@@ -1,0 +1,63 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 数据文件
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# 备份文件
+backup_*.json
+
+# 临时和测试文件
+check-*.js
+check-*.cjs
+check-*.mjs
+test-*.js
+test-*.cjs
+test-*.mjs
+fix-*.js
+fix-*.cjs
+analyze*.py
+analyze*.js
+verify-*.js
+temp_*.js
+
+# 测试 HTML
+test-*.html
+
+# 个人工作
+作业/
+.trae/
+
+# 环境配置
+.env
+
+# Windows 批处理
+*.bat
+
+# SQL 文件
+*.sql
