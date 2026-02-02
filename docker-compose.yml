@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  # 前端服务
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: qc-booklog-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - qc-booklog-network
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # 后端服务
+  backend:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: qc-booklog-backend
+    ports:
+      - "7401:7401"
+    volumes:
+      # 挂载Calibre数据库目录
+      - ${CALIBRE_DB_PATH:-D:/anz/calibre}:/app/calibre:ro
+      # 挂载应用数据目录
+      - qc-booklog-data:/app/data
+      # 挂载日志目录
+      - qc-booklog-logs:/app/data/logs
+    networks:
+      - qc-booklog-network
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=7401
+      # Calibre数据库路径（容器内路径）
+      - CALIBRE_DB_PATH=/app/calibre/metadata.db
+      # Talebook数据库路径
+      - TALEBOOK_DB_PATH=/app/data/calibre-webserver.db
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:7401/api/books', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+# 网络定义
+networks:
+  qc-booklog-network:
+    driver: bridge
+
+# 数据卷定义
+volumes:
+  qc-booklog-data:
+    driver: local
+  qc-booklog-logs:
+    driver: local
