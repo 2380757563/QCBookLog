@@ -10,14 +10,12 @@
  * @returns Promise<string> Base64格式的图片数据
  */
 export const imageUrlToBase64 = (url: string, timeout: number = 5000): Promise<string> => {
-  console.log('🎨 进入imageUrlToBase64函数:', url);
-  
+
   // 移除URL中的反引号，确保URL格式正确
   const cleanUrl = url.replace(/[`]/g, '');
-  console.log('🧹 清理后的URL:', cleanUrl);
-  
+
   return new Promise((resolve, reject) => {
-    console.log('🖼️ 创建Image对象');
+
     // 创建图片对象
     const img = new Image();
     
@@ -27,20 +25,17 @@ export const imageUrlToBase64 = (url: string, timeout: number = 5000): Promise<s
       // 超时后直接返回URL，让浏览器尝试加载
       resolve(cleanUrl);
     }, timeout);
-    
-    console.log('✅ 绑定onload事件处理函数');
+
     // 图片加载成功
     img.onload = () => {
       clearTimeout(timeoutId);
-      console.log('🎉 图片加载成功!');
-      console.log('📏 图片尺寸:', img.width, 'x', img.height);
-      
+
+
       try {
-        console.log('🎨 创建Canvas元素');
+
         // 创建Canvas元素
         const canvas = document.createElement('canvas');
-        
-        console.log('🖌️ 获取Canvas上下文');
+
         const ctx = canvas.getContext('2d');
         
         if (!ctx) {
@@ -61,32 +56,30 @@ export const imageUrlToBase64 = (url: string, timeout: number = 5000): Promise<s
           const ratio = Math.min(maxWidth / width, maxHeight / height);
           width = Math.floor(width * ratio);
           height = Math.floor(height * ratio);
-          console.log('📐 优化图片尺寸:', width, 'x', height);
+
         } else {
-          console.log('📐 设置Canvas尺寸与图片一致:', width, 'x', height);
+
         }
         
         // 设置Canvas尺寸
         canvas.width = width;
         canvas.height = height;
-        
-        console.log('🖌️ 绘制图片到Canvas');
+
         // 绘制图片到Canvas
         ctx.drawImage(img, 0, 0, width, height);
         
         try {
-          console.log('🔄 将Canvas转换为Base64格式，质量0.8');
+
           // 将Canvas转换为Base64格式，使用优化的压缩质量
           const base64 = canvas.toDataURL('image/jpeg', 0.8);
-          
-          console.log('✅ Base64转换成功，数据长度:', base64.length, '字节');
+
           console.log('🔍 Base64数据前缀:', base64.substring(0, 100) + '...');
           
           resolve(base64);
         } catch (canvasError) {
           // 如果Canvas转换失败（可能是因为CORS限制），则直接返回URL作为Base64数据
           // 这种情况下，图片将直接通过URL加载，而不是Base64数据
-          console.warn('⚠️ Canvas转换失败（可能是CORS限制），直接返回原始URL:', canvasError);
+
           resolve(cleanUrl);
         }
       } catch (error) {
@@ -96,8 +89,7 @@ export const imageUrlToBase64 = (url: string, timeout: number = 5000): Promise<s
         resolve(cleanUrl);
       }
     };
-    
-    console.log('❌ 绑定onerror事件处理函数');
+
     // 图片加载失败
     img.onerror = (event) => {
       clearTimeout(timeoutId);
@@ -106,12 +98,10 @@ export const imageUrlToBase64 = (url: string, timeout: number = 5000): Promise<s
       // 如果图片加载失败，直接返回URL，让浏览器尝试加载
       resolve(cleanUrl);
     };
-    
-    console.log('🚀 设置图片URL，开始加载:', cleanUrl);
+
     // 设置图片URL，开始加载
     img.src = cleanUrl;
-    
-    console.log('⏳ 返回Promise，等待图片加载完成');
+
   });
 };
 
@@ -128,7 +118,7 @@ export const isImageUrlValid = (url: string, timeout: number = 3000): Promise<bo
     
     // 设置超时
     const timeoutId = setTimeout(() => {
-      console.warn('⏱️ URL有效性检查超时:', url);
+
       clearTimeout(timeoutId);
       resolve(false);
     }, timeout);
@@ -202,16 +192,15 @@ export const imageUrlToBase64WithRetry = async (url: string, maxRetries: number 
   
   for (let i = 1; i <= maxRetries; i++) {
     try {
-      console.log(`🔄 尝试转换图片（${i}/${maxRetries}）:`, url);
+
       return await imageUrlToBase64(url, timeout);
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      console.warn(`⚠️ 第${i}次尝试失败，正在重试...`, lastError.message);
-      
+
       // 指数退避策略，增加重试间隔
       if (i < maxRetries) {
         const delay = Math.pow(2, i) * 1000;
-        console.log(`⏰ 等待${delay}ms后重试...`);
+
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
@@ -228,25 +217,23 @@ export const imageUrlToBase64WithRetry = async (url: string, maxRetries: number 
  * @returns Promise<void> 上传成功
  */
 export const downloadBookCover = async (bookId: number, coverUrl?: string): Promise<void> => {
-  console.log('🔄 进入downloadBookCover函数:', bookId, coverUrl);
 
   if (!coverUrl) {
-    console.warn('❌ coverUrl为空，跳过下载');
+
     return;
   }
 
   try {
     // 清理URL，移除反引号等特殊字符
     const cleanUrl = coverUrl.replace(/[`]/g, '');
-    console.log('🧹 清理后的URL:', cleanUrl);
 
     // 导入图片管理工具
     const { downloadAndUploadImage } = await import('./localImageStorage');
 
     // 下载并上传到服务器
-    console.log('📥 开始下载并上传图片到服务器');
+
     await downloadAndUploadImage(bookId, cleanUrl);
-    console.log('✅ 图片下载并上传成功');
+
   } catch (error) {
     console.error(`❌ 处理封面图片失败: ${coverUrl}`, error);
     console.error('❌ 错误详情:', error instanceof Error ? error.message : String(error));

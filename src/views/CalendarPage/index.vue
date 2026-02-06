@@ -208,7 +208,7 @@ const loadMonthReadingRecords = async () => {
     });
     
     monthReadingRecords.value = activities;
-    console.log('✅ 加载该月阅读记录成功:', year.value, month.value + 1, activities.length);
+
   } catch (error) {
     console.error('❌ 加载该月阅读记录失败:', error);
     monthReadingRecords.value = [];
@@ -231,7 +231,7 @@ const loadDailyDetails = async (date: string) => {
   try {
     const activities = await activityService.getActivitiesByDate(date);
     records.value = activities;
-    console.log('✅ 加载每日详情成功:', date, activities);
+
   } catch (error) {
     console.error('❌ 加载每日详情失败:', error);
     records.value = null;

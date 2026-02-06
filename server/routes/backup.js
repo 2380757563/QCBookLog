@@ -10,7 +10,7 @@ import path from 'path';
 import { readJsonFile, writeJsonFile, fileExists, updateVersionInfo } from '../services/dataService.js';
 import archiver from 'archiver';
 import unzipper from 'unzipper';
-import databaseService from '../services/databaseService.js';
+import databaseService from '../services/database/index.js';
 
 const router = express.Router();
 const DATA_DIR = path.join(process.cwd(), '../data');

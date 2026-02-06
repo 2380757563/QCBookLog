@@ -186,7 +186,7 @@ onMounted(() => {
 
 // 监听读者切换事件
 eventBus.on('reader-changed', (data: any) => {
-  console.log('📥 收到读者切换事件:', data);
+
   // 重新加载每日统计
   loadDailyStats();
 });

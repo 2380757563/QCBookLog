@@ -3,116 +3,12 @@
  * 提供操作记录的数据库操作
  */
 
-import databaseService from './databaseService.js';
+import databaseService from './database/index.js';
 
 class ActivityService {
   constructor() {
-    this.initActivityTable();
-  }
-
-  /**
-   * 初始化操作记录表
-   */
-  async initActivityTable() {
-    try {
-      const db = databaseService.getDatabase();
-      if (!db) {
-        console.warn('⚠️ 数据库不可用，无法初始化操作记录表');
-        return;
-      }
-
-      const createTableSQL = `
-        CREATE TABLE IF NOT EXISTS activities (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          type TEXT NOT NULL,
-          readerId INTEGER NOT NULL,
-          bookId INTEGER,
-          bookTitle TEXT,
-          bookAuthor TEXT,
-          bookPublisher TEXT,
-          bookCover TEXT,
-          startTime TEXT,
-          endTime TEXT,
-          duration INTEGER,
-          startPage INTEGER,
-          endPage INTEGER,
-          pagesRead INTEGER,
-          content TEXT,
-          metadata TEXT,
-          createdAt TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
-        )
-      `;
-
-      await db.exec(createTableSQL);
-      console.log('✅ 操作记录表初始化成功');
-    } catch (error) {
-      console.error('❌ 初始化操作记录表失败:', error);
-    }
-  }
-
-  /**
-   * 创建操作记录
-   */
-  async createActivity(activity) {
-    try {
-      const db = databaseService.getDatabase();
-      if (!db) {
-        console.warn('⚠️ 数据库不可用，无法创建操作记录');
-        return null;
-      }
-
-      const {
-        type,
-        readerId,
-        bookId,
-        bookTitle,
-        bookAuthor,
-        bookPublisher,
-        bookCover,
-        startTime,
-        endTime,
-        duration,
-        startPage,
-        endPage,
-        pagesRead,
-        content,
-        metadata
-      } = activity;
-
-      const insertSQL = `
-        INSERT INTO activities (
-          type, readerId, bookId, bookTitle, bookAuthor, bookPublisher, bookCover,
-          startTime, endTime, duration, startPage, endPage, pagesRead,
-          content, metadata
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `;
-
-      const metadataStr = metadata ? JSON.stringify(metadata) : null;
-
-      db.prepare(insertSQL).run(
-        type,
-        readerId,
-        bookId || null,
-        bookTitle || null,
-        bookAuthor || null,
-        bookPublisher || null,
-        bookCover || null,
-        startTime || null,
-        endTime || null,
-        duration || null,
-        startPage || null,
-        endPage || null,
-        pagesRead || null,
-        content || null,
-        metadataStr
-      );
-
-      console.log(`✅ 操作记录创建成功: ${type}`);
-      return this.getLastInsertId();
-    } catch (error) {
-      console.error('❌ 创建操作记录失败:', error);
-      return null;
-    }
+    // 不再初始化 activities 表，因为它已被删除
+    // 所有操作记录现在都从业务表（qc_bookmarks、reading_state、qc_reading_records、reading_goals）动态查询
   }
 
   /**
@@ -120,8 +16,8 @@ class ActivityService {
    */
   async getActivities(filters = {}) {
     try {
-      const db = databaseService.getDatabase();
-      const calibreDb = databaseService.getCalibreDatabase();
+      const db = databaseService.talebookDb;
+      const calibreDb = databaseService.calibreDb;
       if (!db) {
         console.warn('⚠️ 数据库不可用，无法获取操作记录');
         return [];
@@ -291,7 +187,7 @@ class ActivityService {
    */
   async getActivitiesByDate(date, readerId = 0) {
     try {
-      const db = databaseService.getDatabase();
+      const db = databaseService.talebookDb;
       if (!db) {
         console.warn('⚠️ 数据库不可用，无法获取操作记录');
         return [];
@@ -400,21 +296,6 @@ class ActivityService {
     }
   }
 
-  /**
-   * 获取最后插入的ID
-   */
-  async getLastInsertId() {
-    try {
-      const db = databaseService.getDatabase();
-      if (!db) return null;
-
-      const row = db.prepare('SELECT last_insert_rowid() as id FROM activities').get();
-      return row ? row.id : null;
-    } catch (error) {
-      console.error('❌ 获取最后插入ID失败:', error);
-      return null;
-    }
-  }
 }
 
 export default new ActivityService();

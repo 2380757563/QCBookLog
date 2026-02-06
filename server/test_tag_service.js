@@ -3,8 +3,8 @@
  * 用于测试标签的规范化、去重、中文处理等功能
  */
 
-import TagService from '../services/tagService.js';
-import databaseService from '../services/databaseService.js';
+import TagService from './services/tagService.js';
+import databaseService from './services/databaseService.js';
 
 console.log('🧪 开始标签服务测试\n');
 

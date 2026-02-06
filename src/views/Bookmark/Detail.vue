@@ -107,7 +107,7 @@ const formatDate = (dateStr: string): string => {
   
   // 检查日期是否有效
   if (isNaN(date.getTime())) {
-    console.warn('无效的日期字符串:', dateStr);
+
     return '未知日期';
   }
   
@@ -150,15 +150,15 @@ onMounted(async () => {
     let cachedBookmark = bookmarkStore.getBookmarkById(id);
 
     if (cachedBookmark) {
-      console.log('使用缓存的书摘数据');
-      console.log('缓存书摘数据:', cachedBookmark);
-      console.log('缓存书摘createTime:', cachedBookmark.createTime);
+
+
+
       bookmark.value = cachedBookmark;
     } else {
-      console.log('从API加载书摘数据');
+
       bookmark.value = await bookmarkService.getBookmarkById(id) || null;
-      console.log('API返回的书摘数据:', bookmark.value);
-      console.log('API返回的书摘createTime:', bookmark.value?.createTime);
+
+
       // 加载成功后更新缓存
       if (bookmark.value) {
         bookmarkStore.addBookmark(bookmark.value);
@@ -166,9 +166,8 @@ onMounted(async () => {
     }
 
     if (bookmark.value) {
-      console.log('最终使用的书摘数据:', bookmark.value);
-      console.log('最终使用的书摘createTime:', bookmark.value.createTime);
-      
+
+
       // 优先使用书摘中存储的书籍信息，其次从缓存或API中获取
       if (bookmark.value.bookTitle || bookmark.value.bookAuthor) {
         // 构造一个简单的书籍对象用于显示
@@ -178,24 +177,24 @@ onMounted(async () => {
           author: bookmark.value.bookAuthor || '未知作者',
           coverUrl: `/api/static/calibre/${encodeURIComponent(bookmark.value.bookAuthor || '未知作者')}/${encodeURIComponent(bookmark.value.bookTitle || '未知书名')}/cover.jpg`
         } as Book;
-        console.log('使用书摘中存储的书籍信息');
+
       } else {
         // 尝试从缓存中获取书籍
         const cachedBook = bookStore.getBookById(bookmark.value.bookId);
 
         if (cachedBook) {
-          console.log('使用缓存的书籍数据');
+
           book.value = cachedBook;
         } else {
           try {
-            console.log('从API加载书籍数据');
+
             book.value = await bookService.getBookById(bookmark.value.bookId) || null;
             // 加载成功后更新缓存
             if (book.value) {
               bookStore.addBook(book.value);
             }
           } catch (error) {
-            console.warn('⚠️ 加载书籍信息失败:', error.message);
+
             book.value = {
               id: bookmark.value.bookId,
               title: '未知书籍',
@@ -208,9 +207,9 @@ onMounted(async () => {
       // 加载书摘标签（从书摘标签 API）
       try {
         bookmarkTags.value = await tagApi.getByBookmarkId(bookmark.value.id);
-        console.log('书摘标签加载完成:', bookmarkTags.value);
+
       } catch (error) {
-        console.warn('⚠️ 加载书摘标签失败:', error.message);
+
         bookmarkTags.value = [];
       }
     }

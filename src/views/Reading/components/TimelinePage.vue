@@ -85,7 +85,11 @@
                 <div v-if="record.bookTitle" class="record-title">{{ record.bookTitle }}</div>
                 <div v-if="record.bookAuthor" class="record-author">{{ record.bookAuthor }} · {{ record.bookPublisher }}</div>
                 <div v-if="record.startTime && record.endTime" class="record-time-range">{{ formatTimeRange(record.startTime, record.endTime) }}</div>
-                <div v-if="record.duration" class="record-duration">累计时长：{{ formatDuration(record.duration) }}</div>
+                <div v-if="record.duration" class="record-duration">阅读时长：{{ formatDuration(record.duration) }}</div>
+                <div v-if="record.startPage !== undefined && record.endPage !== undefined" class="record-pages">
+                  阅读页数：第 {{ record.startPage }} 页 → 第 {{ record.endPage }} 页
+                  <span v-if="record.pagesRead" class="pages-read-count">（本次 {{ record.pagesRead }} 页）</span>
+                </div>
                 <div v-if="record.content" class="record-content">{{ record.content }}</div>
               </div>
             </div>
@@ -117,7 +121,11 @@
                 <div v-if="record.bookTitle" class="record-title">{{ record.bookTitle }}</div>
                 <div v-if="record.bookAuthor" class="record-author">{{ record.bookAuthor }} · {{ record.bookPublisher }}</div>
                 <div v-if="record.startTime && record.endTime" class="record-time-range">{{ formatTimeRange(record.startTime, record.endTime) }}</div>
-                <div v-if="record.duration" class="record-duration">累计时长：{{ formatDuration(record.duration) }}</div>
+                <div v-if="record.duration" class="record-duration">阅读时长：{{ formatDuration(record.duration) }}</div>
+                <div v-if="record.startPage !== undefined && record.endPage !== undefined" class="record-pages">
+                  阅读页数：第 {{ record.startPage }} 页 → 第 {{ record.endPage }} 页
+                  <span v-if="record.pagesRead" class="pages-read-count">（本次 {{ record.pagesRead }} 页）</span>
+                </div>
                 <div v-if="record.content" class="record-content">{{ record.content }}</div>
               </div>
             </div>
@@ -145,7 +153,11 @@
                 <div v-if="record.bookTitle" class="record-title">{{ record.bookTitle }}</div>
                 <div v-if="record.bookAuthor" class="record-author">{{ record.bookAuthor }} · {{ record.bookPublisher }}</div>
                 <div v-if="record.startTime && record.endTime" class="record-time-range">{{ formatTimeRange(record.startTime, record.endTime) }}</div>
-                <div v-if="record.duration" class="record-duration">累计时长：{{ formatDuration(record.duration) }}</div>
+                <div v-if="record.duration" class="record-duration">阅读时长：{{ formatDuration(record.duration) }}</div>
+                <div v-if="record.startPage !== undefined && record.endPage !== undefined" class="record-pages">
+                  阅读页数：第 {{ record.startPage }} 页 → 第 {{ record.endPage }} 页
+                  <span v-if="record.pagesRead" class="pages-read-count">（本次 {{ record.pagesRead }} 页）</span>
+                </div>
                 <div v-if="record.content" class="record-content">{{ record.content }}</div>
               </div>
             </div>
@@ -324,7 +336,7 @@ onMounted(() => {
   }, 100);
   
   eventBus.on('heatmap-data-updated', (data: any) => {
-    console.log('📥 收到热力图数据更新事件:', data);
+
     if (selectedTimelineDate.value) {
       selectTimelineDate(selectedTimelineDate.value);
     }
@@ -992,6 +1004,20 @@ const getTodayActivitiesCount = (): number => {
 
   .record-duration {
     font-size: 12px;
+    color: var(--primary-color);
+    font-weight: 500;
+  }
+
+  .record-pages {
+    font-size: 12px;
+    color: var(--text-hint);
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .pages-read-count {
     color: var(--primary-color);
     font-weight: 500;
   }

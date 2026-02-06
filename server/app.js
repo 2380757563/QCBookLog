@@ -10,8 +10,10 @@ import { fileURLToPath } from 'url';
 import winston from 'winston';
 import axios from 'axios';
 import fs from 'fs/promises';
+import fsSync from 'fs';
 import calibreService from './services/calibreService.js';
 import activityService from './services/activityService.js';
+import databaseService from './services/database/index.js';
 
 // 配置日志
 const logger = winston.createLogger({
@@ -83,7 +85,7 @@ app.get('/api/health', (req, res) => {
 // 版本信息路由
 app.get('/api/version', (req, res) => {
   try {
-    const version = require('../data/metadata/version.json');
+    const version = JSON.parse(fsSync.readFileSync(path.join(__dirname, '../data/metadata/version.json'), 'utf8'));
     res.json(version);
   } catch (error) {
     logger.error('Failed to get version info', error);
@@ -209,14 +211,14 @@ app.get('/api/aliyun-oss-image/:imagePath*', async (req, res) => {
 });
 
 // 导入路由模块
-import bookRoutes from './routes/books.js';
+import bookRoutes from './routes/books/index.js';
 import groupRoutes from './routes/groups.js';
 import tagRoutes from './routes/tags.js';
 import bookmarkRoutes from './routes/bookmarks.js';
 import backupRoutes from './routes/backup.js';
 import dbrRoutes from './routes/dbr.js';
 import syncRoutes from './routes/sync.js';
-import configRoutes from './routes/configRoutes.js';
+import configRoutes from './routes/config/index.js';
 import readingStatusRoutes from './routes/readingstatus.js';
 import qcGroupsRoutes from './routes/qcGroups.js';
 import qcBookmarksRoutes from './routes/qcBookmarks.js';
@@ -398,6 +400,14 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   logger.info(`Server is running on port ${PORT}`);
   console.log(`Server is running on http://localhost:${PORT}`);
+
+  // 显示数据库服务状态
+  console.log(`\n📊 数据库服务状态:`);
+  console.log(`   - 初始化状态: ${databaseService._initialized ? '✅ 已初始化' : '❌ 未初始化'}`);
+  console.log(`   - Calibre数据库: ${databaseService.connectionManager?.calibreDb ? '✅ 已连接' : '❌ 未连接'}`);
+  console.log(`   - Talebook数据库: ${databaseService.connectionManager?.talebookDb ? '✅ 已连接' : '❌ 未连接'}`);
+  console.log(`   - Calibre路径: ${databaseService.connectionManager?.config?.calibrePath || '未配置'}`);
+  console.log(`   - Talebook路径: ${databaseService.connectionManager?.config?.talebookPath || '未配置'}`);
 
   // 显示当前配置的数据库路径
   const currentDbPath = calibreService.getBookDir();

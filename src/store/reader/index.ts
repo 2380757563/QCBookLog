@@ -43,7 +43,7 @@ export const useReaderStore = defineStore('reader', () => {
         const id = parseInt(saved, 10);
         if (!isNaN(id)) {
           currentReaderId.value = id;
-          console.log('✅ 从本地存储加载读者ID:', id);
+
         }
       }
     } catch (error) {
@@ -57,7 +57,7 @@ export const useReaderStore = defineStore('reader', () => {
   const saveCurrentReaderId = () => {
     try {
       localStorage.setItem('currentReaderId', currentReaderId.value.toString());
-      console.log('✅ 读者ID已保存到本地存储:', currentReaderId.value);
+
     } catch (error) {
       console.error('❌ 保存读者ID失败:', error);
     }
@@ -68,15 +68,14 @@ export const useReaderStore = defineStore('reader', () => {
    */
   const loadReaders = async () => {
     try {
-      console.log('🔄 开始加载读者列表...');
+
       const response = await axios.get<Reader[]>('/api/readers');
       readers.value = response.data;
       loaded.value = true;
-      console.log(`✅ 读者列表加载成功，共${readers.value.length}个读者`);
 
       // 如果当前读者ID不在读者列表中，重置为默认读者
       if (!readers.value.some(r => r.id === currentReaderId.value)) {
-        console.warn('⚠️ 当前读者ID不在读者列表中，重置为默认读者');
+
         currentReaderId.value = 0;
         saveCurrentReaderId();
       }
@@ -97,7 +96,7 @@ export const useReaderStore = defineStore('reader', () => {
    * 切换当前读者
    */
   const setCurrentReader = (readerId: number) => {
-    console.log('🔄 切换读者:', readerId);
+
     currentReaderId.value = readerId;
     saveCurrentReaderId();
   };
@@ -106,10 +105,10 @@ export const useReaderStore = defineStore('reader', () => {
    * 初始化Store
    */
   const init = async () => {
-    console.log('🔄 初始化Reader Store...');
+
     loadCurrentReaderId();
     await loadReaders();
-    console.log('✅ Reader Store初始化完成');
+
   };
 
   return {

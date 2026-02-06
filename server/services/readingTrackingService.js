@@ -3,7 +3,7 @@
  * 处理阅读记录、阅读统计等业务逻辑
  */
 
-import databaseService from './databaseService.js';
+import databaseService from './database/index.js';
 import calibreService from './calibreService.js';
 import activityService from './activityService.js';
 
@@ -80,27 +80,7 @@ class ReadingTrackingService {
       );
 
       console.log(`✅ 创建阅读记录: ID=${result.lastInsertRowid}, 书籍ID=${bookId}, 时长=${duration}分钟`);
-      
-      // 获取书籍信息
-      const book = await calibreService.getBookFromCalibreById(bookId);
-      
-      // 记录操作
-      await activityService.createActivity({
-        type: 'reading_started',
-        readerId: readerId,
-        bookId: bookId,
-        bookTitle: book ? book.title : '',
-        bookAuthor: book ? book.author : '',
-        bookPublisher: book ? book.publisher : '',
-        bookCover: book ? book.cover : '',
-        startTime: startTime,
-        endTime: endTime,
-        duration: duration,
-        startPage: startPage,
-        endPage: endPage,
-        pagesRead: pagesRead
-      });
-      
+
       // 更新书籍的阅读统计 - 传递endPage而不是pagesRead，以便替换为当前阅读到的页数
       await this.updateBookReadingStats(bookId, readerId, duration, pagesRead, startTime, endPage);
 
@@ -258,13 +238,25 @@ class ReadingTrackingService {
 
     console.log('🔄 updateBookReadingStats 使用数据库:');
     console.log(`   talebookDb: ${talebookDb ? '已连接' : 'null'}`);
-    console.log(`   endPage: ${endPage}, 将替换 read_pages 为当前阅读到的页数`);
+    console.log(`   书籍ID: ${bookId}, 读者ID: ${readerId}`);
+    console.log(`   本次阅读: ${pagesRead}页, 时长: ${duration}分钟`);
+    console.log(`   当前阅读到第 ${endPage} 页, 将更新 qc_bookdata.read_pages`);
 
     if (!talebookDb) {
       throw new Error('Talebook 数据库未连接');
     }
 
     try {
+      // 检查 qc_bookdata 表是否存在
+      const tableExists = talebookDb.prepare(`
+        SELECT name FROM sqlite_master WHERE type='table' AND name='qc_bookdata'
+      `).get();
+
+      if (!tableExists) {
+        console.error('❌ qc_bookdata 表不存在!');
+        throw new Error('qc_bookdata 表不存在,请先创建表');
+      }
+
       // 从 qc_bookdata 表获取书籍的页数
       let totalPages = 0;
       console.log(`📖 查询书籍页数，bookId: ${bookId}`);
@@ -272,18 +264,19 @@ class ReadingTrackingService {
       try {
         const bookData = talebookDb.prepare('SELECT page_count FROM qc_bookdata WHERE book_id = ?').get(bookId);
         totalPages = bookData?.page_count || 0;
-        console.log(`📖 书籍页数: ${totalPages}`);
+        console.log(`📖 书籍总页数: ${totalPages}`);
       } catch (error) {
         console.error(`❌ 查询 qc_bookdata 表失败: ${error.message}`);
-        totalPages = 0;
       }
 
       // 先检查 qc_bookdata 表中是否已有该书籍的记录
       const checkQuery = `SELECT * FROM qc_bookdata WHERE book_id = ?`;
       const existing = talebookDb.prepare(checkQuery).get(bookId);
 
+      console.log(`📖 检查 qc_bookdata 中是否存在书籍记录:`, existing ? '✅ 存在' : '❌ 不存在');
+
       if (existing) {
-        // 更新现有记录 - 使用 endPage 替换 read_pages（当前阅读到的页数）
+        // 更新现有记录 - 使用 endPage 替换 read_pages(当前阅读到的页数)
         const query = `
           UPDATE qc_bookdata
           SET
@@ -295,13 +288,18 @@ class ReadingTrackingService {
           WHERE book_id = ?
         `;
 
-        talebookDb.prepare(query).run(
+        console.log(`📝 执行更新 SQL:`, query.trim());
+        console.log(`📝 更新参数:`, [duration, endPage, readDate, duration, bookId]);
+
+        const result = talebookDb.prepare(query).run(
           duration,
           endPage,  // 使用 endPage 替换 read_pages
           readDate,
           duration,
           bookId
         );
+
+        console.log(`✅ 更新成功,影响行数: ${result.changes}`);
       } else {
         // 插入新记录
         const insertQuery = `
@@ -313,16 +311,31 @@ class ReadingTrackingService {
           VALUES (?, ?, ?, ?, ?, ?, ?)
         `;
 
-        talebookDb.prepare(insertQuery).run(
+        console.log(`📝 执行插入 SQL:`, insertQuery.trim());
+        console.log(`📝 插入参数:`, [bookId, duration, endPage, 1, readDate, duration, totalPages]);
+
+        const result = talebookDb.prepare(insertQuery).run(
           bookId, duration, endPage,
           1, readDate, duration,
           totalPages
         );
+
+        console.log(`✅ 插入成功,lastInsertRowid: ${result.lastInsertRowid}`);
       }
 
-      console.log(`✅ 更新书籍阅读统计: 书籍ID=${bookId}, 总时长+${duration}分钟, 当前阅读到${endPage}页`);
+      // 验证更新结果
+      const verifyQuery = `SELECT * FROM qc_bookdata WHERE book_id = ?`;
+      const verifyResult = talebookDb.prepare(verifyQuery).get(bookId);
+      console.log(`🔍 验证 qc_bookdata 记录:`, verifyResult);
+      console.log(`   book_id: ${verifyResult.book_id}`);
+      console.log(`   read_pages: ${verifyResult.read_pages} (应该是 ${endPage})`);
+      console.log(`   total_reading_time: ${verifyResult.total_reading_time}`);
+      console.log(`   reading_count: ${verifyResult.reading_count}`);
+
+      console.log(`✅ 更新书籍阅读统计成功: 书籍ID=${bookId}, 总时长+${duration}分钟, 当前阅读到第${endPage}页`);
     } catch (error) {
       console.error('❌ 更新书籍阅读统计失败:', error);
+      console.error('❌ 错误堆栈:', error.stack);
       throw error;
     }
   }

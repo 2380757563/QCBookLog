@@ -67,32 +67,8 @@ router.get('/date/:date', async (req, res) => {
   }
 });
 
-/**
- * 创建操作记录
- */
-router.post('/', async (req, res) => {
-  try {
-    const activityId = await activityService.createActivity(req.body);
-    
-    if (activityId) {
-      res.json({
-        success: true,
-        data: { id: activityId },
-        message: '操作记录创建成功'
-      });
-    } else {
-      res.status(500).json({
-        success: false,
-        message: '操作记录创建失败'
-      });
-    }
-  } catch (error) {
-    console.error('❌ 创建操作记录失败:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || '创建操作记录失败'
-    });
-  }
-});
+// 注意：不再提供创建操作记录的 POST 接口
+// 操作记录应该由业务服务自动创建（书摘、阅读状态、阅读记录、阅读目标等）
+// 前端通过查询接口获取聚合的操作记录数据
 
 export default router;
