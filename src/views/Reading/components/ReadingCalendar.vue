@@ -134,7 +134,7 @@ const loadMonthActivities = async () => {
     });
     
     monthActivities.value = activities;
-    console.log('✅ 加载该月活动记录成功:', year, month + 1, activities.length);
+
   } catch (error) {
     console.error('❌ 加载该月活动记录失败:', error);
     monthActivities.value = [];
@@ -233,8 +233,7 @@ const handleCalendarDayClick = (date: any) => {
   emit('update:selectedDate', date.fullDate);
   emit('date-click', date.fullDate);
   emit('show-details', date.fullDate);
-  
-  console.log('📅 日历日期点击:', date.fullDate);
+
 };
 
 // 加载详细阅读记录
@@ -244,7 +243,7 @@ const loadDateDetails = async (date: string) => {
     const dateStr = date.split(' ')[0];
     const activities = await activityService.getActivitiesByDate(dateStr);
     selectedDateDetails.value = activities;
-    console.log('✅ 加载详细记录成功:', date, activities);
+
   } catch (error) {
     console.error('❌ 加载详细记录失败:', error);
     selectedDateDetails.value = [];

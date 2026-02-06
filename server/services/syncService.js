@@ -2,7 +2,7 @@
  * 数据同步服务
  * 保持文件系统和数据库同步，支持冲突解决和异常处理
  */
-import databaseService from './databaseService.js';
+import databaseService from './database/index.js';
 import calibreService from './calibreService.js';
 import fs from 'fs/promises';
 import path from 'path';
@@ -559,8 +559,8 @@ class SyncService {
       // 获取Talebook书籍（如果可用）
       if (isTalebookAvailable) {
         try {
-          // 获取Talebook书籍 - 只选择存在的列，并重命名book_id为id
-          const talebookQuery = `SELECT book_id as id, book_type, create_time FROM items`;
+          // 获取Talebook书籍 - items表的主键是book_id
+          const talebookQuery = `SELECT book_id as id, book_type FROM items`;
           talebookBooks = databaseService.talebookDb.prepare(talebookQuery).all();
         } catch (error) {
           logger.error('获取Talebook书籍失败:', error.message);
@@ -586,7 +586,7 @@ class SyncService {
         if (talebookBook) {
           // 比较修改时间
           const calibreModified = new Date(calibreBook.last_modified || calibreBook.timestamp);
-          const talebookModified = new Date(talebookBook.create_time);
+          const talebookModified = new Date(talebookBook.last_modified);
           
           if (calibreModified.getTime() !== talebookModified.getTime()) {
             conflictedBooks.push({
@@ -594,7 +594,7 @@ class SyncService {
               title: calibreBook.title,
               author: calibreBook.author,
               calibreModified: calibreBook.last_modified,
-              talebookModified: talebookBook.create_time
+              talebookModified: talebookBook.last_modified
             });
           }
         }
@@ -618,7 +618,7 @@ class SyncService {
           },
           conflicted: conflictedBooks.length,
           onlyInCalibre: onlyInCalibre.map(b => ({ id: b.id, title: b.title, author: b.author })),
-          onlyInTalebook: onlyInTalebook.map(b => ({ id: b.id, title: `未知书籍 ${b.id}`, author: '未知作者' })),
+          onlyInTalebook: onlyInTalebook.map(b => ({ id: b.id, title: b.title || `未知书籍 ${b.id}`, author: b.author || '未知作者' })),
           conflictedBooks: conflictedBooks
         },
         errors: []
@@ -672,24 +672,25 @@ class SyncService {
       // 1. 同步新增和更新的书籍
       for (const book of calibreBooks) {
         try {
-          // 检查Talebook数据库中是否存在
+          // 检查Talebook数据库中是否存在（items表的主键是book_id）
           const existingItem = databaseService.talebookDb.prepare(`SELECT book_id FROM items WHERE book_id = ?`).get(book.id);
-          
+
           if (!existingItem) {
             // 不存在，添加到Talebook数据库
-            // items表是统计表，不存储书籍元数据，只需要确保book_id存在
+            // items表存储统计信息
             databaseService.talebookDb.prepare(`
-              INSERT INTO items (book_id, count_guest, count_visit, count_download, website, sole, book_type, book_count, create_time)
-              VALUES (?, 0, 0, 0, '', 0, 0, 1, ?)
+              INSERT INTO items (book_id, book_type, create_time)
+              VALUES (?, ?, ?)
             `).run(
               book.id,
-              book.timestamp || new Date().toISOString()
+              book.book_type || 1,
+              new Date().toISOString()
             );
-            
+
             synced++;
             logger.info(`✅ 同步成功: ${book.title}`);
           } else {
-            // 已存在，无需更新元数据（items表不存储元数据）
+            // 已存在，检查是否需要更新
             skipped++;
             logger.info(`⏭️ 已存在，跳过: ${book.title}`);
           }
@@ -705,7 +706,7 @@ class SyncService {
 
       // 2. 同步删除的书籍 - 删除Talebook中存在但Calibre中不存在的书籍
       try {
-        // 获取Talebook数据库中的所有书籍ID
+        // 获取Talebook数据库中的所有书籍ID（items表的主键是book_id）
         const talebookBookIds = databaseService.talebookDb.prepare(`SELECT book_id FROM items`).all().map(item => item.book_id);
         console.log(`📊 Talebook中共有 ${talebookBookIds.length} 本书籍: ${talebookBookIds.join(', ')}`);
         
@@ -718,12 +719,12 @@ class SyncService {
         
         // 批量删除
         if (booksToDelete.length > 0) {
-          // 批量删除items表中的记录
+          // 批量删除items表中的记录（使用book_id作为主键）
           const deleteItemsStmt = databaseService.talebookDb.prepare(`DELETE FROM items WHERE book_id = ?`);
-          
+
           // 批量删除qc_book_groups表中的关联记录
           const deleteGroupsStmt = databaseService.talebookDb.prepare(`DELETE FROM qc_book_groups WHERE book_id = ?`);
-          
+
           // 批量删除reading_state表中的关联记录
           const deleteReadingStateStmt = databaseService.talebookDb.prepare(`DELETE FROM reading_state WHERE book_id = ?`);
           

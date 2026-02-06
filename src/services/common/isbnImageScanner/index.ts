@@ -169,7 +169,7 @@ class ISBNImageScannerServiceImpl implements ISBNImageScannerService {
       canvas.height = image.height;
       const ctx = canvas.getContext('2d');
       if (!ctx) {
-        console.warn('无法获取Canvas上下文，跳过图像增强');
+
         return processedBase64;
       }
       
@@ -182,13 +182,13 @@ class ISBNImageScannerServiceImpl implements ISBNImageScannerService {
         // 转换回Base64
         processedBase64 = enhancedCanvas.toDataURL('image/jpeg', 0.95);
       } catch (e) {
-        console.warn('图像增强失败，使用原始图像:', e);
+
         // 图像增强失败时，返回调整尺寸后的原始图像
       }
       
       return processedBase64;
     } catch (e) {
-      console.warn('图像预处理失败，返回原始图像:', e);
+
       // 预处理完全失败时，返回原始图像
       return base64;
     }
@@ -211,12 +211,12 @@ class ISBNImageScannerServiceImpl implements ISBNImageScannerService {
     const strategies = [
       // 策略1: 原始图像
       () => {
-        console.log('🔍 尝试策略1:', strategyNames[0]);
+
         return this.decodeWithCanvas(image, { });
       },
       // 策略2: 自动增强
       () => {
-        console.log('🔍 尝试策略2:', strategyNames[1]);
+
         const canvas = document.createElement('canvas');
         canvas.width = image.width;
         canvas.height = image.height;
@@ -228,7 +228,7 @@ class ISBNImageScannerServiceImpl implements ISBNImageScannerService {
       },
       // 策略3: 提高对比度
       () => {
-        console.log('🔍 尝试策略3:', strategyNames[2]);
+
         const canvas = document.createElement('canvas');
         canvas.width = image.width;
         canvas.height = image.height;
@@ -240,7 +240,7 @@ class ISBNImageScannerServiceImpl implements ISBNImageScannerService {
       },
       // 策略4: 二值化（高对比度）
       () => {
-        console.log('🔍 尝试策略4:', strategyNames[3]);
+
         const canvas = document.createElement('canvas');
         canvas.width = image.width;
         canvas.height = image.height;
@@ -258,7 +258,7 @@ class ISBNImageScannerServiceImpl implements ISBNImageScannerService {
     for (let i = 0; i < strategies.length; i++) {
       try {
         const result = strategies[i]();
-        console.log('✅ 策略成功:', strategyNames[i], '结果:', result);
+
         return result;
       } catch (e) {
         console.warn('⚠️ 策略失败:', strategyNames[i], (e as Error).message);

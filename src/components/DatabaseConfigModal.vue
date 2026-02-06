@@ -109,33 +109,22 @@
             </div>
           </div>
           
-          <!-- 创建新数据库 -->
+          <!-- 创建新数据库提示 -->
           <div v-else class="create-db">
-            <div class="form-group">
-              <label for="new-db-path">新数据库存储路径</label>
-              <div class="path-input-group">
-                <input 
-                  type="text" 
-                  id="new-db-path" 
-                  v-model="newDbPath" 
-                  placeholder="请输入新数据库的存储路径"
-                  class="path-input"
-                />
-                <button class="browse-btn" @click="browseNewDbPath">
-                  浏览
-                </button>
+            <div class="info-message">
+              <div class="info-icon">💡</div>
+              <div class="info-content">
+                <h4>创建新数据库</h4>
+                <p>请在配置页面中创建新的数据库。配置页面提供了更完整的数据库创建和管理功能。</p>
               </div>
-              <p class="hint-text">
-                默认路径：{{ defaultDbPath }}
-              </p>
             </div>
             
             <div class="action-buttons">
               <button class="secondary-btn" @click="backToDetection">
                 上一步
               </button>
-              <button class="primary-btn" @click="createNewDb" :disabled="creatingDb">
-                {{ creatingDb ? '创建中...' : '创建数据库' }}
+              <button class="primary-btn" @click="proceedToConfig">
+                前往配置页面
               </button>
             </div>
           </div>
@@ -220,8 +209,6 @@ const databaseStatus = ref({
 // 配置流程状态
 const hasExistingDb = ref(false);
 const dbPath = ref('');
-const newDbPath = ref('');
-const creatingDb = ref(false);
 
 // 功能验证状态
 const validationItems = ref([
@@ -241,8 +228,8 @@ const title = computed(() => {
 
 const defaultDbPath = computed(() => {
   return currentDbType.value === 'calibre' 
-    ? 'D:/anz/calibre' 
-    : 'D:/anz/talebook';
+    ? './data/calibre' 
+    : './data/talebook';
 });
 
 // 方法
@@ -255,13 +242,11 @@ const handleOverlayClick = () => {
 };
 
 const proceedToConfig = () => {
-  // 确定需要配置的数据库类型
-  if (!databaseStatus.value.calibre.valid) {
-    currentDbType.value = 'calibre';
-  } else if (!databaseStatus.value.talebook.valid) {
-    currentDbType.value = 'talebook';
-  }
-  currentStep.value = 1;
+  // 关闭弹窗
+  handleClose();
+  
+  // 跳转到配置页面的同步状态标签页
+  window.location.href = '/config?tab=sync-status';
 };
 
 const backToDetection = () => {
@@ -273,19 +258,16 @@ const browseDbPath = () => {
   dbPath.value = defaultDbPath.value;
 };
 
-const browseNewDbPath = () => {
-  newDbPath.value = defaultDbPath.value;
-};
-
 const validateDbPath = async () => {
   try {
     // 调用后端API验证数据库路径
-    const response = await fetch(`/api/config/validate-${currentDbType.value}`, {
+    const endpoint = currentDbType.value === 'calibre' ? '/api/config/validate-calibre' : '/api/config/validate-talebook';
+    const body = currentDbType.value === 'calibre' ? { calibreDir: dbPath.value } : { talebookDir: dbPath.value };
+    
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        [currentDbType.value === 'calibre' ? 'calibreDir' : 'talebookDir']: dbPath.value
-      })
+      body: JSON.stringify(body)
     });
     
     const result = await response.json();
@@ -306,48 +288,37 @@ const validateDbPath = async () => {
 
 const saveDbConfig = async () => {
   try {
-    await fetch(`/api/config/${currentDbType.value}-path`, {
+    const endpoint = currentDbType.value === 'calibre' ? '/api/config/calibre-path' : '/api/config/talebook-path';
+    
+    // 从完整数据库路径中提取目录路径
+    let dirPath = dbPath.value;
+    if (dirPath.includes('metadata.db')) {
+      dirPath = dirPath.replace(/\\metadata.db$|\/metadata.db$/, '');
+    } else if (dirPath.includes('calibre-webserver.db')) {
+      dirPath = dirPath.replace(/\\calibre-webserver.db$|\/calibre-webserver.db$/, '');
+    }
+    
+    const body = currentDbType.value === 'calibre' 
+      ? { calibreDir: dirPath, isDefault: true }
+      : { talebookDir: dirPath, isDefault: true };
+    
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        [currentDbType.value === 'calibre' ? 'calibreDir' : 'talebookDir']: dbPath.value,
-        isDefault: true
-      })
+      body: JSON.stringify(body)
     });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    const result = await response.json();
+    if (!result.success) {
+      throw new Error(result.error || '保存配置失败');
+    }
   } catch (error) {
     console.error('保存数据库配置失败:', error);
     throw error;
-  }
-};
-
-const createNewDb = async () => {
-  try {
-    creatingDb.value = true;
-    
-    const response = await fetch('/api/config/create-database', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        dbType: currentDbType.value,
-        dbPath: newDbPath.value
-      })
-    });
-    
-    const result = await response.json();
-    if (result.success) {
-      // 创建成功，保存配置
-      dbPath.value = newDbPath.value;
-      await saveDbConfig();
-      // 检查是否还有其他数据库需要配置
-      checkNextDbConfig();
-    } else {
-      alert(result.error);
-    }
-  } catch (error) {
-    console.error('创建数据库失败:', error);
-    alert('创建数据库失败，请检查路径权限');
-  } finally {
-    creatingDb.value = false;
   }
 };
 
@@ -360,7 +331,6 @@ const checkNextDbConfig = () => {
       currentDbType.value = 'talebook';
       hasExistingDb.value = false;
       dbPath.value = '';
-      newDbPath.value = '';
     } else {
       // 所有数据库都已配置完成，进入验证阶段
       startValidation();
@@ -655,6 +625,34 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.info-message {
+  display: flex;
+  gap: 16px;
+  padding: 20px;
+  background-color: var(--bg-secondary);
+  border-radius: 8px;
+  border-left: 4px solid var(--info-color);
+}
+
+.info-icon {
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.info-content h4 {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.info-content p {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
 }
 
 .form-group {

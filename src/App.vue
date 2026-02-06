@@ -33,19 +33,31 @@
 
     <!-- 阅读计时器悬浮窗 -->
     <ReadingFloatingBall />
+
+    <!-- 数据库配置弹窗 -->
+    <DatabaseConfigModal 
+      :visible="showDatabaseModal" 
+      @close="showDatabaseModal = false"
+      @config-complete="handleConfigComplete"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { useRoute } from 'vue-router';
-import { computed, onMounted, onUnmounted } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useReaderStore } from '@/store/reader';
 import { useReadingStore } from '@/store/reading';
 import ReadingFloatingBall from '@/components/ReadingFloatingBall/ReadingFloatingBall.vue';
+import DatabaseConfigModal from '@/components/DatabaseConfigModal.vue';
 
 const route = useRoute();
 const readerStore = useReaderStore();
 const readingStore = useReadingStore();
+
+// 数据库配置弹窗
+const showDatabaseModal = ref(false);
+const databaseChecked = ref(false);
 
 const navItems = [
   {
@@ -127,6 +139,9 @@ onMounted(async () => {
   // 初始化Reader Store
   await readerStore.init();
 
+  // 检测数据库状态
+  await checkDatabaseStatus();
+
   // 添加页面关闭检测
   window.addEventListener('beforeunload', handleBeforeUnload);
 
@@ -138,6 +153,47 @@ onMounted(async () => {
     }
   });
 });
+
+// 检测数据库状态
+const checkDatabaseStatus = async () => {
+  try {
+    // 如果已经在配置页面，不显示弹窗，避免无限循环
+    if (route.path === '/config' || route.path.startsWith('/config')) {
+
+      databaseChecked.value = true;
+      return;
+    }
+
+    const response = await fetch('/api/config/check-databases');
+    const result = await response.json();
+    
+    if (result.success) {
+      const { calibre, talebook } = result.data;
+      
+      // 如果 Calibre 或 Talebook 数据库无效，显示弹窗并跳转到配置页面
+      if (!calibre.valid || !talebook.valid) {
+
+        // 显示弹窗
+        showDatabaseModal.value = true;
+        // 跳转到配置页面
+        router.push('/config?tab=sync-status');
+      }
+    }
+    
+    databaseChecked.value = true;
+  } catch (error) {
+    console.error('检测数据库状态失败:', error);
+    // 即使检测失败，也标记为已检查，避免重复检测
+    databaseChecked.value = true;
+  }
+};
+
+// 处理配置完成
+const handleConfigComplete = () => {
+  showDatabaseModal.value = false;
+  // 刷新页面以重新加载数据
+  window.location.reload();
+};
 
 // 页面关闭检测
 const handleBeforeUnload = (event: BeforeUnloadEvent) => {

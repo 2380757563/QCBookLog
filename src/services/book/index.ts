@@ -21,7 +21,6 @@ class BookServiceImpl implements BookService {
   async addBook(book: Omit<Book, 'id' | 'createTime' | 'updateTime'>): Promise<Book> {
     const progressStore = useProgressStore();
 
-    console.log('📝 开始添加书籍:', book.title);
     console.log('🖼️  原始封面信息:', {
       coverUrl: book.coverUrl,
       hasBlob: !!((book as any)._coverBlob)
@@ -36,7 +35,7 @@ class BookServiceImpl implements BookService {
       groups: Array.isArray(book.groups) ? book.groups.map(group => String(group)) : [],
       // 确保数字字段是数字类型
       publishYear: typeof book.publishYear === 'number' ? book.publishYear : undefined,
-      pages: typeof book.pages === 'number' ? book.pages : undefined,
+      pages: book.pages ? parseInt(book.pages) : undefined,
       purchasePrice: typeof book.purchasePrice === 'number' ? book.purchasePrice : undefined,
       standardPrice: typeof book.standardPrice === 'number' ? book.standardPrice : undefined,
       rating: typeof book.rating === 'number' ? book.rating : undefined,
@@ -67,19 +66,19 @@ class BookServiceImpl implements BookService {
       // 处理封面：优先级 1. ZIP中的Blob > 2. 外部URL
       if (coverBlob && newBook.id) {
         // 方式1：从ZIP导入的封面Blob，直接上传
-        console.log('📤 使用ZIP中的封面Blob，直接上传');
+
         try {
           await this.uploadCoverBlob(newBook.id, coverBlob);
-          console.log('✅ 封面上传成功');
+
         } catch (error) {
           console.error('❌ 上传封面Blob失败:', error);
         }
       } else if (book.coverUrl) {
         // 方式2：从URL下载封面
-        console.log('🔄 从URL下载封面');
+
         try {
           await downloadBookCover(newBook.id, book.coverUrl);
-          console.log('✅ 封面下载成功');
+
         } catch (error) {
           console.error('❌ 下载封面图片时出错:', error);
         }
@@ -113,7 +112,7 @@ class BookServiceImpl implements BookService {
     // 使用现有的bookApi.uploadCover方法
     try {
       await bookApi.uploadCover(bookId, file);
-      console.log('✅ 封面上传成功');
+
     } catch (error) {
       console.error('❌ 上传封面Blob失败:', error);
       throw error;
@@ -121,7 +120,6 @@ class BookServiceImpl implements BookService {
   }
 
   async updateBook(book: Book): Promise<Book> {
-    console.log('🔄 updateBook 开始，原始book.id:', book.id, '类型:', typeof book.id);
 
     // 确保tags和groups是字符串数组
     const safeBookData = {
@@ -142,31 +140,21 @@ class BookServiceImpl implements BookService {
       binding2: typeof book.binding2 === 'number' ? book.binding2 : 0
     };
 
-    console.log('🔄 safeBookData.id:', safeBookData.id, '类型:', typeof safeBookData.id);
-    console.log('🔄 要更新的数据:', {
-      id: safeBookData.id,
-      title: safeBookData.title,
-      author: safeBookData.author,
-      tags: safeBookData.tags
-    });
 
     // 使用API更新书籍，确保ID是数字
     const bookId = typeof book.id === 'string' ? parseInt(book.id, 10) : book.id;
-    console.log('🔄 使用的bookId:', bookId, '类型:', typeof bookId);
 
     const updatedBook = await bookApi.update(bookId, safeBookData);
 
-    console.log('🔄 更新成功，返回的book.id:', updatedBook.id);
     return updatedBook;
   }
 
   async deleteBook(id: number): Promise<void> {
     try {
-      console.log(`🗑️ 开始删除书籍，ID: ${id}`);
 
       // 使用API删除书籍
       await bookApi.delete(id);
-      console.log(`✅ 书籍删除成功`);
+
     } catch (error) {
       console.error('❌ 删除书籍失败:', error);
       throw error;
@@ -205,8 +193,6 @@ class BookServiceImpl implements BookService {
     const progressStore = useProgressStore();
     const addedBooks: Book[] = [];
 
-    console.log(`📚 开始批量添加书籍，共 ${books.length} 本`);
-
     // 初始化批量进度
     progressStore.startBatch(books.length);
 
@@ -225,8 +211,6 @@ class BookServiceImpl implements BookService {
           const safeBookData = { ...book };
           delete (safeBookData as any)._coverBlob;
 
-          console.log(`📝 [${i + 1}/${books.length}] 创建书籍: ${book.title}`);
-
           // 创建书籍（不包含封面）
           const newBook = await bookApi.create(safeBookData);
           addedBooks.push(newBook);
@@ -244,27 +228,24 @@ class BookServiceImpl implements BookService {
         }
       }
 
-      console.log(`✅ 第一阶段完成：成功创建 ${addedBooks.length}/${books.length} 本书`);
-
       // 等待数据库事务完全提交（WAL模式需要时间）
-      console.log(`⏳ 等待数据库事务提交...`);
+
       await new Promise(resolve => setTimeout(resolve, 500));
 
       // 第二阶段：批量上传封面
-      console.log(`📤 开始批量上传封面...`);
 
       for (let i = 0; i < booksWithCovers.length; i++) {
         const { book, coverBlob, coverUrl } = booksWithCovers[i];
 
         try {
           if (coverBlob) {
-            console.log(`📤 [${i + 1}/${booksWithCovers.length}] 上传封面Blob: ${book.title}`);
+
             await this.uploadCoverBlob(book.id, coverBlob);
-            console.log(`✅ [${i + 1}/${booksWithCovers.length}] 封面上传成功: ${book.title}`);
+
           } else if (coverUrl) {
-            console.log(`🔄 [${i + 1}/${booksWithCovers.length}] 下载封面: ${book.title}`);
+
             await downloadBookCover(book.id, coverUrl);
-            console.log(`✅ [${i + 1}/${booksWithCovers.length}] 封面下载成功: ${book.title}`);
+
           }
         } catch (error) {
           console.error(`⚠️ [${i + 1}/${booksWithCovers.length}] 封面处理失败: ${book.title}`, error);
@@ -272,9 +253,6 @@ class BookServiceImpl implements BookService {
         }
       }
 
-      console.log(`✅ 第二阶段完成：封面处理完成`);
-
-      console.log(`✅ 批量添加完成，成功添加 ${addedBooks.length}/${books.length} 本`);
       return addedBooks;
     } finally {
       // 确保批量进度正确结束

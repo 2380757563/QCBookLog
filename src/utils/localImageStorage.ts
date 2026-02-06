@@ -23,9 +23,7 @@ const downloadImageAsBlob = async (url: string, options?: {
     retryDelayBase: 1000, // 基础重试延迟1秒
     ...options
   };
-  
-  console.log('📥 开始下载图片:', url, '配置:', config);
-  
+
   // 检查URL是否是相对路径
   let fetchUrl = url;
   
@@ -34,7 +32,7 @@ const downloadImageAsBlob = async (url: string, options?: {
     const urlObj = new URL(url);
     // 只有豆瓣图片使用后端代理，其他图片直接使用原始URL
     if (urlObj.hostname.includes('doubanio.com')) {
-      console.log('🔄 使用后端douban-cover代理处理图片请求');
+
       // 提取coverId（格式：/view/subject/l/public/s35302086.jpg → s35302086）
       const coverId = urlObj.pathname.split('/').pop()?.replace('.jpg', '') || '';
       fetchUrl = `/api/douban/cover/${coverId}`;
@@ -44,8 +42,7 @@ const downloadImageAsBlob = async (url: string, options?: {
   // 指数退避重试机制
   for (let retryCount = 0; retryCount <= config.maxRetries; retryCount++) {
     try {
-      console.log(`🔄 下载尝试 ${retryCount + 1}/${config.maxRetries + 1}:`, fetchUrl);
-      
+
       // 创建AbortController用于超时处理
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
@@ -68,7 +65,7 @@ const downloadImageAsBlob = async (url: string, options?: {
       }
       
       const blob = await response.blob();
-      console.log('✅ 图片下载成功，大小:', blob.size, '字节');
+
       return blob;
     } catch (error) {
       // 清除超时定时器（如果存在）
@@ -199,7 +196,6 @@ export const getImageUrl = (coverUrl?: string | null): string | null => {
  * @returns Promise<void> 上传成功
  */
 export const uploadImageToServer = async (bookId: number, imageData: string | Blob): Promise<void> => {
-  console.log('📤 开始上传图片到服务器:', bookId);
 
   try {
     let blobData: Blob;
@@ -243,7 +239,6 @@ export const uploadImageToServer = async (bookId: number, imageData: string | Bl
       throw new Error(errorData.error || `图片上传失败: ${response.status}`);
     }
 
-    console.log('✅ 图片上传成功');
   } catch (error) {
     console.error('❌ 图片上传失败:', error);
     throw error;
@@ -257,7 +252,6 @@ export const uploadImageToServer = async (bookId: number, imageData: string | Bl
  * @returns Promise<void> 上传成功
  */
 export const downloadAndUploadImage = async (bookId: number, url: string): Promise<void> => {
-  console.log('🔄 开始下载并上传图片:', bookId, url);
 
   try {
     // 下载图片
@@ -277,11 +271,10 @@ export const downloadAndUploadImage = async (bookId: number, url: string): Promi
  * @returns Promise<void>
  */
 export const deleteImageFromServer = async (bookId: number): Promise<void> => {
-  console.log('🗑️ 删除服务器上的图片:', bookId);
 
   try {
     await bookApi.deleteCover(bookId);
-    console.log('✅ 服务器图片删除成功');
+
   } catch (error) {
     console.error('❌ 删除服务器图片失败:', error);
     throw error;

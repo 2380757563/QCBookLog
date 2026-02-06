@@ -11,7 +11,7 @@ console.log('🧪 测试 qc_bookdata 表字段...\n');
 
 // 读取配置
 const config = readConfigSync();
-const talebookPath = config.talebookPath || path.join(process.cwd(), '../data/talebook.db');
+const talebookPath = config.talebookPath || path.join(process.cwd(), 'data/talebook/calibre-webserver.db');
 
 console.log('📂 Talebook 数据库路径:', talebookPath);
 
@@ -20,10 +20,12 @@ try {
   const db = new Database(talebookPath);
   console.log('✅ 数据库连接成功\n');
 
-  // 测试数据
-  const testBookId = 999999; // 使用一个不太可能存在的ID
+  // 获取一个实际存在的书籍ID
+  const existingBook = db.prepare('SELECT book_id FROM items LIMIT 1').get();
+  const testBookId = existingBook ? existingBook.book_id : 999999;
+  console.log(`📖 使用书籍ID: ${testBookId}\n`);
 
-  // 1. 测试插入数据
+  // 测试数据
   console.log('📝 测试1: 插入完整数据...');
   const insertData = {
     book_id: testBookId,

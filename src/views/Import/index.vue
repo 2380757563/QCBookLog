@@ -429,7 +429,7 @@ const processFile = async (file: File) => {
   try {
     // 如果是ZIP文件，先验证
     if (importFormat.value === 'zip') {
-      console.log('📦 检测到ZIP文件，开始验证...');
+
       const validation = await importService.validateZipFile(file);
       zipValidationResult.value = validation;
 
@@ -441,7 +441,7 @@ const processFile = async (file: File) => {
 
       // 显示ZIP文件信息
       importPreview.value = true;
-      console.log('✅ ZIP文件验证成功:', validation);
+
     } else {
       // 预览文件内容
       const content = await readFileContent(file);
@@ -612,7 +612,7 @@ const confirmImport = async () => {
     importResult.value = result;
 
     if (result.success) {
-      console.log('✅ 导入成功:', result);
+
     }
   } catch (e) {
     console.error('导入失败:', e);

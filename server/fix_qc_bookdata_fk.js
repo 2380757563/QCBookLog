@@ -38,7 +38,7 @@ async function fixQcBookDataForeignKey() {
         purchase_date TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (book_id) REFERENCES items(book_id) ON DELETE CASCADE ON UPDATE CASCADE
+        FOREIGN KEY (book_id) REFERENCES items(id) ON DELETE CASCADE ON UPDATE CASCADE
       )
     `).run();
     console.log('已创建新表');

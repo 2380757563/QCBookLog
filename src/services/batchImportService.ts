@@ -64,7 +64,8 @@ export class BatchImportService {
         coverUrl: item.coverUrl || '',
         purchaseDate: undefined,
         purchasePrice: undefined,
-        standardPrice: item.price ? parseFloat(item.price) : undefined,
+        // 去除"元"等非数字字符后再转换
+        standardPrice: item.price ? parseFloat(item.price.replace(/[^\d.]/g, '')) : undefined,
         readStatus: '未读' as const,
         readCompleteDate: undefined,
         rating: undefined,

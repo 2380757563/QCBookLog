@@ -48,15 +48,10 @@ const readingTrackingService: ReadingTrackingService = {
    * @returns 创建的阅读记录
    */
   async createReadingRecord(record: CreateReadingRecordRequest): Promise<ReadingRecord> {
-    console.log('📤 准备发送阅读记录到后端:', record);
-
     const requestData = {
       ...record,
       readerId: getCurrentReaderId()
     };
-
-    console.log('📤 实际发送的数据:', requestData);
-
     const response: ApiResponse<ReadingRecord> = await apiClient.post('/reading/record', requestData);
 
     if (!response.success) {

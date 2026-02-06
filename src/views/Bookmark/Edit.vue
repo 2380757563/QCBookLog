@@ -196,11 +196,11 @@ const goBack = () => {
 
 // 选择书籍
 const selectBook = (book: Book) => {
-  console.log('选择书籍:', book);
+
   selectedBook.value = book;
   form.bookId = book.id;
   showBookSelector.value = false;
-  console.log('选择书籍后 - form.bookId:', form.bookId, 'selectedBook:', selectedBook.value);
+
 };
 
 // 切换标签
@@ -251,11 +251,10 @@ const removeTag = async (tagName: string) => {
 
 // 保存
 const handleSave = async () => {
-  console.log('=== 保存书摘开始 ===');
-  console.log('form.bookId:', form.bookId, '类型:', typeof form.bookId);
-  console.log('selectedBook.value:', selectedBook.value);
-  console.log('selectedBook.value?.id:', selectedBook.value?.id, '类型:', typeof selectedBook.value?.id);
-  
+
+
+
+
   if (!form.bookId || form.bookId === 0) {
     console.error('验证失败：未选择书籍，form.bookId =', form.bookId);
     alert('请选择关联书籍');
@@ -267,9 +266,7 @@ const handleSave = async () => {
     return;
   }
 
-  console.log('验证通过，准备保存...');
-  console.log('保存书摘 - form.bookId:', form.bookId, '类型:', typeof form.bookId);
-  console.log('保存书摘 - selectedBook:', selectedBook.value);
+
 
   saving.value = true;
   try {
@@ -291,16 +288,14 @@ const handleSave = async () => {
     bookmarkData.book_title = selectedBook.value?.title;
     bookmarkData.book_author = selectedBook.value?.author;
 
-    console.log('=== 准备发送的数据 ===');
-    console.log('bookmarkData:', bookmarkData);
-    console.log('bookmarkData.bookId:', bookmarkData.bookId, '类型:', typeof bookmarkData.bookId);
-    console.log('bookmarkData.bookTitle:', bookmarkData.bookTitle);
-    console.log('bookmarkData.bookAuthor:', bookmarkData.bookAuthor);
-    console.log('selectedBook.value:', selectedBook.value);
+
+
+
+
 
     if (isEdit.value) {
-      console.log('更新书摘 - form:', form);
-      console.log('更新书摘 - form.id:', form.id, '类型:', typeof form.id);
+
+
       if (!form.id || form.id === '') {
         console.error('保存失败：无效的书摘ID');
         alert('保存失败：无效的书摘ID');
@@ -325,15 +320,14 @@ const handleSave = async () => {
 // 加载数据
 onMounted(async () => {
   try {
-    console.log('Edit页面加载 - route.params.id:', route.params.id, '类型:', typeof route.params.id);
-    console.log('Edit页面加载 - isEdit:', isEdit.value);
+
 
     // 加载书摘标签（从书摘标签 API）
     try {
       allTags.value = await tagApi.getAll();
-      console.log('书摘标签加载完成:', allTags.value);
+
     } catch (error) {
-      console.warn('⚠️ 加载书摘标签失败:', error.message);
+
     }
 
     // 尝试加载书籍列表（可选）
@@ -350,7 +344,6 @@ onMounted(async () => {
     // 编辑模式
     if (isEdit.value) {
       const bookmarkId = String(route.params.id);
-      console.log('加载书摘 - ID:', bookmarkId);
 
       // 检查 bookmarkId 是否有效
       if (!bookmarkId || bookmarkId === 'undefined' || bookmarkId === 'null') {
@@ -361,12 +354,11 @@ onMounted(async () => {
       }
 
       const bookmark = await bookmarkService.getBookmarkById(bookmarkId);
-      console.log('获取到的书摘:', bookmark);
+
       if (bookmark) {
         // 确保bookId是数字类型
         const numericBookId = typeof bookmark.bookId === 'string' ? parseInt(bookmark.bookId, 10) : bookmark.bookId;
-        console.log('numericBookId:', numericBookId, '类型:', typeof numericBookId);
-        
+
         // 复制书摘数据到表单
         form.id = String(bookmark.id);
         form.bookId = numericBookId;
@@ -392,23 +384,22 @@ onMounted(async () => {
             updateTime: ''
           };
           selectedBook.value = tempBook;
-          console.log('使用书摘存储的书籍信息:', selectedBook.value);
-          console.log('selectedBook.value.id:', selectedBook.value?.id, '类型:', typeof selectedBook.value?.id);
+
 
           // 尝试从书籍列表中获取完整的书籍信息（包括封面）
           const fullBook = bookStore.allBooks.find(b => b.id === numericBookId);
           if (fullBook && fullBook.coverUrl) {
             selectedBook.value.coverUrl = fullBook.coverUrl;
-            console.log('从书籍列表获取封面URL:', fullBook.coverUrl);
+
           }
         } else {
           // 如果书摘中没有存储书籍信息，尝试从书籍列表中查找
           const book = bookStore.allBooks.find(b => b.id === numericBookId);
           if (book) {
             selectedBook.value = book;
-            console.log('从书籍列表找到书籍:', book);
+
           } else {
-            console.warn('未找到书籍信息，bookId:', numericBookId);
+
             selectedBook.value = null;
           }
         }

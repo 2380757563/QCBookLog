@@ -3,7 +3,7 @@
  * 处理Talebook特定的数据操作
  */
 
-import databaseService from './databaseService.js';
+import databaseService from './database/index.js';
 
 /**
  * Talebook服务类
@@ -29,7 +29,7 @@ class TalebookService {
     }
 
     try {
-      const query = 'SELECT id, book_type FROM items';
+      const query = 'SELECT book_id as id, book_type FROM items';
       return this.db.prepare(query).all();
     } catch (error) {
       console.error('❌ 获取所有书籍类型失败:', error.message);
@@ -203,9 +203,9 @@ class TalebookService {
       let syncedCount = 0;
       for (const book of calibreBooks) {
         try {
-          // 检查Talebook数据库中是否已存在该书
+          // 检查Talebook数据库中是否已存在该书（items表的主键是book_id）
           const existingBook = this.db.prepare('SELECT book_id FROM items WHERE book_id = ?').get(book.id);
-          
+
           if (existingBook) {
             // 更新现有书籍类型
             this.db.prepare(`
@@ -214,11 +214,14 @@ class TalebookService {
               WHERE book_id = ?
             `).run(0, book.id); // 默认电子书类型
           } else {
-            // 插入新书 - 只设置必要字段，items表是统计表，不存储元数据
+            // 插入新书 - items表只存储统计信息
             this.db.prepare(`
-              INSERT INTO items (book_id, count_guest, count_visit, count_download, website, sole, book_type, book_count, create_time)
-              VALUES (?, 0, 0, 0, '', 0, 0, 1, ?)
-            `).run(book.id, book.timestamp || new Date().toISOString());
+              INSERT INTO items (book_id, book_type, create_time)
+              VALUES (?, 0, ?)
+            `).run(
+              book.id,
+              new Date().toISOString()
+            );
           }
           
           syncedCount++;

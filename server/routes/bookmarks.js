@@ -97,17 +97,9 @@ router.post('/', async (req, res) => {
     };
     
     console.log('创建书摘数据:', bookmarkData);
-    
+
     const newBookmark = qcDataService.createBookmark(bookmarkData);
-    
-    // 记录操作
-    await activityService.createActivity({
-      type: 'bookmark_added',
-      readerId: 0,
-      bookId: bookmarkData.book_id,
-      content: bookmarkData.content
-    });
-    
+
     // 转换返回结果的字段名，前端使用bookId、pageNum
     const responseBookmark = {
       ...newBookmark,
@@ -146,15 +138,7 @@ router.put('/:id', async (req, res) => {
     if (!updatedBookmark) {
       return res.status(404).json({ error: '书摘不存在' });
     }
-    
-    // 记录操作
-    await activityService.createActivity({
-      type: 'bookmark_updated',
-      readerId: 0,
-      bookId: bookmarkData.book_id,
-      content: bookmarkData.content
-    });
-    
+
     // 转换返回结果的字段名，前端使用bookId、pageNum
     const responseBookmark = {
       ...updatedBookmark,
@@ -186,15 +170,7 @@ router.delete('/:id', async (req, res) => {
     if (!success) {
       return res.status(404).json({ error: '书摘不存在' });
     }
-    
-    // 记录操作
-    await activityService.createActivity({
-      type: 'bookmark_deleted',
-      readerId: 0,
-      bookId: bookmark.book_id,
-      content: bookmark.content
-    });
-    
+
     res.json({ message: 'Bookmark deleted successfully' });
   } catch (error) {
     console.error('删除书摘失败:', error.message);

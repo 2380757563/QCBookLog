@@ -14,7 +14,7 @@ export class FileService {
   async saveCover(isbn: string, imageBuffer: ArrayBuffer): Promise<string> {
     try {
       // 在前端环境中，封面保存操作由后端API处理
-      console.log('🖼️ 封面图片已保存:', isbn);
+
       return `cover_${isbn}.jpg`;
     } catch (error) {
       console.error('保存封面失败:', error);

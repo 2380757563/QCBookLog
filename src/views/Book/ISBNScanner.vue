@@ -263,7 +263,7 @@ const initCodeReader = () => {
 const getAvailableCameras = async (forceRefresh = false): Promise<void> => {
   try {
     if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
-      console.warn('⚠️  浏览器不支持mediaDevices API');
+
       hasMultipleCameras.value = false;
       currentDeviceId = null;
       return;
@@ -279,9 +279,9 @@ const getAvailableCameras = async (forceRefresh = false): Promise<void> => {
         // 立即停止临时流
         tempStream.getTracks().forEach(track => track.stop());
         permissionGranted.value = true;
-        console.log('✅ 摄像头权限已授予');
+
       } catch (permError) {
-        console.warn('⚠️  获取摄像头权限失败:', permError);
+
         permissionGranted.value = false;
         // 不返回,继续尝试获取设备列表
       }
@@ -299,9 +299,8 @@ const getAvailableCameras = async (forceRefresh = false): Promise<void> => {
         return false;
       }
     });
-    
-    console.log('📷 检测到的摄像头数量:', availableCameras.length);
-    console.log('📷 所有摄像头详细信息:');
+
+
     availableCameras.forEach((cam, idx) => {
       const label = cam.label || '(未授权 - 需要摄像头权限)';
       console.log(`  [${idx}] ID: ${cam.deviceId.substring(0, 12)}... | Label: ${label}`);
@@ -311,10 +310,10 @@ const getAvailableCameras = async (forceRefresh = false): Promise<void> => {
     
     // 如果没有获取到摄像头信息,显示提示
     if (availableCameras.length === 0) {
-      console.warn('⚠️  未检测到任何摄像头,请检查:');
-      console.warn('  1. 设备是否有摄像头硬件');
-      console.warn('  2. 浏览器是否已授予摄像头权限');
-      console.warn('  3. 其他应用是否正在使用摄像头');
+
+
+
+
       currentDeviceId = null;
       return;
     }
@@ -327,10 +326,10 @@ const getAvailableCameras = async (forceRefresh = false): Promise<void> => {
     
     if (selectedCamera) {
       currentDeviceId = selectedCamera.deviceId;
-      console.log('📷 最终选择的摄像头:', selectedCamera.label);
+
     } else {
       currentDeviceId = null;
-      console.log('⚠️  未找到合适的摄像头');
+
     }
     
     console.log('📷 当前使用摄像头ID:', currentDeviceId?.substring(0, 12) + '...');
@@ -353,7 +352,7 @@ const classifyCameras = (cameras: MediaDeviceInfo[]) => {
     const isExcluded = excludedKeywords.some(keyword => label.includes(keyword));
     
     if (isExcluded) {
-      console.log('  ❌ 排除摄像头:', camera.label);
+
       return acc;
     }
     
@@ -385,7 +384,7 @@ const selectBestCamera = (classified: {
 }) => {
   // 优先级1: 主摄像头
   if (classified.mainCameras.length > 0) {
-    console.log('✅ 优先级1: 选择主摄像头:', classified.mainCameras[0].label);
+
     return classified.mainCameras[0];
   }
   
@@ -393,22 +392,22 @@ const selectBestCamera = (classified: {
   if (classified.backCameras.length > 0) {
     // 如果有多个后置摄像头,选择第二个(通常是主摄)
     if (classified.backCameras.length > 1) {
-      console.log('✅ 优先级2: 选择第二个后置摄像头:', classified.backCameras[1].label);
+
       return classified.backCameras[1];
     }
-    console.log('✅ 优先级2: 选择后置摄像头:', classified.backCameras[0].label);
+
     return classified.backCameras[0];
   }
   
   // 优先级3: 其他摄像头
   if (classified.otherCameras.length > 0) {
-    console.log('✅ 优先级3: 选择其他摄像头:', classified.otherCameras[0].label);
+
     return classified.otherCameras[0];
   }
   
   // 优先级4: 前置摄像头
   if (classified.frontCameras.length > 0) {
-    console.log('✅ 优先级4: 选择前置摄像头:', classified.frontCameras[0].label);
+
     return classified.frontCameras[0];
   }
   
@@ -453,7 +452,7 @@ const initCamera = async () => {
     } else {
       // 否则使用后置摄像头
       videoConstraints.facingMode = { ideal: 'environment' };
-      console.log('⚠️  未指定摄像头,使用 facingMode: environment');
+
     }
     
     const mediaConstraints = {
@@ -467,9 +466,7 @@ const initCamera = async () => {
       console.error('❌ videoElement.value 为 null');
       return;
     }
-    
-    console.log('🎥 启动摄像头,分辨率:', `${config.width}x${config.height}`, '帧率:', config.frameRate);
-    
+
     // 获取媒体流
     let stream: MediaStream;
     try {
@@ -477,7 +474,7 @@ const initCamera = async () => {
     } catch (streamError) {
       // 如果指定的摄像头失败,尝试使用第一个可用摄像头
       if (currentDeviceId && availableCameras.length > 0) {
-        console.warn('⚠️  使用指定摄像头失败,尝试使用第一个可用摄像头');
+
         delete videoConstraints.deviceId;
         videoConstraints.facingMode = { ideal: 'environment' };
         currentDeviceId = availableCameras[0].deviceId;
@@ -514,7 +511,7 @@ const initCamera = async () => {
       
       videoElement.value.onloadedmetadata = () => {
         clearTimeout(timeout);
-        console.log('✅ 视频已加载,尺寸:', videoElement.value!.videoWidth, 'x', videoElement.value!.videoHeight);
+
         resolve();
       };
       
@@ -599,8 +596,7 @@ const initCamera = async () => {
             }
           }
         );
-        
-        console.log('✅ ZXing扫描已启动');
+
       } catch (zxingError) {
         console.error('❌ 启动ZXing扫描失败:', zxingError);
         throw zxingError;
@@ -650,15 +646,14 @@ const initCamera = async () => {
 
 // 停止摄像头
 const stopCamera = () => {
-  console.log('🛑 停止摄像头...');
-  
+
   // 停止 ZXing 阅读器
   if (codeReader) {
     try {
       codeReader.reset();
-      console.log('🛑 已停止 ZXing 阅读器');
+
     } catch (e) {
-      console.warn('停止 ZXing 阅读器时出错:', e);
+
     }
   }
   
@@ -670,18 +665,18 @@ const stopCamera = () => {
     const stream = videoElement.value.srcObject as MediaStream;
     if (stream) {
       stream.getTracks().forEach(track => {
-        console.log('🛑 停止视频轨道:', track.label || track.kind);
+
         track.stop();
       });
     }
     videoElement.value.srcObject = null;
-    console.log('🛑 已清除视频流');
+
   }
   
   isCameraActive.value = false;
   isScanning = false;
   scannedResult.value = '';
-  console.log('✅ 摄像头已停止');
+
 };
 
 // 图像质量检测
@@ -752,14 +747,14 @@ const switchCamera = async () => {
   try {
     // 检查是否有多个摄像头
     if (!hasMultipleCameras.value) {
-      console.warn('⚠️  只有一个摄像头,无法切换');
+
       error.value = '设备只有一个摄像头,无法切换';
       return;
     }
     
     // 检查摄像头列表
     if (availableCameras.length === 0) {
-      console.warn('⚠️  摄像头列表为空,正在重新获取...');
+
       await getAvailableCameras(true); // 强制刷新
     
       if (availableCameras.length === 0) {
@@ -775,9 +770,9 @@ const switchCamera = async () => {
     if (codeReader) {
       try {
         codeReader.reset();
-        console.log('🛑 已停止 ZXing 阅读器');
+
       } catch (e) {
-        console.warn('停止 ZXing 阅读器失败:', e);
+
       }
     }
     
@@ -806,7 +801,7 @@ const switchCamera = async () => {
     // 如果找不到当前摄像头(可能已被移除),从第一个开始
     let nextIndex: number;
     if (currentIndex === -1) {
-      console.warn('⚠️  当前摄像头不在列表中,从第一个开始');
+
       nextIndex = 0;
     } else {
       nextIndex = (currentIndex + 1) % camerasToUse.length;
@@ -816,12 +811,10 @@ const switchCamera = async () => {
     
     // 更新当前设备ID
     currentDeviceId = nextCamera.deviceId;
-    
-    console.log(`🔄 切换到摄像头 [${nextIndex + 1}/${camerasToUse.length}]:`);
+
     console.log('   设备ID:', nextCamera.deviceId.substring(0, 12) + '...');
     console.log('   设备名称:', nextCamera.label || '(未授权)');
-    console.log('   是否已过滤:', filteredCameras.length > 0);
-    
+
     // 显示切换提示
     showSwitchingHint.value = true;
     setTimeout(() => {
@@ -830,8 +823,7 @@ const switchCamera = async () => {
     
     // 重新初始化摄像头
     await initCamera();
-    
-    console.log('✅ 摄像头切换成功');
+
   } catch (e) {
     console.error('❌ 切换摄像头失败:', e);
     error.value = '切换摄像头失败,请重试';
@@ -877,7 +869,7 @@ const onManualInput = () => {
 // 使用扫描结果
 const useScannedIsbn = () => {
   if (scannedResult.value) {
-    console.log('📤 使用扫描结果:', scannedResult.value);
+
     const route = router.currentRoute.value;
     
     const fromBatch = route.query.from === 'batch';
@@ -927,8 +919,7 @@ const handleFileSelect = async (event: Event) => {
   }
   
   const file = target.files[0];
-  console.log('📁 开始扫描图片:', file.name, file.type, file.size);
-  
+
   isScanningFromImage.value = true;
   error.value = '';
   
@@ -939,25 +930,23 @@ const handleFileSelect = async (event: Event) => {
       maxHeight: 1080,
       onlyValidIsbn: true
     });
-    
-    console.log('📷 图片扫描结果:', result);
-    
+
     if (result.validationResult === 'VALID') {
       scannedResult.value = result.processedIsbn || result.rawValue;
-      console.log('✅ 扫描成功，ISBN:', scannedResult.value);
+
       isScanning = false;
       if (codeReader) {
         codeReader.reset();
       }
     } else if (result.validationResult === 'INVALID_CHECKSUM') {
       error.value = '识别到条码但校验失败，请重新拍摄';
-      console.warn('⚠️ ISBN校验失败:', result.rawValue);
+
     } else if (result.validationResult === 'INVALID_FORMAT') {
       error.value = '无法识别ISBN格式，请确保图片清晰且包含完整条码';
-      console.warn('⚠️ ISBN格式无效:', result.rawValue);
+
     } else {
       error.value = result.error || '无法识别图片中的ISBN条码，请尝试拍摄更清晰的照片';
-      console.warn('⚠️ 扫描失败:', result.error);
+
     }
   } catch (e) {
     console.error('❌ 图片扫描异常:', e);
@@ -995,7 +984,7 @@ onMounted(() => {
   // 监听设备插拔
   if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
     navigator.mediaDevices.addEventListener('devicechange', async () => {
-      console.log('🔄 检测到设备变化,重新获取摄像头列表');
+
       await getAvailableCameras(true);
     });
   }

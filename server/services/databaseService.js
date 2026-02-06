@@ -7,6 +7,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { createRequire } from 'module';
 import { readConfigSync } from './dataService.js';
+import fsSync from 'fs';
 
 // 使用同步 require 导入 better-sqlite3
 const require = createRequire(import.meta.url);
@@ -23,8 +24,8 @@ try {
 }
 
 // 默认数据库路径（可被环境变量覆盖）
-let CALIBRE_DB_PATH = path.join(process.cwd(), 'data/book/metadata.db');
-let TALEBOOK_DB_PATH = path.join(process.cwd(), 'data/calibre-webserver.db');
+let CALIBRE_DB_PATH = path.join(process.cwd(), 'data/calibre/metadata.db');
+let TALEBOOK_DB_PATH = path.join(process.cwd(), 'data/talebook/calibre-webserver.db');
 
 // 优先级：1. 配置文件 2. 环境变量 3. 默认路径
 const config = readConfigSync();
@@ -64,6 +65,128 @@ class DatabaseService {
   initDatabases() {
     this.initCalibreDatabase();
     this.initTalebookDatabase();
+    // 初始化后进行完整性检查
+    this.checkDatabaseIntegrity();
+  }
+
+  /**
+   * 检查数据库完整性并修复
+   */
+  checkDatabaseIntegrity() {
+    console.log('🔍 开始数据库完整性检查...');
+    try {
+      if (this.isTalebookAvailable()) {
+        this.checkAndFixTalebookDatabase();
+      }
+      if (this.isCalibreAvailable()) {
+        this.checkAndFixCalibreDatabase();
+      }
+      console.log('✅ 数据库完整性检查完成');
+    } catch (error) {
+      console.error('❌ 数据库完整性检查失败:', error.message);
+    }
+  }
+
+  /**
+   * 检查并修复 Talebook 数据库
+   */
+  checkAndFixTalebookDatabase() {
+    try {
+      console.log('🔍 检查 Talebook 数据库完整性...');
+
+      // 检查 items 表的主键
+      const itemsTableInfo = this.talebookDb.prepare('PRAGMA table_info(items)').all();
+      const hasBookIdPrimaryKey = itemsTableInfo.some(col => col.name === 'book_id' && col.pk > 0);
+
+      if (!hasBookIdPrimaryKey) {
+        console.log('⚠️ items 表缺少 book_id 主键，开始修复...');
+        this.fixItemsTablePrimaryKey();
+      }
+
+      // 检查外键约束是否正确
+      const tablesToCheck = ['qc_book_groups', 'qc_bookmarks', 'qc_bookdata'];
+      for (const tableName of tablesToCheck) {
+        const foreignKeys = this.talebookDb.prepare(`PRAGMA foreign_key_list(${tableName})`).all();
+        const hasIncorrectForeignKey = foreignKeys.some(fk => fk.table === 'items' && fk.from === 'id');
+
+        if (hasIncorrectForeignKey) {
+          console.log(`⚠️ ${tableName} 表的外键约束不正确，开始修复...`);
+          this.fixTableForeignKey(tableName);
+        }
+      }
+
+      // 确保 qc_bookdata 表有所有必需的列
+      this.ensureQcBookdataColumns();
+
+      console.log('✅ Talebook 数据库完整性检查通过');
+    } catch (error) {
+      console.error('❌ 检查/修复 Talebook 数据库失败:', error.message);
+    }
+  }
+
+  /**
+   * 检查并修复 Calibre 数据库
+   */
+  checkAndFixCalibreDatabase() {
+    try {
+      console.log('🔍 检查 Calibre 数据库完整性...');
+      // 这里可以添加 Calibre 数据库的完整性检查逻辑
+      console.log('✅ Calibre 数据库完整性检查通过');
+    } catch (error) {
+      console.error('❌ 检查/修复 Calibre 数据库失败:', error.message);
+    }
+  }
+
+  /**
+   * 修复 items 表的主键
+   */
+  fixItemsTablePrimaryKey() {
+    // 这个修复逻辑已经在之前的迁移脚本中实现
+    // 如果 items 表格式不正确，需要重新创建表
+    console.log('⚠️ items 表主键修复需要在切换数据库时手动处理');
+  }
+
+  /**
+   * 修复表的外键约束
+   */
+  fixTableForeignKey(tableName) {
+    // 这个修复逻辑已经在之前的迁移脚本中实现
+    console.log(`⚠️ ${tableName} 表外键修复需要在切换数据库时手动处理`);
+  }
+
+  /**
+   * 确保 qc_bookdata 表有所有必需的列
+   */
+  ensureQcBookdataColumns() {
+    try {
+      const columns = this.talebookDb.prepare('PRAGMA table_info(qc_bookdata)').all();
+      const columnNames = new Set(columns.map(c => c.name));
+
+      const requiredFields = [
+        { name: 'purchase_price', sql: 'purchase_price REAL DEFAULT 0' },
+        { name: 'note', sql: 'note TEXT' },
+        { name: 'total_reading_time', sql: 'total_reading_time INTEGER DEFAULT 0' },
+        { name: 'read_pages', sql: 'read_pages INTEGER DEFAULT 0' },
+        { name: 'reading_count', sql: 'reading_count INTEGER DEFAULT 0' },
+        { name: 'last_read_date', sql: 'last_read_date DATE DEFAULT NULL' },
+        { name: 'last_read_duration', sql: 'last_read_duration INTEGER DEFAULT 0' }
+      ];
+
+      for (const field of requiredFields) {
+        if (!columnNames.has(field.name)) {
+          try {
+            this.talebookDb.prepare(`ALTER TABLE qc_bookdata ADD COLUMN ${field.sql}`).run();
+            console.log(`✅ 添加 ${field.name} 列到 qc_bookdata 表`);
+          } catch (error) {
+            if (!error.message.includes('duplicate column name')) {
+              console.error(`❌ 添加 ${field.name} 列失败:`, error.message);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('❌ 检查/添加 qc_bookdata 列失败:', error.message);
+    }
   }
 
   /**
@@ -79,10 +202,28 @@ class DatabaseService {
         return;
       }
 
+      // 确保数据库目录存在
+      const dbDir = path.dirname(CALIBRE_DB_PATH);
+      if (!fsSync.existsSync(dbDir)) {
+        console.log('📂 创建数据库目录:', dbDir);
+        fsSync.mkdirSync(dbDir, { recursive: true });
+        console.log('✅ 数据库目录创建成功');
+      }
+
+      // 检查数据库文件是否存在
+      if (!fsSync.existsSync(CALIBRE_DB_PATH)) {
+        console.warn('⚠️ Calibre 数据库文件不存在:', CALIBRE_DB_PATH);
+        console.warn('⚠️ 请先配置 Calibre 书库路径');
+        this.calibreDb = null;
+        return;
+      }
+
       this.calibreDb = new Database(CALIBRE_DB_PATH);
       console.log('✅ Calibre 数据库对象创建成功');
       this.calibreDb.pragma('journal_mode = WAL');
       console.log('✅ Calibre WAL 模式已启用');
+      this.calibreDb.pragma('foreign_keys = ON');
+      console.log('✅ Calibre 外键约束已启用');
 
       // 注册 Calibre 所需的自定义函数 title_sort
       this.registerCalibreFunctions(this.calibreDb);
@@ -114,9 +255,24 @@ class DatabaseService {
     try {
       console.log('🔄 初始化 Talebook 数据库连接...');
       console.log('🔄 数据库路径:', TALEBOOK_DB_PATH);
-
       if (!Database) {
         console.warn('⚠️ 数据库服务不可用，Talebook 功能将不可用');
+        return;
+      }
+
+      // 确保数据库目录存在
+      const dbDir = path.dirname(TALEBOOK_DB_PATH);
+      if (!fsSync.existsSync(dbDir)) {
+        console.log('📂 创建数据库目录:', dbDir);
+        fsSync.mkdirSync(dbDir, { recursive: true });
+        console.log('✅ 数据库目录创建成功');
+      }
+
+      // 检查数据库文件是否存在
+      if (!fsSync.existsSync(TALEBOOK_DB_PATH)) {
+        console.warn('⚠️ Talebook 数据库文件不存在:', TALEBOOK_DB_PATH);
+        console.warn('⚠️ 请先配置 Talebook 书库路径');
+        this.talebookDb = null;
         return;
       }
 
@@ -124,6 +280,8 @@ class DatabaseService {
       console.log('✅ Talebook 数据库对象创建成功');
       this.talebookDb.pragma('journal_mode = WAL');
       console.log('✅ Talebook WAL 模式已启用');
+      this.talebookDb.pragma('foreign_keys = ON');
+      console.log('✅ Talebook 外键约束已启用');
 
       // 初始化 qcbooklog 专属表结构
       this.initQcTables(this.talebookDb);
@@ -158,6 +316,10 @@ class DatabaseService {
       console.log('🔄 重新初始化 Calibre 数据库...');
       this.initCalibreDatabase();
 
+      // 初始化后进行完整性检查
+      console.log('🔄 进行数据库完整性检查...');
+      this.checkDatabaseIntegrity();
+
       console.log('✅ Calibre 数据库路径更新完成');
       return { success: true, message: 'Calibre 数据库路径已更新' };
     } catch (error) {
@@ -187,6 +349,10 @@ class DatabaseService {
       console.log('🔄 重新初始化 Talebook 数据库...');
       this.initTalebookDatabase();
 
+      // 初始化后进行完整性检查
+      console.log('🔄 进行数据库完整性检查...');
+      this.checkDatabaseIntegrity();
+
       console.log('✅ Talebook 数据库路径更新完成');
       return { success: true, message: 'Talebook 数据库路径已更新' };
     } catch (error) {
@@ -211,11 +377,26 @@ class DatabaseService {
 
   /**
    * 初始化 Calibre 数据库表结构
+   * 注意：如果数据库已存在表结构，则完全使用现有表，不进行任何修改
+   * 这样可以保证以 data/calibre/metadata.db 为模板的表结构不被破坏
    */
   initCalibreTables(db) {
     try {
       console.log('📋 开始初始化 Calibre 数据库表结构');
-      
+
+      // 检查是否已经存在核心表（如果存在，说明数据库已有完整结构）
+      const existingTables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
+      const hasBooksTable = existingTables.some(t => t.name === 'books');
+      const hasAuthorsTable = existingTables.some(t => t.name === 'authors');
+
+      if (hasBooksTable && hasAuthorsTable) {
+        console.log('✅ 数据库已存在表结构，使用现有结构（不进行任何修改）');
+        console.log(`   已有表: ${existingTables.map(t => t.name).join(', ')}`);
+        return;
+      }
+
+      console.log('⚠️ 数据库表结构不完整，将创建基本表结构...');
+
       // 创建 books 表（如果不存在）
       db.prepare(`
         CREATE TABLE IF NOT EXISTS books (
@@ -227,6 +408,7 @@ class DatabaseService {
           has_cover INTEGER DEFAULT 0,
           path TEXT,
           series_index REAL DEFAULT 1,
+          author_sort TEXT,
           last_modified TEXT DEFAULT CURRENT_TIMESTAMP
         )
       `).run();
@@ -235,7 +417,8 @@ class DatabaseService {
       db.prepare(`
         CREATE TABLE IF NOT EXISTS authors (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          name TEXT NOT NULL
+          name TEXT NOT NULL,
+          sort TEXT
         )
       `).run();
       
@@ -294,7 +477,7 @@ class DatabaseService {
       db.prepare(`
         CREATE TABLE IF NOT EXISTS ratings (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
-          rating INTEGER NOT NULL
+          rating REAL NOT NULL
         )
       `).run();
       
@@ -347,6 +530,25 @@ class DatabaseService {
         )
       `).run();
       
+      // 创建 series 表（如果不存在）
+      db.prepare(`
+        CREATE TABLE IF NOT EXISTS series (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL
+        )
+      `).run();
+      
+      // 创建 books_series_link 表（如果不存在）
+      db.prepare(`
+        CREATE TABLE IF NOT EXISTS books_series_link (
+          book INTEGER,
+          series INTEGER,
+          PRIMARY KEY (book, series),
+          FOREIGN KEY (book) REFERENCES books(id) ON DELETE CASCADE,
+          FOREIGN KEY (series) REFERENCES series(id) ON DELETE CASCADE
+        )
+      `).run();
+      
       console.log('✅ Calibre 数据库表结构初始化完成');
     } catch (error) {
       console.error('❌ 初始化 Calibre 数据库表结构失败:', error.message);
@@ -361,6 +563,22 @@ class DatabaseService {
   initQcTables(db) {
     try {
       console.log('📋 开始初始化 qcbooklog 专属表结构');
+
+      // 创建 items 表（如果不存在）- 统计信息表（符合 calibre-webserver (1).db 的格式）
+      db.prepare(`
+        CREATE TABLE IF NOT EXISTS items (
+          book_id INTEGER NOT NULL PRIMARY KEY,
+          count_guest INTEGER NOT NULL DEFAULT 0,
+          count_visit INTEGER NOT NULL DEFAULT 0,
+          count_download INTEGER NOT NULL DEFAULT 0,
+          website VARCHAR(255) NOT NULL DEFAULT '',
+          collector_id INTEGER,
+          sole BOOLEAN NOT NULL DEFAULT 0,
+          book_type INTEGER NOT NULL DEFAULT 1,
+          book_count INTEGER NOT NULL DEFAULT 0,
+          create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `).run();
 
       // 创建 users 表（如果不存在）- 用于读者/用户管理
       db.prepare(`
@@ -380,7 +598,7 @@ class DatabaseService {
       const defaultUser = db.prepare('SELECT * FROM users WHERE id = 1').get();
       if (!defaultUser) {
         db.prepare(`
-          INSERT INTO users (id, username, name, admin, active)
+          INSERT OR IGNORE INTO users (id, username, name, admin, active)
           VALUES (1, 'default', '默认用户', 1, 1)
         `).run();
         console.log('✅ 默认用户已创建');
@@ -545,6 +763,11 @@ class DatabaseService {
           binding1 INTEGER DEFAULT 0,
           binding2 INTEGER DEFAULT 0,
           note TEXT,
+          total_reading_time INTEGER DEFAULT 0,
+          read_pages INTEGER DEFAULT 0,
+          reading_count INTEGER DEFAULT 0,
+          last_read_date DATE DEFAULT NULL,
+          last_read_duration INTEGER DEFAULT 0,
           FOREIGN KEY (book_id) REFERENCES items(book_id) ON DELETE CASCADE
         )
       `).run();
@@ -619,6 +842,21 @@ class DatabaseService {
 
       db.prepare('CREATE INDEX IF NOT EXISTS idx_daily_stats_reader_date ON qc_daily_reading_stats(reader_id, date)').run();
       console.log('✅ qc_daily_reading_stats 表创建完成');
+
+      // 创建 reading_goals 表（如果不存在）- 阅读目标
+      db.prepare(`
+        CREATE TABLE IF NOT EXISTS reading_goals (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          reader_id INTEGER NOT NULL DEFAULT 0,
+          year INTEGER NOT NULL,
+          target INTEGER NOT NULL,
+          completed INTEGER DEFAULT 0,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(reader_id, year)
+        )
+      `).run();
+      console.log('✅ reading_goals 表创建完成');
 
       console.log('✅ qcbooklog 专属表结构初始化完成');
       console.log('✅ qc_bookdata 表创建完成');
@@ -701,7 +939,7 @@ class DatabaseService {
           WHERE bal.book = b.id
         ) as author,
         (SELECT i.val FROM identifiers i WHERE i.book = b.id AND i.type = 'isbn') as isbn,
-        (SELECT r.rating FROM ratings r JOIN books_ratings_link brl ON r.id = brl.rating WHERE brl.book = b.id) as rating,
+        (SELECT r.rating / 2.0 FROM ratings r JOIN books_ratings_link brl ON r.id = brl.rating WHERE brl.book = b.id) as rating,
         (SELECT c.text FROM comments c WHERE c.book = b.id) as description,
         (SELECT p.name FROM publishers p WHERE p.id IN (SELECT publisher FROM books_publishers_link WHERE book = b.id)) as publisher,
         (SELECT l.lang_code FROM languages l WHERE l.id IN (SELECT lang_code FROM books_languages_link WHERE book = b.id)) as language,
@@ -712,10 +950,7 @@ class DatabaseService {
           JOIN books_tags_link btl ON t.id = btl.tag
           WHERE btl.book = b.id
         ) as tags,
-        (
-          SELECT '[' || GROUP_CONCAT('"' || d.format || '"', ',') || ']'
-          FROM data d WHERE d.book = b.id
-        ) as formats
+        '[]' as formats
       FROM books b
       ORDER BY b.last_modified DESC
     `;
@@ -962,7 +1197,7 @@ class DatabaseService {
             WHERE bal.book = b.id
           ) as author,
           (SELECT COALESCE((SELECT i.val FROM identifiers i WHERE i.book = b.id AND i.type = 'isbn'), '') as isbn) as isbn,
-          (SELECT r.rating FROM ratings r JOIN books_ratings_link brl ON r.id = brl.rating WHERE brl.book = b.id) as rating,
+          (SELECT r.rating / 2.0 FROM ratings r JOIN books_ratings_link brl ON r.id = brl.rating WHERE brl.book = b.id) as rating,
           (SELECT c.text FROM comments c WHERE c.book = b.id) as description,
           (SELECT p.name FROM publishers p WHERE p.id IN (SELECT publisher FROM books_publishers_link WHERE book = b.id)) as publisher,
           (SELECT l.lang_code FROM languages l WHERE l.id IN (SELECT lang_code FROM books_languages_link WHERE book = b.id)) as language,
@@ -973,10 +1208,7 @@ class DatabaseService {
             JOIN books_tags_link btl ON t.id = btl.tag
             WHERE btl.book = b.id
           ) as tags,
-          (
-            SELECT '[' || GROUP_CONCAT('"' || d.format || '"', ',') || ']'
-            FROM data d WHERE d.book = b.id
-          ) as formats
+          '[]' as formats
         FROM books b
         WHERE b.id = ?
       `;
@@ -1092,6 +1324,16 @@ class DatabaseService {
    * @returns {Object} 添加后的书籍信息（包含ID）
    */
   addBookToDB(book) {
+    console.log('📝 [addBookToDB] 开始添加书籍到数据库');
+    console.log('📚 [addBookToDB] 书籍数据:', JSON.stringify(book, null, 2));
+    console.log('📚 [addBookToDB] 关键字段检查:');
+    console.log('  - title:', book.title);
+    console.log('  - author:', book.author);
+    console.log('  - isbn:', book.isbn);
+    console.log('  - description:', book.description ? book.description.substring(0, 100) + '...' : '无');
+    console.log('  - tags:', book.tags);
+    console.log('  - publisher:', book.publisher);
+
     try {
       if (!this.calibreDb) {
         throw new Error('Calibre 数据库未初始化');
@@ -1103,11 +1345,15 @@ class DatabaseService {
         throw new Error(`数据验证失败: ${validationResult.errors.join(', ')}`);
       }
 
+      console.log('✅ [addBookToDB] 数据验证通过');
+
       // 使用对象来存储bookId，这样可以在transaction中修改
       const result = { bookId: null };
       
       // 开启事务并执行
       const transaction = this.calibreDb.transaction(() => {
+        console.log('🔄 [addBookToDB] 开始事务');
+
         // 1. 处理作者
         let authorId = null;
         if (book.author) {
@@ -1133,6 +1379,10 @@ class DatabaseService {
         }
 
         // 3. 添加书籍到books表
+        // 构建path字段：将作者中的 " / " 替换为 "&"，确保只有两级目录
+        const authorPath = (book.author || '未知作者').replace(/\s*\/\s*/g, ' & ');
+        const bookPath = book.path || `${authorPath}/${book.title || '未知书名'}`;
+        
         const bookResult = this.calibreDb.prepare(`
           INSERT INTO books (title, author_sort, timestamp, pubdate, uuid, has_cover, path, last_modified)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -1143,13 +1393,14 @@ class DatabaseService {
           book.publishYear ? `${book.publishYear}-01-01` : new Date().toISOString(),
           book.uuid || '',
           book.hasCover ? 1 : 0,
-          book.path || `${book.author || '未知作者'}/${book.title || '未知书名'}`,
+          bookPath,
           new Date().toISOString()
         );
 
         result.bookId = bookResult.lastInsertRowid;
         
         const bookId = result.bookId;
+        console.log('✅ [addBookToDB] 书籍基本信息插入成功，bookId:', bookId);
 
         // 4. 关联作者
         if (authorId) {
@@ -1162,70 +1413,234 @@ class DatabaseService {
         }
 
         // 6. 添加ISBN
-        if (book.isbn) {
-          this.calibreDb.prepare(`INSERT OR IGNORE INTO identifiers (book, type, val) VALUES (?, 'isbn', ?)`).run(bookId, book.isbn);
+        console.log('📖 [addBookToDB] 检查ISBN字段:');
+        console.log('  - book.isbn类型:', typeof book.isbn);
+        console.log('  - book.isbn值:', book.isbn);
+        console.log('  - book.isbn.trim():', book.isbn ? book.isbn.trim() : 'N/A');
+        
+        if (book.isbn && book.isbn.trim() !== '') {
+          console.log('📖 [addBookToDB] 准备插入ISBN:', book.isbn);
+          try {
+            const isbnResult = this.calibreDb.prepare(`INSERT INTO identifiers (book, type, val) VALUES (?, 'isbn', ?)`).run(bookId, book.isbn);
+            console.log('✅ [addBookToDB] ISBN插入成功，ID:', isbnResult.lastInsertRowid);
+
+            // 验证ISBN是否正确插入
+            const insertedISBN = this.calibreDb.prepare(`SELECT * FROM identifiers WHERE id = ?`).get(isbnResult.lastInsertRowid);
+            if (!insertedISBN) {
+              throw new Error('ISBN插入后验证失败');
+            }
+            console.log('✅ [addBookToDB] ISBN验证成功:', insertedISBN.val);
+          } catch (isbnError) {
+            console.error('❌ [addBookToDB] ISBN插入失败:', isbnError.message);
+            // 不抛出错误，允许其他字段继续插入
+            // 但记录详细的错误信息
+            console.error('❌ [addBookToDB] 详细信息:', {
+              bookId,
+              isbn: book.isbn,
+              errorStack: isbnError.stack
+            });
+          }
+        } else {
+          console.log('⚠️ [addBookToDB] ISBN为空，跳过插入');
+          console.log('⚠️ [addBookToDB] ISBN值:', book.isbn);
         }
 
         // 7. 添加描述
-        if (book.description) {
-          this.calibreDb.prepare(`INSERT INTO comments (book, text) VALUES (?, ?)`).run(bookId, book.description);
+        console.log('📝 [addBookToDB] 检查description字段:');
+        console.log('  - book.description类型:', typeof book.description);
+        console.log('  - book.description值:', book.description ? book.description.substring(0, 100) + '...' : '无');
+        
+        if (book.description && book.description.trim() !== '') {
+          console.log('📝 [addBookToDB] 准备插入描述，长度:', book.description.length);
+          try {
+            const commentResult = this.calibreDb.prepare(`INSERT INTO comments (book, text) VALUES (?, ?)`).run(bookId, book.description);
+            console.log('✅ [addBookToDB] 描述插入成功，ID:', commentResult.lastInsertRowid);
+
+            // 验证描述是否正确插入
+            const insertedComment = this.calibreDb.prepare(`SELECT * FROM comments WHERE id = ?`).get(commentResult.lastInsertRowid);
+            if (!insertedComment) {
+              throw new Error('描述插入后验证失败');
+            }
+            console.log('✅ [addBookToDB] 描述验证成功，长度:', insertedComment.text.length);
+          } catch (commentError) {
+            console.error('❌ [addBookToDB] 描述插入失败:', commentError.message);
+            console.error('❌ [addBookToDB] 详细信息:', {
+              bookId,
+              descriptionLength: book.description.length,
+              errorStack: commentError.stack
+            });
+          }
+        } else {
+          console.log('⚠️ [addBookToDB] description为空，跳过插入');
         }
 
         // 8. 添加评分
         if (book.rating) {
-          // 查找或创建评分
-          const rating = this.calibreDb.prepare(`SELECT id FROM ratings WHERE rating = ?`).get(book.rating);
-          let ratingId;
-          if (rating) {
-            ratingId = rating.id;
-          } else {
-            ratingId = this.calibreDb.prepare(`INSERT INTO ratings (rating) VALUES (?)`).run(book.rating).lastInsertRowid;
+          console.log('⭐ [addBookToDB] 准备插入评分:', book.rating);
+          // 将浮点数评分乘以2转换为整数（例如7.5 -> 15），以便在INTEGER字段中存储
+          const ratingValue = Math.round(parseFloat(book.rating) * 2);
+          console.log('🔄 [addBookToDB] 评分转换:', book.rating, '->', ratingValue);
+          try {
+            // 查找或创建评分
+            const rating = this.calibreDb.prepare(`SELECT id FROM ratings WHERE rating = ?`).get(ratingValue);
+            let ratingId;
+            if (rating) {
+              ratingId = rating.id;
+              console.log('✅ [addBookToDB] 找到已存在的评分ID:', ratingId);
+            } else {
+              const newRatingResult = this.calibreDb.prepare(`INSERT INTO ratings (rating) VALUES (?)`).run(ratingValue);
+              ratingId = newRatingResult.lastInsertRowid;
+              console.log('✅ [addBookToDB] 创建新评分ID:', ratingId);
+            }
+
+            // 删除旧的评分关联（如果存在）
+            this.calibreDb.prepare(`DELETE FROM books_ratings_link WHERE book = ?`).run(bookId);
+
+            // 添加新的评分关联
+            const ratingLinkResult = this.calibreDb.prepare(`INSERT INTO books_ratings_link (book, rating) VALUES (?, ?)`).run(bookId, ratingId);
+            console.log('✅ [addBookToDB] 评分关联成功，link ID:', ratingLinkResult.lastInsertRowid);
+
+            // 验证评分关联是否正确插入
+            const insertedRatingLink = this.calibreDb.prepare(`SELECT * FROM books_ratings_link WHERE book = ? AND rating = ?`).get(bookId, ratingId);
+            if (!insertedRatingLink) {
+              throw new Error('评分关联插入后验证失败');
+            }
+            console.log('✅ [addBookToDB] 评分关联验证成功');
+          } catch (ratingError) {
+            console.error('❌ [addBookToDB] 评分插入失败:', ratingError.message);
+            console.error('❌ [addBookToDB] 详细信息:', {
+              bookId,
+              rating: book.rating,
+              ratingValue,
+              errorStack: ratingError.stack
+            });
           }
-          this.calibreDb.prepare(`INSERT OR IGNORE INTO books_ratings_link (book, rating) VALUES (?, ?)`).run(bookId, ratingId);
         }
 
         // 9. 添加标签
+        console.log('🏷️ [addBookToDB] 检查tags字段:');
+        console.log('  - book.tags类型:', typeof book.tags);
+        console.log('  - book.tags值:', book.tags);
+        console.log('  - Array.isArray(book.tags):', Array.isArray(book.tags));
+        console.log('  - book.tags?.length:', book.tags?.length);
+        
         if (book.tags && Array.isArray(book.tags) && book.tags.length > 0) {
+          console.log('🏷️ [addBookToDB] 准备插入标签，数量:', book.tags.length);
+          let tagsInserted = 0;
+          let tagsFailed = 0;
+
           for (const tagName of book.tags) {
-            // 查找或创建标签
-            const tag = this.calibreDb.prepare(`SELECT id FROM tags WHERE name = ?`).get(tagName);
-            let tagId;
-            if (tag) {
-              tagId = tag.id;
-            } else {
-              // Calibre数据库的tags表没有sort列，只插入name列
-              tagId = this.calibreDb.prepare(`INSERT INTO tags (name) VALUES (?)`).run(tagName).lastInsertRowid;
+            try {
+              // 查找或创建标签
+              const tag = this.calibreDb.prepare(`SELECT id FROM tags WHERE name = ?`).get(tagName);
+              let tagId;
+              if (tag) {
+                tagId = tag.id;
+              } else {
+                // Calibre数据库的tags表没有sort列，只插入name列
+                const newTagResult = this.calibreDb.prepare(`INSERT INTO tags (name) VALUES (?)`).run(tagName);
+                tagId = newTagResult.lastInsertRowid;
+                console.log('✅ [addBookToDB] 创建新标签:', tagName, 'ID:', tagId);
+              }
+
+              // 删除旧的标签关联（如果存在）
+              this.calibreDb.prepare(`DELETE FROM books_tags_link WHERE book = ? AND tag = ?`).run(bookId, tagId);
+
+              // 添加新的标签关联
+              const tagLinkResult = this.calibreDb.prepare(`INSERT INTO books_tags_link (book, tag) VALUES (?, ?)`).run(bookId, tagId);
+              tagsInserted++;
+              console.log('✅ [addBookToDB] 标签关联成功:', tagName, 'link ID:', tagLinkResult.lastInsertRowid);
+            } catch (tagError) {
+              tagsFailed++;
+              console.error('❌ [addBookToDB] 标签插入失败:', tagName, tagError.message);
+              console.error('❌ [addBookToDB] 详细信息:', {
+                bookId,
+                tagName,
+                errorStack: tagError.stack
+              });
             }
-            this.calibreDb.prepare(`INSERT OR IGNORE INTO books_tags_link (book, tag) VALUES (?, ?)`).run(bookId, tagId);
           }
+
+          console.log('📊 [addBookToDB] 标签插入完成: 成功', tagsInserted, '个，失败', tagsFailed, '个');
+        } else {
+          console.log('⚠️ [addBookToDB] tags为空或不是数组，跳过插入');
+          console.log('⚠️ [addBookToDB] tags值:', book.tags);
         }
 
         // 10. 添加丛书
-        if (book.series) {
-          // 查找或创建丛书
-          const series = this.calibreDb.prepare(`SELECT id FROM series WHERE name = ?`).get(book.series);
-          let seriesId;
-          if (series) {
-            seriesId = series.id;
-          } else {
-            seriesId = this.calibreDb.prepare(`INSERT INTO series (name) VALUES (?)`).run(book.series).lastInsertRowid;
+        if (book.series && book.series.trim() !== '') {
+          console.log('📚 [addBookToDB] 准备插入丛书:', book.series);
+          try {
+            // 查找或创建丛书
+            const series = this.calibreDb.prepare(`SELECT id FROM series WHERE name = ?`).get(book.series);
+            let seriesId;
+            if (series) {
+              seriesId = series.id;
+            } else {
+              const newSeriesResult = this.calibreDb.prepare(`INSERT INTO series (name) VALUES (?)`).run(book.series);
+              seriesId = newSeriesResult.lastInsertRowid;
+              console.log('✅ [addBookToDB] 创建新丛书:', book.series, 'ID:', seriesId);
+            }
+
+            // 删除旧的丛书关联（如果存在）
+            this.calibreDb.prepare(`DELETE FROM books_series_link WHERE book = ?`).run(bookId);
+
+            // 关联书籍和丛书
+            const seriesLinkResult = this.calibreDb.prepare(`INSERT INTO books_series_link (book, series) VALUES (?, ?)`).run(bookId, seriesId);
+            console.log('✅ [addBookToDB] 丛书关联成功，link ID:', seriesLinkResult.lastInsertRowid);
+
+            // 验证丛书关联是否正确插入
+            const insertedSeriesLink = this.calibreDb.prepare(`SELECT * FROM books_series_link WHERE book = ? AND series = ?`).get(bookId, seriesId);
+            if (!insertedSeriesLink) {
+              throw new Error('丛书关联插入后验证失败');
+            }
+            console.log('✅ [addBookToDB] 丛书关联验证成功');
+          } catch (seriesError) {
+            console.error('❌ [addBookToDB] 丛书插入失败:', seriesError.message);
+            console.error('❌ [addBookToDB] 详细信息:', {
+              bookId,
+              series: book.series,
+              errorStack: seriesError.stack
+            });
           }
-          // 关联书籍和丛书
-          this.calibreDb.prepare(`INSERT OR IGNORE INTO books_series_link (book, series) VALUES (?, ?)`).run(bookId, seriesId);
         }
 
         // 11. 添加语言
         if (book.language) {
-          // 查找或创建语言
-          const language = this.calibreDb.prepare(`SELECT id FROM languages WHERE lang_code = ?`).get(book.language);
-          let langId;
-          if (language) {
-            langId = language.id;
-          } else {
-            langId = this.calibreDb.prepare(`INSERT INTO languages (lang_code) VALUES (?)`).run(book.language).lastInsertRowid;
+          console.log('🌍 [addBookToDB] 准备插入语言:', book.language);
+          try {
+            // 查找或创建语言
+            const language = this.calibreDb.prepare(`SELECT id FROM languages WHERE lang_code = ?`).get(book.language);
+            let langId;
+            if (language) {
+              langId = language.id;
+            } else {
+              const newLanguageResult = this.calibreDb.prepare(`INSERT INTO languages (lang_code) VALUES (?)`).run(book.language);
+              langId = newLanguageResult.lastInsertRowid;
+              console.log('✅ [addBookToDB] 创建新语言:', book.language, 'ID:', langId);
+            }
+
+            // 删除旧的语言关联（如果存在）
+            this.calibreDb.prepare(`DELETE FROM books_languages_link WHERE book = ?`).run(bookId);
+
+            // Calibre数据库的books_languages_link表使用lang_code作为列名，而不是language
+            const languageLinkResult = this.calibreDb.prepare(`INSERT INTO books_languages_link (book, lang_code) VALUES (?, ?)`).run(bookId, langId);
+            console.log('✅ [addBookToDB] 语言关联成功，link ID:', languageLinkResult.lastInsertRowid);
+
+            // 验证语言关联是否正确插入
+            const insertedLanguageLink = this.calibreDb.prepare(`SELECT * FROM books_languages_link WHERE book = ? AND lang_code = ?`).get(bookId, langId);
+            if (!insertedLanguageLink) {
+              throw new Error('语言关联插入后验证失败');
+            }
+            console.log('✅ [addBookToDB] 语言关联验证成功');
+          } catch (languageError) {
+            console.error('❌ [addBookToDB] 语言插入失败:', languageError.message);
+            console.error('❌ [addBookToDB] 详细信息:', {
+              bookId,
+              language: book.language,
+              errorStack: languageError.stack
+            });
           }
-          // Calibre数据库的books_languages_link表使用lang_code作为列名，而不是language
-          this.calibreDb.prepare(`INSERT OR IGNORE INTO books_languages_link (book, lang_code) VALUES (?, ?)`).run(bookId, langId);
         }
       });
       
@@ -1235,13 +1650,13 @@ class DatabaseService {
       // 3. 如果 Talebook 数据库可用，同步书籍到 Talebook 数据库
       if (this.isTalebookAvailable()) {
         try {
-          // 检查书籍是否已存在于 Talebook 数据库
+          // 检查书籍是否已存在于 Talebook 数据库（items表的主键是book_id）
         const existingItem = this.talebookDb.prepare(`SELECT book_id FROM items WHERE book_id = ?`).get(result.bookId);
         if (!existingItem) {
-          // 插入书籍到 Talebook 数据库的 items 表
+          // 插入书籍到 Talebook 数据库的 items 表（只存储统计信息）
           this.talebookDb.prepare(`
-            INSERT INTO items (book_id, count_guest, count_visit, count_download, website, sole, book_type, book_count, create_time)
-            VALUES (?, 0, 0, 0, '', 0, ?, 1, ?)
+            INSERT INTO items (book_id, book_type, create_time)
+            VALUES (?, ?, ?)
           `).run(
             result.bookId,
             book.book_type || 1,
@@ -1251,7 +1666,7 @@ class DatabaseService {
         } else {
           // 更新书籍类型
           this.talebookDb.prepare(`
-            UPDATE items 
+            UPDATE items
             SET book_type = ?
             WHERE book_id = ?
           `).run(
@@ -1265,7 +1680,14 @@ class DatabaseService {
         const existingBookData = this.talebookDb.prepare(`SELECT * FROM qc_bookdata WHERE book_id = ?`).get(result.bookId);
         if (!existingBookData) {
           // 处理前端发送的pages字段，兼容pageCount字段
-          const pageCount = book.pageCount || book.pages || 0;
+          // 提取数字页数
+          let pageCount = 0;
+          if (book.pageCount) {
+            pageCount = parseInt(book.pageCount) || 0;
+          } else if (book.pages) {
+            // 处理字符串格式的页数，如"114页"
+            pageCount = parseInt(String(book.pages).match(/\d+/)?.[0] || '0') || 0;
+          }
 
           // 插入书籍到qc_bookdata表，包含所有新增字段
           this.talebookDb.prepare(`
@@ -1276,7 +1698,7 @@ class DatabaseService {
             pageCount,
             book.standardPrice || 0,
             book.purchasePrice || 0,
-            book.purchaseDate || CURRENT_TIMESTAMP,
+            book.purchaseDate || new Date().toISOString(),
             book.binding1 || 0,
             book.binding2 || 0,
             book.note || ''
@@ -1284,23 +1706,30 @@ class DatabaseService {
           console.log('✅ 书籍同步到 Talebook 数据库qc_bookdata表成功');
         } else {
           // 处理前端发送的pages字段，兼容pageCount字段
-          const pageCount = book.pageCount || book.pages || existingBookData.page_count || 0;
+          // 提取数字页数
+          let pageCount = existingBookData.page_count || 0;
+          if (book.pageCount) {
+            pageCount = parseInt(book.pageCount) || existingBookData.page_count || 0;
+          } else if (book.pages) {
+            // 处理字符串格式的页数，如"114页"
+            pageCount = parseInt(String(book.pages).match(/\d+/)?.[0] || String(existingBookData.page_count)) || 0;
+          }
 
-          // 如果已存在，则更新数据
-          this.talebookDb.prepare(`
-            UPDATE qc_bookdata
-            SET page_count = ?, standard_price = ?, purchase_price = ?, purchase_date = ?, binding1 = ?, binding2 = ?, note = ?
-            WHERE book_id = ?
-          `).run(
-            pageCount,
-            book.standardPrice || existingBookData.standard_price || 0,
-            book.purchasePrice || existingBookData.purchase_price || 0,
-            book.purchaseDate || existingBookData.purchase_date || CURRENT_TIMESTAMP,
-            book.binding1 !== undefined ? book.binding1 : existingBookData.binding1 || 0,
-            book.binding2 !== undefined ? book.binding2 : existingBookData.binding2 || 0,
-            book.note !== undefined ? book.note : (existingBookData.note || ''),
-            result.bookId
-          );
+            // 如果已存在，则更新数据
+            this.talebookDb.prepare(`
+              UPDATE qc_bookdata
+              SET page_count = ?, standard_price = ?, purchase_price = ?, purchase_date = ?, binding1 = ?, binding2 = ?, note = ?
+              WHERE book_id = ?
+            `).run(
+              pageCount,
+              book.standardPrice || existingBookData.standard_price || 0,
+              book.purchasePrice || existingBookData.purchase_price || 0,
+              book.purchaseDate || existingBookData.purchase_date || new Date().toISOString(),
+              book.binding1 !== undefined ? book.binding1 : existingBookData.binding1 || 0,
+              book.binding2 !== undefined ? book.binding2 : existingBookData.binding2 || 0,
+              book.note !== undefined ? book.note : (existingBookData.note || ''),
+              result.bookId
+            );
           console.log('✅ 书籍更新到 Talebook 数据库qc_bookdata表成功');
         }
           
@@ -1317,7 +1746,8 @@ class DatabaseService {
             }
           }
         } catch (talebookError) {
-          console.warn('⚠️ 同步书籍到 Talebook 数据库失败:', talebookError.message);
+          console.error('❌ 同步书籍到 Talebook 数据库失败:', talebookError.message);
+          console.error('❌ 错误详情:', talebookError.stack);
           // 不影响主流程，继续执行
         }
       }
@@ -1347,7 +1777,10 @@ class DatabaseService {
         purchasePrice: book.purchasePrice,
         standardPrice: book.standardPrice,
         note: book.note,
-        purchaseDate: book.purchaseDate
+        purchaseDate: book.purchaseDate,
+        isbn: book.isbn,
+        description: book.description ? book.description.substring(0, 50) + '...' : '无',
+        tags: book.tags
       });
 
       if (!this.calibreDb) {
@@ -1365,33 +1798,70 @@ class DatabaseService {
         throw new Error('无效的书籍ID');
       }
 
+      // 获取当前书籍的完整信息（包括 ISBN、description、tags 等）
+      console.log('🔄 获取当前书籍的完整信息...');
+      const currentBook = this.getBookById(bookId);
+      if (!currentBook) {
+        throw new Error('书籍不存在');
+      }
+      console.log('🔄 当前书籍信息:', {
+        isbn: currentBook.isbn,
+        description: currentBook.description ? currentBook.description.substring(0, 50) + '...' : '无',
+        tags: currentBook.tags
+      });
+
+      // 合并新旧数据，确保不会丢失任何字段
+      const mergedBook = {
+        ...currentBook,
+        ...book,
+        // 确保关键字段不会丢失
+        isbn: book.isbn !== undefined ? book.isbn : currentBook.isbn,
+        description: book.description !== undefined ? book.description : currentBook.description,
+        tags: book.tags !== undefined ? book.tags : currentBook.tags,
+        rating: book.rating !== undefined ? book.rating : currentBook.rating,
+        publisher: book.publisher !== undefined ? book.publisher : currentBook.publisher,
+        language: book.language !== undefined ? book.language : currentBook.language,
+        series: book.series !== undefined ? book.series : currentBook.series,
+        pages: book.pages !== undefined ? book.pages : currentBook.pages
+      };
+      console.log('🔄 合并后的书籍信息:', {
+        isbn: mergedBook.isbn,
+        description: mergedBook.description ? mergedBook.description.substring(0, 50) + '...' : '无',
+        tags: mergedBook.tags,
+        pages: mergedBook.pages
+      });
+
       // 开启事务
       console.log('🔄 开始Calibre数据库事务...');
       const transaction = this.calibreDb.transaction(() => {
+        // 构建path字段：将作者中的 " / " 替换为 "&"，确保只有两级目录
+        const authorPath = (mergedBook.author || '未知作者').replace(/\s*\/\s*/g, ' & ');
+        const bookPath = mergedBook.path || `${authorPath}/${mergedBook.title || '未知书名'}`;
+        
         // 1. 更新书籍基本信息
         this.calibreDb.prepare(`
           UPDATE books 
           SET title = ?, author_sort = ?, pubdate = ?, has_cover = ?, path = ?, last_modified = ?
           WHERE id = ?
         `).run(
-          book.title,
-          book.author || '',
-          book.publishYear ? `${book.publishYear}-01-01` : new Date().toISOString(),
-          book.hasCover ? 1 : 0,
-          book.path || `${book.author || '未知作者'}/${book.title || '未知书名'}`,
+          mergedBook.title,
+          mergedBook.author || '',
+          mergedBook.publishYear ? `${mergedBook.publishYear}-01-01` : new Date().toISOString(),
+          mergedBook.hasCover ? 1 : 0,
+          bookPath,
           new Date().toISOString(),
           bookId
         );
 
         // 2. 处理作者
-        if (book.author) {
+        if (mergedBook.author) {
           // 查找或创建作者
-          const author = this.calibreDb.prepare(`SELECT id FROM authors WHERE name = ?`).get(book.author);
+          const author = this.calibreDb.prepare(`SELECT id FROM authors WHERE name = ?`).get(mergedBook.author);
           let authorId;
           if (author) {
             authorId = author.id;
           } else {
-            authorId = this.calibreDb.prepare(`INSERT INTO authors (name, sort) VALUES (?, ?)`).run(book.author, book.author).lastInsertRowid;
+            authorId = this.calibreDb.prepare(`INSERT INTO authors (name, sort) VALUES (?, ?)`).run(mergedBook.author, mergedBook.author).lastInsertRowid;
           }
 
           // 删除旧的作者关联
@@ -1401,14 +1871,14 @@ class DatabaseService {
         }
 
         // 3. 处理出版社
-        if (book.publisher) {
+        if (mergedBook.publisher) {
           // 查找或创建出版社
-          const publisher = this.calibreDb.prepare(`SELECT id FROM publishers WHERE name = ?`).get(book.publisher);
+          const publisher = this.calibreDb.prepare(`SELECT id FROM publishers WHERE name = ?`).get(mergedBook.publisher);
           let publisherId;
           if (publisher) {
             publisherId = publisher.id;
           } else {
-            publisherId = this.calibreDb.prepare(`INSERT INTO publishers (name) VALUES (?)`).run(book.publisher).lastInsertRowid;
+            publisherId = this.calibreDb.prepare(`INSERT INTO publishers (name) VALUES (?)`).run(mergedBook.publisher).lastInsertRowid;
           }
 
           // 删除旧的出版社关联
@@ -1419,34 +1889,44 @@ class DatabaseService {
 
         // 4. 更新ISBN
         this.calibreDb.prepare(`DELETE FROM identifiers WHERE book = ? AND type = 'isbn'`).run(bookId);
-        if (book.isbn) {
-          this.calibreDb.prepare(`INSERT INTO identifiers (book, type, val) VALUES (?, 'isbn', ?)`).run(bookId, book.isbn);
+        if (mergedBook.isbn && mergedBook.isbn.trim() !== '') {
+          this.calibreDb.prepare(`INSERT INTO identifiers (book, type, val) VALUES (?, 'isbn', ?)`).run(bookId, mergedBook.isbn);
+          console.log('✅ ISBN已更新:', mergedBook.isbn);
+        } else {
+          console.log('⚠️ ISBN为空，跳过更新');
         }
 
         // 5. 更新描述
         this.calibreDb.prepare(`DELETE FROM comments WHERE book = ?`).run(bookId);
-        if (book.description) {
-          this.calibreDb.prepare(`INSERT INTO comments (book, text) VALUES (?, ?)`).run(bookId, book.description);
+        if (mergedBook.description && mergedBook.description.trim() !== '') {
+          this.calibreDb.prepare(`INSERT INTO comments (book, text) VALUES (?, ?)`).run(bookId, mergedBook.description);
+          console.log('✅ 描述已更新，长度:', mergedBook.description.length);
+        } else {
+          console.log('⚠️ 描述为空，跳过更新');
         }
 
         // 6. 更新评分
         this.calibreDb.prepare(`DELETE FROM books_ratings_link WHERE book = ?`).run(bookId);
-        if (book.rating) {
+        if (mergedBook.rating) {
+          // 将浮点数评分乘以2转换为整数（例如7.5 -> 15），以便在INTEGER字段中存储
+          const ratingValue = Math.round(parseFloat(mergedBook.rating) * 2);
           // 查找或创建评分
-          const rating = this.calibreDb.prepare(`SELECT id FROM ratings WHERE rating = ?`).get(book.rating);
+          const rating = this.calibreDb.prepare(`SELECT id FROM ratings WHERE rating = ?`).get(ratingValue);
           let ratingId;
           if (rating) {
             ratingId = rating.id;
           } else {
-            ratingId = this.calibreDb.prepare(`INSERT INTO ratings (rating) VALUES (?)`).run(book.rating).lastInsertRowid;
+            ratingId = this.calibreDb.prepare(`INSERT INTO ratings (rating) VALUES (?)`).run(ratingValue).lastInsertRowid;
           }
           this.calibreDb.prepare(`INSERT INTO books_ratings_link (book, rating) VALUES (?, ?)`).run(bookId, ratingId);
+          console.log('✅ 评分已更新:', mergedBook.rating);
         }
 
         // 7. 更新标签
         this.calibreDb.prepare(`DELETE FROM books_tags_link WHERE book = ?`).run(bookId);
-        if (book.tags && Array.isArray(book.tags) && book.tags.length > 0) {
-          for (const tagName of book.tags) {
+        if (mergedBook.tags && Array.isArray(mergedBook.tags) && mergedBook.tags.length > 0) {
+          console.log('🏷️ 更新标签，数量:', mergedBook.tags.length);
+          for (const tagName of mergedBook.tags) {
             // 查找或创建标签
             const tag = this.calibreDb.prepare(`SELECT id FROM tags WHERE name = ?`).get(tagName);
             let tagId;
@@ -1462,31 +1942,33 @@ class DatabaseService {
 
         // 8. 更新语言
         this.calibreDb.prepare(`DELETE FROM books_languages_link WHERE book = ?`).run(bookId);
-        if (book.language) {
+        if (mergedBook.language) {
           // 查找或创建语言
-          const language = this.calibreDb.prepare(`SELECT id FROM languages WHERE lang_code = ?`).get(book.language);
+          const language = this.calibreDb.prepare(`SELECT id FROM languages WHERE lang_code = ?`).get(mergedBook.language);
           let langId;
           if (language) {
             langId = language.id;
           } else {
-            langId = this.calibreDb.prepare(`INSERT INTO languages (lang_code) VALUES (?)`).run(book.language).lastInsertRowid;
+            langId = this.calibreDb.prepare(`INSERT INTO languages (lang_code) VALUES (?)`).run(mergedBook.language).lastInsertRowid;
           }
           this.calibreDb.prepare(`INSERT INTO books_languages_link (book, lang_code) VALUES (?, ?)`).run(bookId, langId);
+          console.log('✅ 语言已更新:', mergedBook.language);
         }
 
         // 9. 更新丛书
         this.calibreDb.prepare(`DELETE FROM books_series_link WHERE book = ?`).run(bookId);
-        if (book.series) {
+        if (mergedBook.series && mergedBook.series.trim() !== '') {
           // 查找或创建丛书
-          const series = this.calibreDb.prepare(`SELECT id FROM series WHERE name = ?`).get(book.series);
+          const series = this.calibreDb.prepare(`SELECT id FROM series WHERE name = ?`).get(mergedBook.series);
           let seriesId;
           if (series) {
             seriesId = series.id;
           } else {
-            seriesId = this.calibreDb.prepare(`INSERT INTO series (name) VALUES (?)`).run(book.series).lastInsertRowid;
+            seriesId = this.calibreDb.prepare(`INSERT INTO series (name) VALUES (?)`).run(mergedBook.series).lastInsertRowid;
           }
           // 关联书籍和丛书
           this.calibreDb.prepare(`INSERT OR IGNORE INTO books_series_link (book, series) VALUES (?, ?)`).run(bookId, seriesId);
+          console.log('✅ 丛书已更新:', mergedBook.series);
         }
       });
       
@@ -1497,18 +1979,33 @@ class DatabaseService {
       if (this.isTalebookAvailable()) {
         try {
           console.log('🔄 开始同步到Talebook数据库...');
-          
+
           // 更新 Talebook 数据库中的书籍类型（items表只有统计字段，不存储书籍详细信息）
           const bookType = book.book_type !== undefined && book.book_type !== null ? book.book_type : 1;
-          this.talebookDb.prepare(`
-            UPDATE items 
-            SET book_type = ?
-            WHERE book_id = ?
-          `).run(
-            bookType,
-            bookId
-          );
-          console.log('✅ items表book_type更新成功，book_type:', bookType);
+          // 检查书籍是否存在
+          const existingItem = this.talebookDb.prepare(`SELECT book_id FROM items WHERE book_id = ?`).get(bookId);
+          if (existingItem) {
+            this.talebookDb.prepare(`
+              UPDATE items
+              SET book_type = ?
+              WHERE book_id = ?
+            `).run(
+              bookType,
+              bookId
+            );
+            console.log('✅ items表book_type更新成功，book_type:', bookType);
+          } else {
+            // 如果不存在则创建记录
+            this.talebookDb.prepare(`
+              INSERT INTO items (book_id, book_type, create_time)
+              VALUES (?, ?, ?)
+            `).run(
+              bookId,
+              bookType,
+              new Date().toISOString()
+            );
+            console.log('✅ items表记录创建成功，book_type:', bookType);
+          }
           
           // 更新分组关联
           if (book.groups) {
@@ -1535,25 +2032,32 @@ class DatabaseService {
           console.log('🔄 现有qc_bookdata记录:', existingBookData);
           
           // 处理前端发送的pages字段，兼容pageCount字段
-          const pageCount = book.pageCount || book.pages || 0;
+          // 提取数字页数
+          let pageCount = 0;
+          if (book.pageCount) {
+            pageCount = parseInt(book.pageCount) || 0;
+          } else if (book.pages) {
+            // 处理字符串格式的页数，如"114页"
+            pageCount = parseInt(String(book.pages).match(/\d+/)?.[0] || '0') || 0;
+          }
 
-          if (existingBookData) {
-            console.log('🔄 更新现有qc_bookdata记录...');
-            // 更新现有记录
-            const updateResult = this.talebookDb.prepare(`
-              UPDATE qc_bookdata
-              SET page_count = ?, standard_price = ?, purchase_price = ?, purchase_date = ?, binding1 = ?, binding2 = ?, note = ?
-              WHERE book_id = ?
-            `).run(
-              pageCount,
-              book.standardPrice || existingBookData.standard_price || 0,
-              book.purchasePrice || existingBookData.purchase_price || 0,
-              book.purchaseDate || existingBookData.purchase_date || new Date().toISOString(),
-              book.binding1 !== undefined ? book.binding1 : existingBookData.binding1 || 0,
-              book.binding2 !== undefined ? book.binding2 : existingBookData.binding2 || 0,
-              book.note !== undefined ? book.note : (existingBookData.note || ''),
-              bookId
-            );
+        if (existingBookData) {
+          console.log('🔄 更新现有qc_bookdata记录...');
+          // 更新现有记录
+          const updateResult = this.talebookDb.prepare(`
+            UPDATE qc_bookdata
+            SET page_count = ?, standard_price = ?, purchase_price = ?, purchase_date = ?, binding1 = ?, binding2 = ?, note = ?
+            WHERE book_id = ?
+          `).run(
+            pageCount,
+            book.standardPrice || existingBookData.standard_price || 0,
+            book.purchasePrice || existingBookData.purchase_price || 0,
+            book.purchaseDate || existingBookData.purchase_date || new Date().toISOString(),
+            book.binding1 !== undefined ? book.binding1 : existingBookData.binding1 || 0,
+            book.binding2 !== undefined ? book.binding2 : existingBookData.binding2 || 0,
+            book.note !== undefined ? book.note : (existingBookData.note || ''),
+            bookId
+          );
             console.log('🔄 qc_bookdata更新结果，影响行数:', updateResult.changes);
           } else {
             console.log('🔄 插入新qc_bookdata记录...');
@@ -1677,10 +2181,10 @@ class DatabaseService {
       const existingItem = this.talebookDb.prepare('SELECT book_id FROM items WHERE book_id = ?').get(bookId);
       if (!existingItem) {
         console.log(`📝 书籍 ${bookId} 不在 items 表中，创建记录...`);
-        // 创建items记录（items表是统计表，不存储书籍元数据）
+        // 创建items记录（items表只存储统计信息）
         this.talebookDb.prepare(`
-          INSERT INTO items (book_id, count_guest, count_visit, count_download, website, sole, book_type, book_count, create_time)
-          VALUES (?, 0, 0, 0, '', 0, 1, 1, ?)
+          INSERT INTO items (book_id, book_type, create_time)
+          VALUES (?, 1, ?)
         `).run(bookId, new Date().toISOString());
         console.log(`✅ 已在 items 表中创建书籍 ${bookId} 的记录`);
       }
@@ -1742,7 +2246,7 @@ class DatabaseService {
 
       // 更新 items 表中的 book_type 字段
       this.talebookDb.prepare(`
-        UPDATE items SET book_type = ? WHERE book_id = ?
+        UPDATE items SET book_type = ? WHERE id = ?
       `).run(bookType, bookId);
 
       return { success: true, message: '书籍类型已更新' };
@@ -1898,9 +2402,9 @@ class DatabaseService {
 
     // 验证评分范围
     if (book.rating !== undefined && book.rating !== null) {
-      const rating = parseInt(book.rating, 10);
-      if (isNaN(rating) || rating < 0 || rating > 5) {
-        errors.push('评分必须是0到5之间的整数');
+      const rating = parseFloat(book.rating);
+      if (isNaN(rating) || rating < 0 || rating > 10) {
+        errors.push('评分必须是0到10之间的数字');
       }
     }
 

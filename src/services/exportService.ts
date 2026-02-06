@@ -82,19 +82,17 @@ class ExportService {
     const bookStore = useBookStore();
     const books = bookStore.allBooks;
 
-    console.log('📚 导出书籍数量:', books.length);
-
     // 获取所有分组数据，用于将分组ID转换为分组名称
     let groupsMap = new Map<string, string>();
     try {
       const groups = await bookService.getAllGroups();
-      console.log('📁 获取到分组数量:', groups.length);
+
       groups.forEach(group => {
         groupsMap.set(String(group.id), group.name);
-        console.log(`  分组映射: ${group.id} -> ${group.name}`);
+
       });
     } catch (e) {
-      console.warn('获取分组数据失败，分组将显示ID:', e);
+
     }
 
     // 根据选中的字段过滤数据
@@ -115,7 +113,6 @@ class ExportService {
    * 导出整库备份（完整备份：Calibre书库 + Talebook数据库）
    */
   async exportLibrary(options: ZipExportOptions): Promise<Blob> {
-    console.log('📦 开始导出整库备份...');
 
     try {
       // 调用后端备份 API
@@ -158,7 +155,6 @@ class ExportService {
    * 根据选中的字段过滤数据（保持原始数据格式）
    */
   private filterFields(books: any[], selectedFields: string[]): any[] {
-    console.log('📦 filterFields: 处理书籍数量:', books.length);
 
     return books.map((book, index) => {
       const filtered: any = {};
@@ -190,7 +186,6 @@ class ExportService {
    * 导出为CSV格式
    */
   private exportAsCSV(books: any[], selectedFields: string[], groupsMap?: Map<string, string>): Blob {
-    console.log('📄 CSV导出开始，书籍数量:', books.length, 'groupsMap大小:', groupsMap?.size || 0);
 
     // 生成表头
     const headers = selectedFields.join(',');
@@ -205,12 +200,12 @@ class ExportService {
           if (Array.isArray(value) && value.length > 0) {
             value = value.join(', ');
             if (index < 3) {
-              console.log(`🏷️ CSV[${index}] 标签:`, book.tags, '->', value);
+
             }
           } else {
             value = '';
             if (index < 3) {
-              console.log(`🏷️ CSV[${index}] 标签为空`);
+
             }
           }
         } else if (field === 'groups') {
@@ -221,25 +216,25 @@ class ExportService {
                   const groupIdStr = String(groupId);
                   const name = groupsMap.get(groupIdStr);
                   if (index < 3) {
-                    console.log(`  📁 CSV分组ID: ${groupId} -> ${name || '未找到'}`);
+
                   }
                   return name || groupIdStr;
                 })
                 .filter(name => name);
               value = groupNames.join(', ');
               if (index < 3) {
-                console.log(`📁 CSV[${index}] 分组:`, book.groups, '->', value);
+
               }
             } else {
               value = value.join(', ');
               if (index < 3) {
-                console.log(`📁 CSV[${index}] 分组映射为空，使用原始ID:`, value);
+
               }
             }
           } else {
             value = '';
             if (index < 3) {
-              console.log(`📁 CSV[${index}] 分组为空`);
+
             }
           }
         }
@@ -279,7 +274,6 @@ class ExportService {
    * 导出为Excel格式（支持图片嵌入）
    */
   private async exportAsExcel(books: any[], selectedFields: string[], groupsMap?: Map<string, string>): Promise<Blob> {
-    console.log('📊 Excel导出开始，书籍数量:', books.length, 'groupsMap大小:', groupsMap?.size || 0);
 
     // 创建 workbook 和 worksheet
     const workbook = new ExcelJS.Workbook();
@@ -315,12 +309,12 @@ class ExportService {
           if (Array.isArray(book[field])) {
             row[field] = book[field].join(', ');
             if (i < 3) {
-              console.log(`🏷️ Excel[${i}] 标签:`, book[field], '->', row[field]);
+
             }
           } else {
             row[field] = '';
             if (i < 3) {
-              console.log(`🏷️ Excel[${i}] 标签为空`);
+
             }
           }
         } else if (field === 'groups') {
@@ -339,18 +333,18 @@ class ExportService {
                 .filter(name => name); // 过滤空值
               row[field] = groupNames.join(', ');
               if (i < 3) {
-                console.log(`📁 Excel[${i}] 分组:`, book[field], '->', row[field]);
+
               }
             } else {
               row[field] = book[field].join(', ');
               if (i < 3) {
-                console.log(`📁 Excel[${i}] 分组映射为空，使用原始值:`, row[field]);
+
               }
             }
           } else {
             row[field] = '';
             if (i < 3) {
-              console.log(`📁 Excel[${i}] 分组为空`);
+
             }
           }
         } else if (field === 'rating') {
@@ -403,7 +397,7 @@ class ExportService {
             });
           }
         } catch (error) {
-          console.warn(`嵌入封面图片失败: ${book.title}`, error);
+
         }
       }
     }

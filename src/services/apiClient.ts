@@ -17,16 +17,16 @@ const API_BASE_URL = '/api';
 async function apiRequest(url: string, options: RequestInit = {}, responseType: 'json' | 'blob' = 'json'): Promise<any> {
   try {
     const fullUrl = `${API_BASE_URL}${url}`;
-    console.log('🌐 API请求:', fullUrl);
-    console.log('📦 请求方法:', options.method);
-    console.log('📦 请求头:', options.headers);
+
+
+
 
     if (options.body) {
       try {
         const bodyStr = typeof options.body === 'string' ? options.body : JSON.stringify(options.body);
-        console.log('📦 请求体:', bodyStr);
+
       } catch (e) {
-        console.log('📦 请求体:', options.body);
+
       }
     }
 
@@ -38,15 +38,12 @@ async function apiRequest(url: string, options: RequestInit = {}, responseType: 
       ...options
     });
 
-    console.log('📦 响应状态:', response.status, response.statusText);
-
     // 检查响应状态
     if (!response.ok) {
       let errorMessage = `请求失败: ${response.status}`;
 
       try {
         const errorData = await response.json();
-        console.log('❌ 错误响应数据:', errorData);
 
         if (errorData.error) {
           errorMessage = errorData.error;

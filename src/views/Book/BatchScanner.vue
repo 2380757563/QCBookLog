@@ -258,8 +258,6 @@ const loadFromStorage = () => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      console.log('📂 从本地存储加载列表:', parsed);
-      
       // 确保加载的数据包含书籍信息
       isbnList.value = parsed.map(item => ({
         ...item,
@@ -270,7 +268,6 @@ const loadFromStorage = () => {
       return true;
     }
   } catch (e) {
-    console.warn('⚠️ 加载本地存储失败:', e);
   }
   return false;
 };
@@ -279,9 +276,7 @@ const loadFromStorage = () => {
 const saveToStorage = () => {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(isbnList.value));
-    console.log('💾 保存列表到本地存储，数量:', isbnList.value.length);
   } catch (e) {
-    console.warn('⚠️ 保存本地存储失败:', e);
   }
 };
 
@@ -289,9 +284,7 @@ const saveToStorage = () => {
 const clearStorage = () => {
   try {
     localStorage.removeItem(STORAGE_KEY);
-    console.log('🗑️ 已清空本地存储');
   } catch (e) {
-    console.warn('⚠️ 清空本地存储失败:', e);
   }
 };
 
@@ -301,11 +294,9 @@ const getBookFromCache = (isbn: string): BookSearchResult | null => {
     const cacheData = localStorage.getItem(BOOK_CACHE_KEY);
     if (cacheData) {
       const cache = JSON.parse(cacheData);
-      console.log('💾 从缓存读取书籍信息:', isbn, cache[isbn] ? '命中' : '未命中');
       return cache[isbn] || null;
     }
   } catch (e) {
-    console.warn('⚠️ 读取书籍缓存失败:', e);
   }
   return null;
 };
@@ -316,18 +307,14 @@ const saveBookToCache = (isbn: string, bookData: BookSearchResult) => {
     const cache = cacheData ? JSON.parse(cacheData) : {};
     cache[isbn] = bookData;
     localStorage.setItem(BOOK_CACHE_KEY, JSON.stringify(cache));
-    console.log('💾 保存书籍信息到缓存:', isbn, bookData.title);
   } catch (e) {
-    console.warn('⚠️ 保存书籍缓存失败:', e);
   }
 };
 
 const clearBookCache = () => {
   try {
     localStorage.removeItem(BOOK_CACHE_KEY);
-    console.log('🗑️ 已清空书籍缓存');
   } catch (e) {
-    console.warn('⚠️ 清空书籍缓存失败:', e);
   }
 };
 
@@ -339,7 +326,6 @@ const hasCachedBooks = () => {
       return Object.keys(cache).length > 0;
     }
   } catch (e) {
-    console.warn('⚠️ 检查书籍缓存失败:', e);
   }
   return false;
 };
@@ -432,8 +418,6 @@ const addIsbn = () => {
 // 移除ISBN
 const removeIsbn = (index: number) => {
   const removedIsbn = isbnList.value[index]?.isbn;
-  console.log('🗑️ 删除ISBN:', removedIsbn);
-
   // 从isbnList中移除
   isbnList.value.splice(index, 1);
   selectedBooks.value = selectedBooks.value.filter(isbn => isbn !== removedIsbn);
@@ -447,11 +431,9 @@ const removeIsbn = (index: number) => {
         if (cache[removedIsbn]) {
           delete cache[removedIsbn];
           localStorage.setItem(BOOK_CACHE_KEY, JSON.stringify(cache));
-          console.log('🗑️ 从缓存中删除书籍:', removedIsbn);
         }
       }
     } catch (e) {
-      console.warn('⚠️ 从缓存删除失败:', e);
     }
   }
 
@@ -462,7 +444,6 @@ const removeIsbn = (index: number) => {
 // 清空所有
 const clearAll = () => {
   if (confirm('确定要清空所有ISBN吗？')) {
-    console.log('🗑️ 清空所有ISBN');
     isbnList.value = [];
     selectedBooks.value = [];
     newlyAddedIsbns.value = [];
@@ -476,20 +457,17 @@ const clearAll = () => {
 // 全选书籍
 const selectAllBooks = () => {
   selectedBooks.value = previewBooks.value.map(book => book.isbn);
-  console.log('✅ 全选书籍，数量:', selectedBooks.value.length);
 };
 
 // 全不选书籍
 const deselectAllBooks = () => {
   selectedBooks.value = [];
-  console.log('🚫 取消全选');
 };
 
 // 反选书籍
 const invertSelection = () => {
   const allIsbns = previewBooks.value.map(book => book.isbn);
   selectedBooks.value = allIsbns.filter(isbn => !selectedBooks.value.includes(isbn));
-  console.log('🔄 反选书籍，已选数量:', selectedBooks.value.length);
 };
 
 // 搜索单个ISBN
@@ -500,7 +478,6 @@ const searchSingle = async (index: number) => {
   // 先检查缓存
   const cachedBook = getBookFromCache(item.isbn);
   if (cachedBook) {
-    console.log('✅ 使用缓存的书籍信息:', item.isbn, cachedBook.title);
     item.data = cachedBook;
     item.error = null;
     return;
@@ -589,7 +566,6 @@ const importAll = async () => {
     // 检查是否从缓存获取
     const fromCache = getBookFromCache(bookData.isbn);
     if (fromCache) {
-      console.log('✅ 从缓存导入书籍:', bookData.isbn, bookData.title);
     }
 
     try {
@@ -604,7 +580,8 @@ const importAll = async () => {
         coverUrl: bookData.coverUrl || '',
         purchaseDate: undefined,
         purchasePrice: undefined,
-        standardPrice: bookData.price ? parseFloat(bookData.price) : undefined,
+        // 去除"元"等非数字字符后再转换
+        standardPrice: bookData.price ? parseFloat(bookData.price.replace(/[^\d.]/g, '')) : undefined,
         readStatus: '未读' as const,
         readCompleteDate: undefined,
         rating: undefined,
@@ -704,18 +681,13 @@ const isProcessingRoute = ref(false); // 防止重复处理路由
 const processRouteIsbn = () => {
   // 如果组件已卸载或正在处理，不再处理
   if (isUnmounted.value || isProcessingRoute.value) {
-    console.log('⏸️ 跳过处理：isUnmounted=', isUnmounted.value, 'isProcessingRoute=', isProcessingRoute.value);
     return;
   }
   
   const isbnParam = route.query.isbn;
   if (!isbnParam) {
-    console.log('⏸️ 路由参数中没有ISBN，跳过');
     return;
   }
-  
-  console.log('═══════════════════════════════════════');
-  console.log('🎯 开始处理ISBN:', isbnParam);
   console.log('📊 处理前列表状态:', isbnList.value.map(item => item.isbn));
   
   // 开始处理
@@ -729,10 +701,6 @@ const processRouteIsbn = () => {
   } else if (Array.isArray(isbnParam)) {
     isbns = isbnParam.map(s => s?.trim()).filter(Boolean);
   }
-  
-  console.log('📥 处理路由参数中的ISBN:', isbns);
-  console.log('📊 当前列表长度:', isbnList.value.length);
-  
   // 记录新添加的ISBN
   newlyAddedIsbns.value = isbns;
   
@@ -752,9 +720,7 @@ const processRouteIsbn = () => {
         isNew: true // 标记为新添加
       });
       addedCount++;
-      console.log(`✅ 添加新ISBN: ${isbn}, 缓存状态: ${cachedBook ? '命中' : '未命中'}`);
     } else {
-      console.log(`⚠️  ISBN已存在，跳过: ${isbn}`);
     }
   });
   
@@ -762,9 +728,6 @@ const processRouteIsbn = () => {
   if (addedCount > 0) {
     saveToStorage();
   }
-  
-  console.log('📊 处理后列表长度:', isbnList.value.length, '新增:', addedCount);
-  
   // 清空 isbn 参数，避免重复处理（保留其他参数）
   if (isbns.length > 0) {
     // 只移除 isbn 参数，不清空所有参数
@@ -773,7 +736,6 @@ const processRouteIsbn = () => {
     
     router.replace({ query: currentQuery }).then(() => {
       isProcessingRoute.value = false; // 清空完成后重置标记
-      console.log('🧹 已清空ISBN参数');
     });
     
     // 自动搜索所有新添加的ISBN
@@ -796,7 +758,6 @@ const processRouteIsbn = () => {
 watch(
   () => route.query.isbn,
   (newIsbn) => {
-    console.log('🔄 路由参数变化:', newIsbn);
     processRouteIsbn();
   },
   { immediate: true } // 立即执行一次
@@ -804,18 +765,14 @@ watch(
 
 // 组件挂载时的处理
 onMounted(() => {
-  console.log('📱 BatchScanner组件已挂载');
-  console.log('📊 当前列表长度:', isbnList.value.length);
   // 如果列表为空，尝试从本地存储恢复
   if (isbnList.value.length === 0 && !hasLoadedFromStorage) {
-    console.log('⚠️ 列表为空且未从存储加载，尝试恢复');
     loadFromStorage();
   }
 });
 
 // 组件卸载时标记
 onUnmounted(() => {
-  console.log('📱 BatchScanner组件即将卸载');
   isUnmounted.value = true;
   isProcessingRoute.value = false;
 });

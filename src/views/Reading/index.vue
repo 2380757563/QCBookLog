@@ -65,16 +65,15 @@ const readingStats = computed(() => {
 });
 
 onMounted(async () => {
-  console.log('🔄 Reading 页面加载，开始加载数据...');
 
   if (goalCardRef.value) {
     goalCardRef.value.loadGoal();
   }
 
   try {
-    console.log('📚 从后端获取书籍...');
+
     const books = await bookService.getAllBooks();
-    console.log('✅ 获取到书籍数量:', books.length);
+
     console.log('📚 书籍列表:', books.map(b => ({ id: b.id, title: b.title })));
     bookStore.setBooks(books);
 

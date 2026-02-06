@@ -293,8 +293,6 @@ const filteredBookmarks = computed(() => {
     return isValid;
   });
 
-  console.log(`过滤后的书摘数量: ${result.length} / 原始数量: ${bookmarks.value.length}`);
-
   return result;
 });
 
@@ -346,7 +344,7 @@ const goToBookmarkDetail = (id: string) => {
 const goToBookmarks = () => {
   // 使用正确的书籍ID（数字类型）
   const bookId = book.value?.id;
-  console.log('跳转到书摘列表 - bookId:', bookId, '类型:', typeof bookId);
+
   router.push({ path: '/bookmark', query: { bookId: bookId } });
 };
 
@@ -357,8 +355,6 @@ const goToAddBookmark = () => {
 // 更新阅读进度
 const handleUpdateProgress = async (page: number) => {
   if (!book.value) return;
-
-  console.log('更新阅读进度到页码:', page);
 
   try {
     // 将页码转换为进度百分比
@@ -410,11 +406,7 @@ const loadReadingStats = async () => {
       if (!book.value.pages && stats.totalPages) {
         book.value.pages = stats.totalPages;
       }
-      console.log('阅读统计已更新到书籍对象:', {
-        read_pages: book.value.read_pages,
-        pages: book.value.pages,
-        page_count: book.value.page_count
-      });
+
     }
   } catch (error) {
     console.error('加载阅读统计失败:', error);
@@ -425,11 +417,8 @@ const loadReadingStats = async () => {
 const handleStartReading = () => {
   if (!book.value) return;
 
-  // 计算开始页码（基于当前阅读进度）
-  const progress = book.value.progress || 0;
-  const startPage = book.value.pages
-    ? Math.floor(book.value.pages * (progress / 100))
-    : 0;
+  // 计算开始页码（基于当前已读页数）
+  const startPage = book.value.read_pages || 0;
 
   // 调用 store 开始阅读
   readingStore.startReading(
@@ -437,8 +426,6 @@ const handleStartReading = () => {
     book.value.title || '未知书名',
     startPage
   );
-
-  console.log(`📖 开始阅读《${book.value.title}》从第${startPage}页开始`);
 
   // 跳转到阅读页面
   router.push(`/book/reading/${book.value.id}`);
@@ -452,18 +439,16 @@ onMounted(async () => {
   const bookIdStr = route.params.id as string;
   const bookId = Number(bookIdStr);
 
-  console.log('书籍详情页加载 - bookIdStr:', bookIdStr, '类型:', typeof bookIdStr);
-  console.log('书籍详情页加载 - bookId:', bookId, '类型:', typeof bookId);
 
   try {
     // 优先从缓存中获取书籍信息
     let cachedBook = bookStore.getBookById(bookId);
 
     if (cachedBook) {
-      console.log('使用缓存的书籍数据');
+
       book.value = cachedBook;
     } else {
-      console.log('从API加载书籍数据');
+
       book.value = await bookService.getBookById(bookId) || null;
       // 加载成功后更新缓存
       if (book.value) {
@@ -478,12 +463,10 @@ onMounted(async () => {
     }
 
     if (book.value) {
-      console.log('开始加载书摘 - 当前书籍ID:', book.value.id, '类型:', typeof book.value.id);
 
       // 加载相关书摘
       bookmarks.value = await bookmarkService.getBookmarksByBookId(bookId);
 
-      console.log('加载到的书摘数量:', bookmarks.value.length);
       console.log('书摘详情:', bookmarks.value.map(b => ({
         id: b.id,
         bookId: b.bookId,

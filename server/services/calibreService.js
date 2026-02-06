@@ -13,7 +13,7 @@ import { DATA_DIR, readJsonFile } from './dataService.js';
 // 延迟导入数据库服务，避免启动错误
 let databaseService = null;
 try {
-  databaseService = await import('./databaseService.js');
+  databaseService = await import('./database/index.js');
 } catch (error) {
   console.warn('⚠️ 数据库服务导入失败，将使用文件系统模式');
 }
@@ -126,10 +126,8 @@ const saveBookToCalibre = async (book) => {
     // 确保使用最新的书库目录
     updateBookDir();
 
-    // 1. 创建书籍目录
-    const authorDirName = book.author || '未知作者';
-    const titleDirName = book.title || '未知书名';
-    const bookPath = path.join(BOOK_DIR, authorDirName, titleDirName);
+    // 使用数据库中的path字段构建书籍路径（确保只有两级目录）
+    const bookPath = path.join(BOOK_DIR, book.path || `${book.author || '未知作者'}/${book.title || '未知书名'}`);
 
     await fs.mkdir(bookPath, { recursive: true });
     console.log(`✅ 创建书籍目录成功：${bookPath}`);
