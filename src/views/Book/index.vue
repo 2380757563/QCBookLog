@@ -631,31 +631,14 @@
       </div>
     </div>
 
-    <!-- 配置提示弹窗 -->
-    <div v-if="showConfigModal" class="dialog-overlay" @click="closeConfigModal">
-      <div class="dialog dialog--config" @click.stop>
-        <div class="dialog-header">
-          <span>配置提示</span>
-          <span class="dialog-close" @click="closeConfigModal">×</span>
-        </div>
-        <div class="dialog-body">
-          <div class="config-modal-content">
-            <div class="config-modal-icon">⚠️</div>
-            <p class="config-modal-message">{{ configErrorMsg }}</p>
-          </div>
-        </div>
-        <div class="dialog-footer">
-          <button class="btn btn-primary" @click="goToConfig">去配置</button>
-        </div>
-      </div>
-    </div>
+
   </div>
 
 
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onActivated, watch, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { useBookStore } from '@/store/book';
@@ -677,44 +660,7 @@ const readerStore = useReaderStore();
 const readingStore = useReadingStore();
 const { books: storeBooks } = storeToRefs(bookStore);
 
-// 配置提示框状态
-const showConfigModal = ref(false);
-const configErrorMsg = ref('');
 const isLoading = ref(true);
-
-// 检测数据库状态
-const checkDatabaseStatus = async () => {
-  try {
-    const response = await fetch('/api/config/check-databases');
-    const result = await response.json();
-    
-    if (result.success) {
-      const { calibre, talebook } = result.data;
-      // 检查是否至少有一个数据库有效
-      if (!calibre.valid && !talebook.valid) {
-        // 如果两个数据库都无效，显示配置提示框
-        configErrorMsg.value = '请先配置至少一个书库';
-        showConfigModal.value = true;
-      }
-    }
-  } catch (error) {
-    console.error('检测数据库状态失败:', error);
-    // 检测失败时显示配置提示框
-    configErrorMsg.value = '数据库连接失败，请检查配置';
-    showConfigModal.value = true;
-  }
-};
-
-// 跳转到配置页面
-const goToConfig = () => {
-  showConfigModal.value = false;
-  router.push('/config');
-};
-
-// 关闭配置提示框
-const closeConfigModal = () => {
-  showConfigModal.value = false;
-};
 
 // Tab配置
 const tabs = computed(() => [
@@ -1000,7 +946,7 @@ const loadFilterConditions = () => {
         publisher: conditions.publisher || '',
         author: conditions.author || ''
       };
-      console.log('✅ 加载已保存的筛选条件:', filterConditions.value);
+
     } catch (error) {
       console.error('⚠️ 加载筛选条件失败:', error);
     }
@@ -1309,7 +1255,7 @@ const loadData = async () => {
 
     // 清空选中状态，避免切换数据库后删除不存在的书籍ID
     if (selectedBookIds.value.length > 0 || selectedGroupIds.value.length > 0) {
-      console.log('🔄 清空选中状态...');
+
       selectedBookIds.value = [];
       selectedGroupIds.value = [];
     }
@@ -1332,9 +1278,6 @@ const loadData = async () => {
       }
     };
 
-    // 检测数据库状态
-    await checkDatabaseStatus();
-    
     // 加载书籍数据
     await loadBooks();
 
@@ -1368,6 +1311,13 @@ onMounted(async () => {
 
   // 添加点击外部关闭菜单的事件监听
   document.addEventListener('click', handleClickOutside);
+});
+
+onActivated(async () => {
+  // 当页面被激活时（从其他页面返回），重新加载书籍列表
+  // 这样可以确保添加书籍后能立即看到新添加的书籍
+
+  await loadData();
 });
 
 onUnmounted(() => {
@@ -1591,12 +1541,12 @@ const moveToEnd = async () => {
 
 const addToWishlistBatch = () => {
   // TODO: 实现批量添加到书单功能
-  console.log('批量添加到书单功能待实现');
+
 };
 
 const addTags = () => {
   // TODO: 实现添加标签功能
-  console.log('添加标签功能待实现');
+
 };
 
 const changeStatus = () => {
@@ -1666,7 +1616,7 @@ const confirmChangeStatus = async () => {
     selectedBookIds.value = [];
 
     if (successCount > 0) {
-      console.log(`✅ 成功更新 ${successCount} 本书的阅读状态`);
+
     } else {
       alert('修改状态失败，请重试');
     }
@@ -1678,17 +1628,17 @@ const confirmChangeStatus = async () => {
 
 const setSource = () => {
   // TODO: 实现设置来源功能
-  console.log('设置来源功能待实现');
+
 };
 
 const exportBookDraft = () => {
   // TODO: 实现导出书稿功能
-  console.log('导出书稿功能待实现');
+
 };
 
 const exportBooks = () => {
   // TODO: 实现导出书籍功能
-  console.log('导出书籍功能待实现');
+
 };
 
 const deleteSelected = async () => {
@@ -1715,7 +1665,7 @@ const deleteSelected = async () => {
 
       if (validBookIds.length < selectedBookIds.value.length) {
         const skippedCount = selectedBookIds.value.length - validBookIds.length;
-        console.warn(`⚠️ 发现 ${skippedCount} 个书籍ID在当前数据库中不存在，已跳过`);
+
         alert(`注意：发现 ${skippedCount} 个书籍ID在当前数据库中不存在，已跳过这些书籍。\n\n这通常发生在切换数据库后，建议刷新页面重新加载书籍列表。`);
       }
 
@@ -2059,55 +2009,6 @@ watch(
   font-size: 12px;
   padding: 2px 6px;
   background-color: #f0f0f0;
-}
-
-/* 配置提示弹窗样式 */
-.dialog--config .dialog-body {
-  text-align: center;
-  padding: 24px;
-}
-
-.config-modal-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-}
-
-.config-modal-icon {
-  font-size: 48px;
-  animation: pulse 1.5s infinite;
-}
-
-.config-modal-message {
-  font-size: 16px;
-  color: var(--text-primary);
-  line-height: 1.5;
-  margin: 0;
-  max-width: 400px;
-}
-
-@keyframes pulse {
-  0% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.1);
-  }
-  100% {
-    transform: scale(1);
-  }
-}
-
-.dialog--config .dialog-footer {
-  justify-content: center;
-  padding: 16px 24px 24px;
-}
-
-.dialog--config .btn-primary {
-  min-width: 120px;
-  font-size: 16px;
-  border-radius: 10px;
 }
 
 .tab-item.active .tab-count {

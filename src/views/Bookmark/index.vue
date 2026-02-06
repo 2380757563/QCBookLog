@@ -176,14 +176,13 @@ const slideDirection = ref('slide-left');
 // 所有书摘（带书名）
 const allBookmarks = computed(() => {
   const bookmarks = bookmarkStore.allBookmarks;
-  console.log('allBookmarks计算 - 书摘数量:', bookmarks.length);
-  console.log('allBookmarks计算 - 书摘数据:', bookmarks);
+
 
   // 验证书摘数据，过滤掉无效的书摘
   const validBookmarks = bookmarks.filter(b => {
     const isValid = b.id !== null && b.id !== undefined && b.id !== '';
     if (!isValid) {
-      console.warn('发现无效书摘，将被过滤:', b);
+
     }
     return isValid;
   });
@@ -198,8 +197,7 @@ const allBookmarks = computed(() => {
     
     // 确保标签是数组
     const tags = Array.isArray(b.tags) ? b.tags : [];
-    console.log(`书摘 ${b.id} 的标签:`, tags);
-    
+
     return {
       ...b,
       bookTitle: bookTitle,
@@ -229,7 +227,7 @@ const formatDate = (dateStr: string): string => {
   
   // 检查日期是否有效
   if (isNaN(date.getTime())) {
-    console.warn('无效的日期字符串:', dateStr);
+
     return '未知日期';
   }
   
@@ -250,7 +248,7 @@ const goToBookmarkDetail = (id: string | number) => {
 };
 
 const handleEdit = (id: string | number) => {
-  console.log('编辑书摘 - ID类型:', typeof id, 'ID值:', id);
+
   if (id === null || id === undefined || id === '') {
     console.error('编辑失败：无效的书摘ID', id);
     return;
@@ -260,7 +258,7 @@ const handleEdit = (id: string | number) => {
 
 // 删除
 const handleDelete = (id: string | number) => {
-  console.log('删除书摘 - ID类型:', typeof id, 'ID值:', id);
+
   if (id === null || id === undefined || id === '') {
     console.error('删除失败：无效的书摘ID', id);
     return;
@@ -326,14 +324,14 @@ onMounted(async () => {
   try {
     // 加载书摘（优先级最高）
     const bookmarks = await bookmarkService.getAllBookmarks();
-    console.log('书摘加载完成，数量:', bookmarks.length);
-    console.log('书摘数据详情:', bookmarks);
+
+
     bookmarkStore.setBookmarks(bookmarks);
 
     // 加载书摘标签（从书摘标签 API）
     try {
       allTags.value = await tagApi.getAll();
-      console.log('书摘标签加载完成:', allTags.value);
+
     } catch (error) {
       console.warn('⚠️ 加载书摘标签失败:', (error as any).message);
     }
@@ -343,7 +341,7 @@ onMounted(async () => {
       const books = await bookService.getAllBooks();
       if (books && books.length > 0) {
         bookStore.setBooks(books);
-        console.log('书籍加载完成，数量:', books.length);
+
       }
     } catch (error) {
       console.warn('⚠️ 加载书籍列表失败，书摘将使用存储的书籍信息:', (error as any).message);

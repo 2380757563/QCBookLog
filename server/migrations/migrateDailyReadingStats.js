@@ -80,7 +80,7 @@ export async function migrateDailyReadingStats() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (reader_id) REFERENCES users(id) ON DELETE CASCADE,
-        FOREIGN KEY (book_id) REFERENCES items(book_id) ON DELETE CASCADE
+        FOREIGN KEY (book_id) REFERENCES items(id) ON DELETE CASCADE
       );
 
       CREATE INDEX idx_reader_date ON qc_daily_reading_stats(reader_id, DATE(session_start));

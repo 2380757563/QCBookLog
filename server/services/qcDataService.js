@@ -4,14 +4,14 @@
  * 包括groups表和bookmarks表的CRUD操作
  */
 
-import databaseService from './databaseService.js';
+import databaseService from './database/index.js';
 
 /**
  * qcDataService类
  */
 class QcDataService {
   constructor() {
-    this.updateConnection();
+    this._db = null;
   }
 
   /**
@@ -19,6 +19,20 @@ class QcDataService {
    */
   isAvailable() {
     return databaseService.isTalebookAvailable();
+  }
+
+  /**
+   * 获取数据库连接（每次都获取最新连接）
+   */
+  getDb() {
+    return databaseService.talebookDb;
+  }
+
+  /**
+   * 获取数据库连接（向后兼容）
+   */
+  get db() {
+    return this.getDb();
   }
 
   /**

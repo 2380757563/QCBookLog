@@ -22,7 +22,7 @@ import {
 } from '../services/dataService.js';
 import calibreService from '../services/calibreService.js';
 import activityService from '../services/activityService.js';
-import databaseService from '../services/databaseService.js';
+import databaseService from '../services/database/index.js';
 import syncService from '../services/syncService.js';
 
 const router = express.Router();
@@ -88,6 +88,7 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     console.log('\n📝 开始创建书籍');
+    console.log('📥 [POST /books] 接收到的请求体:', JSON.stringify(req.body, null, 2));
 
     const timestamp = new Date().toISOString();
 
@@ -104,7 +105,7 @@ router.post('/', async (req, res) => {
     publisher: req.body.publisher || '',
     description: req.body.description || '',
     publishYear: req.body.publishYear || undefined,
-    pages: req.body.pages || 0,
+    pages: req.body.pages || undefined,
     binding1: req.body.binding1 !== undefined ? req.body.binding1 : 0,
     binding2: req.body.binding2 !== undefined ? req.body.binding2 : 0,
     rating: req.body.rating || undefined,
@@ -121,6 +122,8 @@ router.post('/', async (req, res) => {
     path: `${req.body.author || '未知作者'}/${req.body.title || '未知书名'}`,
     hasCover: false
   };
+
+    console.log('📚 [POST /books] 构建的书籍对象:', JSON.stringify(newBook, null, 2));
 
     console.log(`📚 书籍信息: ${newBook.title} - ${newBook.author}`);
 
@@ -208,18 +211,8 @@ router.post('/', async (req, res) => {
     
     await updateVersionInfo();
     console.log('✅ 书籍创建完成');
-    
-    // 记录操作
-    await activityService.createActivity({
-      type: 'book_added',
-      readerId: 0,
-      bookId: newBook.id,
-      bookTitle: newBook.title,
-      bookAuthor: newBook.author,
-      bookPublisher: newBook.publisher
-    });
-    
-    res.status(201).json(newBook);
+
+    res.status(201).json(verifiedBook);
   } catch (error) {
     console.error('❌ 创建书籍失败:', error.message);
     res.status(400).json({ error: error.message });
@@ -332,26 +325,7 @@ router.put('/:id', async (req, res) => {
       title: updatedBook.title,
       author: updatedBook.author
     });
-    
-    // 记录操作
-    const oldReadStatus = currentBook.readStatus;
-    const newReadStatus = updatedBook.readStatus;
-    
-    if (oldReadStatus !== newReadStatus) {
-      await activityService.createActivity({
-        type: 'reading_status_changed',
-        readerId: 0,
-        bookId: updatedBook.id,
-        bookTitle: updatedBook.title,
-        bookAuthor: updatedBook.author,
-        bookPublisher: updatedBook.publisher,
-        metadata: {
-          oldStatus: oldReadStatus,
-          newStatus: newReadStatus
-        }
-      });
-    }
-    
+
     res.json(updatedBook);
   } catch (error) {
     console.error('❌ ============ 更新请求处理失败 ============');
@@ -446,6 +420,24 @@ router.delete('/:id', async (req, res) => {
             if (deleteReadingStateResult.changes > 0) {
               console.log(`✅ 成功从Talebook数据库reading_state表删除关联记录，影响行数: ${deleteReadingStateResult.changes}`);
             }
+            
+            // 同时删除qc_bookdata表中的关联记录
+            const deleteBookdataResult = databaseService.talebookDb.prepare(`DELETE FROM qc_bookdata WHERE book_id = ?`).run(bookId);
+            if (deleteBookdataResult.changes > 0) {
+              console.log(`✅ 成功从Talebook数据库qc_bookdata表删除关联记录，影响行数: ${deleteBookdataResult.changes}`);
+            }
+            
+            // 同时删除qc_bookmarks表中的关联记录
+            const deleteBookmarksResult = databaseService.talebookDb.prepare(`DELETE FROM qc_bookmarks WHERE book_id = ?`).run(bookId);
+            if (deleteBookmarksResult.changes > 0) {
+              console.log(`✅ 成功从Talebook数据库qc_bookmarks表删除关联记录，影响行数: ${deleteBookmarksResult.changes}`);
+            }
+            
+            // 同时删除qc_reading_records表中的关联记录
+            const deleteReadingRecordsResult = databaseService.talebookDb.prepare(`DELETE FROM qc_reading_records WHERE book_id = ?`).run(bookId);
+            if (deleteReadingRecordsResult.changes > 0) {
+              console.log(`✅ 成功从Talebook数据库qc_reading_records表删除关联记录，影响行数: ${deleteReadingRecordsResult.changes}`);
+            }
           } catch (talebookError) {
             console.error(`⚠️ 从Talebook数据库删除关联记录失败:`, talebookError.message);
           }
@@ -526,9 +518,9 @@ router.delete('/:id', async (req, res) => {
           console.log(`✅ 成功删除 ${deleteGoalsResult.changes} 条阅读目标`);
         }
       }
-      
+
       // 删除该书籍的活动记录
-      const db = databaseService.getDatabase();
+      const db = databaseService.talebookDb;
       if (db) {
         const deleteActivitiesResult = db.prepare(
           `DELETE FROM activities WHERE book_id = ?`
@@ -544,17 +536,7 @@ router.delete('/:id', async (req, res) => {
       console.error('⚠️ 级联删除失败:', cascadeError);
       // 不影响主流程，只记录错误
     }
-    
-    // 记录操作
-    await activityService.createActivity({
-      type: 'book_deleted',
-      readerId: 0,
-      bookId: book.id,
-      bookTitle: book.title,
-      bookAuthor: book.author,
-      bookPublisher: book.publisher
-    });
-    
+
     // 返回被删除的书籍信息，方便前端使用
     res.json({ 
       message: 'Book deleted successfully',
@@ -603,10 +585,9 @@ router.post('/:id/cover', upload.single('cover'), async (req, res) => {
     const bookDir = calibreService.getBookDir();
     console.log(`📂 当前书库目录: ${bookDir}`);
 
-    // 构建Calibre格式的封面路径（使用动态书库目录）
-    const authorDir = book.author || '未知作者';
-    const titleDir = book.title || '未知书名';
-    const coverDir = path.join(bookDir, authorDir, titleDir);
+    // 使用数据库中的path字段构建封面路径（确保只有两级目录）
+    const bookPath = book.path || `${book.author || '未知作者'}/${book.title || '未知书名'}`;
+    const coverDir = path.join(bookDir, bookPath);
     const coverPath = path.join(coverDir, 'cover.jpg');
 
     console.log(`💾 保存新封面到Calibre路径: ${coverPath}`);
@@ -620,17 +601,19 @@ router.post('/:id/cover', upload.single('cover'), async (req, res) => {
 
     // 更新书籍的封面状态
     const updatedBook = {
-      ...book,
+      id: book.id,
+      title: book.title,
+      author: book.author,
       hasCover: true,
-      updateTime: new Date().toISOString()
+      path: book.path
     };
 
     console.log(`💾 更新书籍元数据...`);
 
     // 1. 更新数据库中的has_cover字段
     try {
-      if (databaseService && databaseService.default && databaseService.default.isAvailable && databaseService.default.isAvailable()) {
-        await databaseService.default.updateBookInDB(updatedBook);
+      if (databaseService && databaseService.isCalibreAvailable && databaseService.isCalibreAvailable()) {
+        databaseService.updateBookInDB(updatedBook);
         console.log('✅ 数据库中has_cover字段更新成功');
       }
     } catch (dbError) {
@@ -675,10 +658,9 @@ router.delete('/:id/cover', async (req, res) => {
     calibreService.updateBookDir();
     const bookDir = calibreService.getBookDir();
 
-    // 使用动态书库路径构建封面路径
-    const authorDir = book.author || '未知作者';
-    const titleDir = book.title || '未知书名';
-    const coverPath = path.join(bookDir, authorDir, titleDir, 'cover.jpg');
+    // 使用数据库中的path字段构建封面路径（确保只有两级目录）
+    const bookPath = book.path || `${book.author || '未知作者'}/${book.title || '未知书名'}`;
+    const coverPath = path.join(bookDir, bookPath, 'cover.jpg');
 
     try {
       await fs.access(coverPath);
@@ -690,20 +672,17 @@ router.delete('/:id/cover', async (req, res) => {
 
     // 更新书籍信息，移除封面
     const updatedBook = {
-      ...book,
+      id: book.id,
+      title: book.title,
+      author: book.author,
       hasCover: false,
-      updateTime: new Date().toISOString()
+      path: book.path
     };
 
     // 更新数据库中的has_cover状态
-    const databaseService = await import('../services/databaseService.js');
-    if (databaseService.default && databaseService.default.isAvailable && databaseService.default.isAvailable()) {
+    if (databaseService && databaseService.isCalibreAvailable && databaseService.isCalibreAvailable()) {
       try {
-        await databaseService.default.updateBookInDB({
-          id: book.id,
-          title: book.title,
-          hasCover: false
-        });
+        databaseService.updateBookInDB(updatedBook);
         console.log('✅ 数据库中的封面状态已更新');
       } catch (dbError) {
         console.warn('⚠️ 更新数据库封面状态失败:', dbError.message);

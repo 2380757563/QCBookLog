@@ -9,12 +9,12 @@ import { v4 as uuidv4 } from 'uuid';
 import fsSync from 'fs';
 
 // 数据目录路径
-export const DATA_DIR = path.join(process.cwd(), '../data');
+export const DATA_DIR = path.join(process.cwd(), 'data');
 
 /**
  * 配置文件路径
  */
-const CONFIG_FILE = path.join(process.cwd(), '../data/metadata/config.json');
+const CONFIG_FILE = path.join(process.cwd(), 'data/metadata/config.json');
 
 /**
  * 读取配置文件
@@ -291,9 +291,37 @@ export const getFilesInDir = async (dirPath) => {
  */
 export const updateVersionInfo = async () => {
   try {
-    const versionInfo = await readJsonFile('metadata/version.json');
+    // 确保 metadata 目录存在
+    const metadataDir = path.join(DATA_DIR, 'metadata');
+    try {
+      await fs.mkdir(metadataDir, { recursive: true });
+    } catch (error) {
+      // 目录已存在，忽略错误
+      if (error.code !== 'EEXIST') {
+        throw error;
+      }
+    }
+
+    // 尝试读取版本信息，如果文件不存在则创建默认版本信息
+    let versionInfo;
+    const versionFilePath = path.join(metadataDir, 'version.json');
+    
+    try {
+      versionInfo = await fs.readFile(versionFilePath, 'utf8');
+      versionInfo = JSON.parse(versionInfo);
+    } catch (error) {
+      // 文件不存在，创建默认版本信息
+      versionInfo = {
+        version: '1.0.0',
+        lastUpdated: new Date().toISOString()
+      };
+    }
+
+    // 更新时间戳
     versionInfo.lastUpdated = new Date().toISOString();
-    await writeJsonFile('metadata/version.json', versionInfo);
+    
+    // 写入文件
+    await fs.writeFile(versionFilePath, JSON.stringify(versionInfo, null, 2), 'utf8');
   } catch (error) {
     console.error('Error updating version info:', error);
     throw new Error('Failed to update version info');

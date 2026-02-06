@@ -89,7 +89,7 @@ const API_CONFIG = {
  */
 async function searchTanshu(isbn: string): Promise<BookSearchResult | null> {
   try {
-    console.log(`调用探数图书API（后端代理），ISBN: ${isbn}`);
+
     const response = await axios.get(`${API_CONFIG.TANSHU.url}/${isbn}`, {
       timeout: 15000
     });
@@ -99,7 +99,6 @@ async function searchTanshu(isbn: string): Promise<BookSearchResult | null> {
 
     // 根据API文档，探数图书API成功码是1
     if (response.data) {
-      console.log('探数API响应码:', response.data.code);
 
       if (response.data.code === 1) {
         const data = response.data.data;
@@ -165,12 +164,11 @@ async function searchTanshu(isbn: string): Promise<BookSearchResult | null> {
  */
 async function searchIsbnWork(isbn: string): Promise<BookSearchResult | null> {
   try {
-    console.log(`调用公共图书API（后端代理）搜索ISBN: ${isbn}`);
+
     const response = await axios.get(`${API_CONFIG.ISBN_WORK.url}/${isbn}`, {
       timeout: 15000
     });
 
-    console.log('公共图书API响应:', response.data);
     // 根据文档，公共图书API成功码是0
     if (response.data && response.data.code === 0 && response.data.success) {
       const data = response.data.data;
@@ -220,25 +218,24 @@ async function searchIsbnWork(isbn: string): Promise<BookSearchResult | null> {
           
           if (pictures.length > 0) {
             let originalCoverUrl = pictures[0];
-            console.log('✅ 公共图书返回的原始图片URL:', originalCoverUrl);
-            
+
             // 如果是阿里云OSS图片URL，使用后端中转接口避免403错误
             if (originalCoverUrl && originalCoverUrl.includes('aliyuncs.com')) {
-              console.log('✅ 公共图书返回的是阿里云OSS图片URL，使用后端中转接口:', originalCoverUrl);
+
               // 提取图片路径，如 https://data-isbn.oss-cn-hangzhou.aliyuncs.com/7gxk02e1a88ijt9gx7ohg2nelforrje6.jpg 中的 7gxk02e1a88ijt9gx7ohg2nelforrje6.jpg
               const imagePathMatch = originalCoverUrl.match(/aliyuncs\.com\/(.*)$/i);
               if (imagePathMatch && imagePathMatch[1]) {
                 const imagePath = imagePathMatch[1];
                 // 使用后端中转接口，格式为 /api/aliyun-oss-image/:imagePath
                 coverUrl = `/api/aliyun-oss-image/${imagePath}`;
-                console.log('🎯 转换为后端中转URL:', coverUrl);
+
               } else {
                 coverUrl = originalCoverUrl;
-                console.log('⚠️ 无法提取阿里云OSS图片路径，直接使用原始URL:', coverUrl);
+
               }
             } else {
               coverUrl = originalCoverUrl;
-              console.log('✅ 直接使用原始图片URL:', coverUrl);
+
             }
           }
         } catch (e) {
@@ -291,34 +288,31 @@ async function searchIsbnWork(isbn: string): Promise<BookSearchResult | null> {
  */
 async function searchDBR(isbn: string): Promise<BookSearchResult | null> {
   try {
-    console.log(`调用DBR API，ISBN: ${isbn}`);
-    
+
     // 调用DBR API获取书籍信息
     const response = await dbrApi.getByIsbn(isbn);
-    console.log('DBR API响应:', response);
-    
+
     if (!response || response.code === undefined || response.code !== 0 || !response.data) {
       console.error('DBR API返回无效数据:', response);
       return null;
     }
     
     const data = response.data;
-    console.log('DBR API响应数据:', data);
-    
+
     // 处理封面图片，使用后端中转接口避免40310015错误
     let coverUrl: string = data.images?.large || data.images?.medium || data.images?.small || '';
     let localCoverData: string | undefined;
     
     // 如果是豆瓣图片URL，使用后端中转接口
     if (coverUrl && coverUrl.includes('doubanio.com')) {
-      console.log('✅ DBR返回的是豆瓣图片URL，使用后端中转接口:', coverUrl);
+
       // 提取豆瓣图片ID，如 https://img9.doubanio.com/view/subject/l/public/s35302086.jpg 中的 s35302086
       const coverIdMatch = coverUrl.match(/\/public\/(s\d+)\.jpg/i);
       if (coverIdMatch && coverIdMatch[1]) {
         const coverId = coverIdMatch[1];
         // 使用后端中转接口，格式为 /api/douban/cover/:coverId
         coverUrl = `/api/douban/cover/${coverId}`;
-        console.log('🎯 转换为后端中转URL:', coverUrl);
+
       }
     }
     
@@ -375,7 +369,6 @@ async function searchDBR(isbn: string): Promise<BookSearchResult | null> {
       sourceUrl: data.sourceUrl
     };
 
-    console.log('DBR API处理后结果:', result);
     return result;
   } catch (error) {
     console.error('DBR API调用失败:', error);
@@ -394,8 +387,6 @@ async function searchDouban(isbn: string): Promise<BookSearchResult | null> {
       console.error('无效的ISBN格式:', isbn);
       return null;
     }
-
-    console.log(`调用豆瓣图书API（后端代理GET），ISBN: ${isbn}`);
 
     // 使用后端代理，GET请求方式
     const response = await axios.get(
@@ -428,27 +419,26 @@ async function searchDouban(isbn: string): Promise<BookSearchResult | null> {
     let localCoverData: string | undefined;
 
     const originalCoverUrl = data.images?.large || data.image || '';
-    console.log('📚 豆瓣图书API完整响应:', data);
-    console.log('🖼️  原始图片URL:', originalCoverUrl);
-    console.log('🔍 images对象:', data.images);
-    console.log('📷 备用图片字段:', data.image);
+
+
+
 
     // 处理豆瓣图片URL，使用后端中转接口避免40310015错误
     if (originalCoverUrl) {
-      console.log('✅ 图片URL存在，使用后端中转接口避免40310015错误');
+
       // 提取豆瓣图片ID，如 https://img9.doubanio.com/view/subject/l/public/s35302086.jpg 中的 s35302086
       const coverIdMatch = originalCoverUrl.match(/\/public\/(s\d+)\.jpg/i);
       if (coverIdMatch && coverIdMatch[1]) {
         const coverId = coverIdMatch[1];
         // 使用后端中转接口，格式为 /api/douban/cover/:coverId
         coverUrl = `/api/douban/cover/${coverId}`;
-        console.log('🎯 转换为后端中转URL:', coverUrl);
+
       } else {
-        console.log('⚠️ 无法提取豆瓣图片ID，使用原始URL:', originalCoverUrl);
+
         coverUrl = originalCoverUrl;
       }
     } else {
-      console.log('❌ 未获取到图片URL');
+
     }
 
     return {
@@ -502,7 +492,7 @@ export async function searchBookByISBN(isbn: string): Promise<{
   // 先检查缓存
   const cached = ISBN_SEARCH_CACHE.get(isbn);
   if (cached && isCacheValid(cached.timestamp)) {
-    console.log(`✅ 使用缓存的搜索结果，ISBN: ${isbn}`);
+
     return cached.data;
   }
   
@@ -518,7 +508,7 @@ export async function searchBookByISBN(isbn: string): Promise<{
   let finalIsbnWorkResult: BookSearchResult | null = null;
   if (isbnWorkResult.status === 'fulfilled') {
     finalIsbnWorkResult = isbnWorkResult.value;
-    console.log('✅ 公共图书API结果:', finalIsbnWorkResult ? '成功' : '失败');
+
   } else {
     console.error('❌ 公共图书API调用异常:', isbnWorkResult.reason);
     finalIsbnWorkResult = null;
@@ -528,7 +518,7 @@ export async function searchBookByISBN(isbn: string): Promise<{
   let finalDBRResult: BookSearchResult | null = null;
   if (dbrResult.status === 'fulfilled') {
     finalDBRResult = dbrResult.value;
-    console.log('✅ DBR API结果:', finalDBRResult ? '成功' : '失败');
+
   } else {
     console.error('❌ DBR API调用异常:', dbrResult.reason);
     finalDBRResult = null;
@@ -538,7 +528,7 @@ export async function searchBookByISBN(isbn: string): Promise<{
   let finalDoubanResult: BookSearchResult | null = null;
   if (doubanResult.status === 'fulfilled') {
     finalDoubanResult = doubanResult.value;
-    console.log('✅ 豆瓣图书API结果:', finalDoubanResult ? '成功' : '失败');
+
   } else {
     console.error('❌ 豆瓣图书API调用异常:', doubanResult.reason);
     finalDoubanResult = null;
@@ -546,8 +536,7 @@ export async function searchBookByISBN(isbn: string): Promise<{
   
   // 探数API结果初始化为null，等待用户主动点击时调用
   const finalTanshuResult: BookSearchResult | null = null;
-  console.log('⏳ 探数图书API：暂未调用（仅在用户主动点击时触发）');
-  
+
   // 确定最佳结果，优先使用免费API的高质量数据源
   // 优先级: DBR > 公共图书 > 豆瓣 > 探数
   const bestResult = finalDBRResult || finalIsbnWorkResult || finalDoubanResult || finalTanshuResult;
@@ -569,10 +558,8 @@ export async function searchBookByISBN(isbn: string): Promise<{
   
   // 清理过期缓存
   cleanCache();
-  
-  console.log(`✅ 多源搜索完成，最佳结果来自: ${bestResult?.source || '无结果'}`);
-  console.log(`📦 搜索结果已缓存，ISBN: ${isbn}`);
-  
+
+
   return result;
 }
 
@@ -625,7 +612,7 @@ export const isbnCacheUtils = {
    */
   clearByISBN: (isbn: string) => {
     ISBN_SEARCH_CACHE.delete(isbn);
-    console.log(`🗑️  已清除ISBN: ${isbn}的搜索缓存`);
+
   },
   
   /**
@@ -633,7 +620,7 @@ export const isbnCacheUtils = {
    */
   clearAll: () => {
     ISBN_SEARCH_CACHE.clear();
-    console.log(`🗑️  已清除所有ISBN搜索缓存`);
+
   },
   
   /**

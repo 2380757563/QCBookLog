@@ -517,9 +517,7 @@ const initHeatmapEventListeners = () => {
       scrollHeatmapWrapper.value.addEventListener('touchstart', handleTouchStart, { passive: true });
       scrollHeatmapWrapper.value.addEventListener('touchmove', handleTouchMove, { passive: false });
       scrollHeatmapWrapper.value.addEventListener('touchend', handleTouchEnd, { passive: true });
-      console.log('✅ 热力图滚轮和触摸事件监听器已添加');
     } else {
-      console.warn('⚠️ 热力图容器未找到，无法添加事件监听器');
     }
   });
 };
@@ -627,8 +625,6 @@ const handleResize = () => {
 
 // 组件挂载
 onMounted(async () => {
-  console.log('🔄 ReadingHeatmap 组件挂载...');
-
   // 添加窗口大小监听
   window.addEventListener('resize', handleResize);
 
@@ -665,14 +661,13 @@ const loadActivities = async () => {
     });
 
     allActivities.value = activities;
-    
+
     // 使用优化的计算方法
     computeHeatmapColumnsOptimized();
     
-    console.log('✅ 热力图数据加载完成，通知时间线页面刷新');
     eventBus.emit('heatmap-data-updated', { activities });
   } catch (error) {
-    console.error('加载操作记录失败:', error);
+    // 静默处理加载失败
   } finally {
     loadingActivities.value = false;
   }
@@ -696,14 +691,12 @@ const validateHeatmapData = () => {
     // 验证每列的第一个元素是否为周日（dayOfWeek === 0）
     const firstDay = column[0];
     if (firstDay.dayOfWeek !== 0) {
-      console.error(`❌ 列 ${colIndex} 的第一个元素不是周日，而是周${['日', '一', '二', '三', '四', '五', '六'][firstDay.dayOfWeek]}`, firstDay);
       hasError = true;
     }
 
     // 验证每列的最后一个元素是否为周六（dayOfWeek === 6）
     const lastDay = column[column.length - 1];
     if (lastDay.dayOfWeek !== 6 && column.length === 7) {
-      console.error(`❌ 列 ${colIndex} 的最后一个元素不是周六，而是周${['日', '一', '二', '三', '四', '五', '六'][lastDay.dayOfWeek]}`, lastDay);
       hasError = true;
     }
 
@@ -714,14 +707,13 @@ const validateHeatmapData = () => {
       const diffDays = (next.getTime() - current.getTime()) / (1000 * 60 * 60 * 24);
       
       if (diffDays !== 1) {
-        console.error(`❌ 列 ${colIndex} 中第 ${i} 和 ${i + 1} 个元素不连续，相差 ${diffDays} 天`, column[i], column[i + 1]);
         hasError = true;
       }
     }
   });
 
   if (!hasError) {
-    console.log('✅ 热力图数据验证通过：每列严格对应周日至周六');
+    // 热力图数据验证通过：每列严格对应周日至周六
   }
 };
 
@@ -751,7 +743,6 @@ onUnmounted(() => {
     scrollHeatmapWrapper.value.removeEventListener('touchstart', handleTouchStart);
     scrollHeatmapWrapper.value.removeEventListener('touchmove', handleTouchMove);
     scrollHeatmapWrapper.value.removeEventListener('touchend', handleTouchEnd);
-    console.log('✅ 热力图滚轮和触摸事件监听器已移除');
   }
 });
 
@@ -766,24 +757,23 @@ watch(scrollHeatmapColumnsData, () => {
 
 // 监听热力图设置变化,确保参数实时生效
 watch(() => heatmapSettingsStore.wheelSensitivity, () => {
-  console.log('🔥 热力图滚轮灵敏度已更新:', heatmapSettingsStore.wheelSensitivity);
+  // 热力图滚轮灵敏度已更新
 });
 
 watch(() => heatmapSettingsStore.touchSensitivity, () => {
-  console.log('🔥 热力图触摸灵敏度已更新:', heatmapSettingsStore.touchSensitivity);
+  // 热力图触摸灵敏度已更新
 });
 
 watch(() => heatmapSettingsStore.touchFriction, () => {
-  console.log('🔥 热力图摩擦系数已更新:', heatmapSettingsStore.touchFriction);
+  // 热力图摩擦系数已更新
 });
 
 watch(() => heatmapSettingsStore.touchMinVelocity, () => {
-  console.log('🔥 热力图最小速度阈值已更新:', heatmapSettingsStore.touchMinVelocity);
+  // 热力图最小速度阈值已更新
 });
 
 // 监听读者切换事件
 eventBus.on('reader-changed', (data: any) => {
-  console.log('📥 收到读者切换事件:', data);
   // 重新加载热力图数据
   loadActivities();
 });

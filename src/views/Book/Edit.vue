@@ -453,7 +453,7 @@ const fetchBookByISBN = async () => {
     // 清除该ISBN的缓存，确保获取最新数据
     if (isbnCacheUtils) {
       isbnCacheUtils.clearByISBN(isbn);
-      console.log('已清除ISBN:', isbn, '的缓存');
+
     }
     
     // 调用综合ISBN搜索API
@@ -471,8 +471,7 @@ const fetchBookByISBN = async () => {
           form.pages = bookInfo.pages;
           // 根据API返回的装帧信息设置binding1
           const bindingText = (bookInfo.binding || '').toLowerCase();
-          console.log('API返回的装帧信息:', bookInfo.binding, '转换后:', bindingText);
-          
+
           // 处理各种可能的装帧描述
           if (bindingText.includes('平装') || bindingText.includes('paperback') || bindingText.includes('平裝')) {
             form.binding1 = 1;
@@ -482,13 +481,14 @@ const fetchBookByISBN = async () => {
             form.binding1 = 3;
           }
           form.binding2 = 0; // 默认无细分
-          console.log('设置的binding1:', form.binding1);
+
           form.coverUrl = bookInfo.coverUrl || '';
           // 设置书籍简介
           form.description = bookInfo.description || '';
           // 设置标准价格（从API获取的价格）
           if (bookInfo.price) {
-            form.standardPrice = parseFloat(bookInfo.price);
+            // 去除"元"等非数字字符后再转换
+            form.standardPrice = parseFloat(bookInfo.price.replace(/[^\d.]/g, ''));
           }
     } else {
       alert('未找到相关书籍信息');
@@ -608,26 +608,16 @@ const removeCalibreTag = (index: number) => {
 
     saving.value = true;
     try {
-      console.log('💾 ============ 开始保存书籍 ============');
-      console.log('💾 模式:', isEdit.value ? '编辑' : '新增');
-      console.log('💾 书籍ID:', form.id, '类型:', typeof form.id);
+
+
+
       console.log('💾 原始form数据:', JSON.parse(JSON.stringify(form)));
 
       // 检查阅读状态是否有变化
       const readStatusChanged = form.readStatus !== originalReadStatus.value;
-      console.log('💾 阅读状态变化:', {
-        original: originalReadStatus.value,
-        current: form.readStatus,
-        changed: readStatusChanged
-      });
 
       // 检查阅读进度是否有变化
       const readingProgressChanged = readingProgress.value !== originalReadingProgress.value;
-      console.log('💾 阅读进度变化:', {
-        original: originalReadingProgress.value,
-        current: readingProgress.value,
-        changed: readingProgressChanged
-      });
 
       // 保存前，将calibreTags复制到tags字段（API期望的格式）
       const { calibreTags, ...saveData } = form as any;
@@ -654,7 +644,7 @@ const removeCalibreTag = (index: number) => {
       if (finalSaveData.purchaseDate && finalSaveData.purchaseDate.trim() !== '') {
         try {
           finalSaveData.purchaseDate = new Date(finalSaveData.purchaseDate).toISOString();
-          console.log('💾 purchaseDate转换:', finalSaveData.purchaseDate);
+
         } catch (e) {
           console.error('❌ purchaseDate转换失败:', finalSaveData.purchaseDate, e);
         }
@@ -662,7 +652,7 @@ const removeCalibreTag = (index: number) => {
       if (finalSaveData.readCompleteDate && finalSaveData.readCompleteDate.trim() !== '') {
         try {
           finalSaveData.readCompleteDate = new Date(finalSaveData.readCompleteDate).toISOString();
-          console.log('💾 readCompleteDate转换:', finalSaveData.readCompleteDate);
+
         } catch (e) {
           console.error('❌ readCompleteDate转换失败:', finalSaveData.readCompleteDate, e);
         }
@@ -671,22 +661,13 @@ const removeCalibreTag = (index: number) => {
     let savedBook: Book;
 
     if (isEdit.value && form.id) {
-      console.log('💾 执行更新操作...');
+
       const updatedBook = await bookService.updateBook(finalSaveData as Book);
-      console.log('💾 更新成功:', {
-        id: updatedBook.id,
-        title: updatedBook.title,
-        author: updatedBook.author,
-        binding1: updatedBook.binding1,
-        binding2: updatedBook.binding2,
-        purchasePrice: updatedBook.purchasePrice,
-        standardPrice: updatedBook.standardPrice,
-        note: updatedBook.note
-      });
+
       bookStore.updateBook(updatedBook);
       savedBook = updatedBook;
     } else {
-      console.log('💾 执行新增操作...');
+
       const newBook = await bookService.addBook(finalSaveData);
       bookStore.addBook(newBook);
       savedBook = newBook;
@@ -694,7 +675,7 @@ const removeCalibreTag = (index: number) => {
 
     // 检查阅读状态是否有变化并更新
     if (readStatusChanged && savedBook.id) {
-      console.log('💾 阅读状态有变化，开始更新阅读状态...');
+
       try {
         // 将字符串状态转换为数字
         const statusMap: Record<string, number> = {
@@ -716,8 +697,6 @@ const removeCalibreTag = (index: number) => {
           readerStore.currentReaderId
         );
 
-        console.log('💾 阅读状态更新成功:', updatedReadingState);
-
         // 更新本地书籍对象的阅读状态
         savedBook.readStatus = form.readStatus;
         savedBook.readCompleteDate = updatedReadingState.read_date || undefined;
@@ -733,12 +712,8 @@ const removeCalibreTag = (index: number) => {
 
     // 检查阅读进度是否有变化并更新
     if (readingProgressChanged && savedBook.id && form.pages) {
-      console.log('💾 阅读进度有变化，开始更新阅读进度...');
-      console.log('💾 阅读进度详情:', {
-        readingProgressValue: readingProgress.value,
-        totalPages: form.pages,
-        savedBookId: savedBook.id
-      });
+
+
       try {
         // readingProgress.value 现在是页码，直接使用
         const readPages = readingProgress.value;
@@ -747,8 +722,6 @@ const removeCalibreTag = (index: number) => {
           parseInt(savedBook.id.toString(), 10),
           readPages
         );
-
-        console.log('💾 阅读进度更新成功:', updatedProgress);
 
         // 更新本地书籍对象的阅读进度
         savedBook.read_pages = updatedProgress.readPages;
@@ -762,7 +735,6 @@ const removeCalibreTag = (index: number) => {
       }
     }
 
-    console.log('💾 保存完成，准备返回...');
     router.back();
   } catch (error) {
     console.error('❌ ============ 保存失败 ============');
@@ -856,7 +828,8 @@ onMounted(async () => {
         
         // 设置标准价格（从查询参数中获取）
         if (query.price) {
-          form.standardPrice = parseFloat(query.price as string);
+          // 去除"元"等非数字字符后再转换
+          form.standardPrice = parseFloat((query.price as string).replace(/[^\d.]/g, ''));
         }
         // 设置评分
         if (query.rating) {

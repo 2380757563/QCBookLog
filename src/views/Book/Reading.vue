@@ -114,6 +114,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { useReadingStore } from '@/store/reading';
 import { useBookStore } from '@/store/book';
 import { bookmarkService } from '@/services/bookmark';
+import { bookService } from '@/services/book';
 import readingTrackingService from '@/services/readingTracking';
 import type { Book } from '@/services/book/types';
 
@@ -236,7 +237,7 @@ const handleAddBookmark = async () => {
   }
 
   try {
-    await bookmarkService.createBookmark({
+    await bookmarkService.addBookmark({
       bookId: book.value.id,
       content,
       pageNum: currentPage.value,
@@ -258,18 +259,15 @@ onMounted(async () => {
   // 标记进入阅读界面
   readingStore.setInReadingPage(true);
 
-  // 获取书籍信息
-  book.value = bookStore.getBookById(bookId) || await bookService.getBookById(bookId) || null;
+  // 获取书籍信息（总是从API获取最新数据）
+  book.value = await bookService.getBookById(bookId) || null;
 
   // 如果已经在阅读中，使用当前页码
   if (readingStore.isReading && readingStore.currentBookId === bookId) {
     currentPage.value = readingStore.currentProgress;
   } else if (book.value) {
-    // 否则根据进度计算
-    const progress = book.value.progress || 0;
-    currentPage.value = book.value.pages
-      ? Math.floor(book.value.pages * (progress / 100))
-      : 0;
+    // 否则使用已读页数
+    currentPage.value = book.value.read_pages || 0;
   }
 
   // 加载今日统计

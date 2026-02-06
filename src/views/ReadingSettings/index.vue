@@ -368,8 +368,7 @@ const loadSettings = () => {
       } else {
         currentPreset.value = 'high';
       }
-      
-      console.log('✅ 已加载热力图设置:', heatmapSettings);
+
     } catch (e) {
       console.error('加载热力图设置失败:', e);
     }

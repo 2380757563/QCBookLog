@@ -90,7 +90,6 @@ class ImportService {
    * 从文件导入
    */
   async importFromFile(file: File, options: ImportOptions): Promise<ImportResult> {
-    console.log('📁 开始导入文件:', file.name, file.type);
 
     // 如果是ZIP格式，单独处理
     if (options.format === 'zip') {
@@ -123,7 +122,6 @@ class ImportService {
    * 导入ZIP压缩包（完善版）
    */
   async importFromZip(file: File, options: ImportOptions): Promise<ImportResult> {
-    console.log('📦 开始解压ZIP文件:', file.name);
 
     try {
       const arrayBuffer = await file.arrayBuffer();
@@ -147,7 +145,7 @@ class ImportService {
       if (metadataFile) {
         const metadataContent = await metadataFile.async('string');
         metadata = JSON.parse(metadataContent);
-        console.log('📋 导入包元数据:', metadata);
+
       }
 
       // ===== 2. 导入分组数据 =====
@@ -159,7 +157,6 @@ class ImportService {
             const groupsData = JSON.parse(groupsContent);
 
             if (groupsData.groups && Array.isArray(groupsData.groups)) {
-              console.log(`📁 发现 ${groupsData.groups.length} 个分组，开始导入...`);
 
               // 获取现有分组列表，避免重复
               const existingGroups = await bookService.getAllGroups();
@@ -169,23 +166,22 @@ class ImportService {
               for (const group of groupsData.groups) {
                 // 检查分组是否已存在（按名称）
                 if (existingGroupNames.has(group.name)) {
-                  console.log(`  ⏭️ 分组已存在，跳过: ${group.name}`);
+
                   continue;
                 }
 
                 try {
                   await bookService.addGroup(group);
-                  console.log(`  ✓ 导入分组: ${group.name}`);
+
                   importedCount++;
                 } catch (e) {
-                  console.warn(`  ✗ 分组导入失败: ${group.name}`, e);
+
                 }
               }
 
-              console.log(`📁 分组导入完成，成功导入 ${importedCount}/${groupsData.groups.length} 个`);
             }
           } catch (e) {
-            console.warn('⚠️ 分组导入失败:', e);
+
           }
         }
       }
@@ -199,12 +195,12 @@ class ImportService {
             const bookmarksData = JSON.parse(bookmarksContent);
 
             if (bookmarksData.bookmarks && Array.isArray(bookmarksData.bookmarks)) {
-              console.log(`🔖 发现 ${bookmarksData.bookmarks.length} 个书签，开始导入...`);
+
               // TODO: 实现书签的批量导入
-              console.log('  ⚠️ 书签导入功能待实现');
+
             }
           } catch (e) {
-            console.warn('⚠️ 书签导入失败:', e);
+
           }
         }
       }
@@ -224,8 +220,6 @@ class ImportService {
                 dayCount += dataset.data?.length || 0;
               });
 
-              console.log(`📊 发现热力图数据: ${yearCount} 年, ${dayCount} 天，开始导入...`);
-
               // 使用 readingHeatmapService 导入热力图数据
               for (const [year, dataset] of Object.entries(heatmapData.heatmap)) {
                 const yearNum = parseInt(year);
@@ -242,13 +236,12 @@ class ImportService {
                 }
               }
 
-              console.log('📊 热力图数据导入成功');
             }
           } catch (e) {
-            console.warn('⚠️ 热力图数据导入失败:', e);
+
           }
         } else {
-          console.log('📊 未找到热力图数据文件');
+
         }
       }
 
@@ -261,7 +254,6 @@ class ImportService {
             const goalsData = JSON.parse(goalsContent);
 
             if (goalsData.goals && Array.isArray(goalsData.goals)) {
-              console.log(`🎯 发现 ${goalsData.goals.length} 个年度阅读目标，开始导入...`);
 
               // 使用 readingGoalsService 导入阅读目标数据
               const currentYear = new Date().getFullYear();
@@ -285,10 +277,10 @@ class ImportService {
               console.log(`🎯 年度阅读目标导入完成 (${goalsData.goals.length} 个)`);
             }
           } catch (e) {
-            console.warn('⚠️ 年度阅读目标导入失败:', e);
+
           }
         } else {
-          console.log('🎯 未找到年度阅读目标文件');
+
         }
       }
 
@@ -315,14 +307,13 @@ class ImportService {
       }
 
       let books = libraryData.books;
-      console.log(`📚 从ZIP中读取到 ${books.length} 本书籍`);
 
       // ===== 8. 提取封面文件 =====
       const coversFolder = zip.folder('covers');
       const coversMap = new Map<string, Blob>();
 
       if (coversFolder) {
-        console.log('🖼️ 发现封面文件夹，开始提取...');
+
         for (const [path, zipEntry] of Object.entries(coversFolder.files)) {
           if (!zipEntry.dir && (path.endsWith('.jpg') || path.endsWith('.jpeg') || path.endsWith('.png'))) {
             const blob = await zipEntry.async('blob');
@@ -343,7 +334,7 @@ class ImportService {
           const blob = coversMap.get(book.isbn);
           if (blob) {
             book._coverBlob = blob;
-            console.log(`  ✓ 为书籍 "${book.title}" 匹配到封面: ${book.isbn}.jpg`);
+
           }
         }
       }
@@ -364,7 +355,6 @@ class ImportService {
    * 验证ZIP文件格式
    */
   async validateZipFile(file: File): Promise<ZipImportResult> {
-    console.log('🔍 验证ZIP文件:', file.name);
 
     try {
       const arrayBuffer = await file.arrayBuffer();
@@ -372,7 +362,6 @@ class ImportService {
 
       // 检查文件列表
       const files = Object.keys(zip.files);
-      console.log('📋 ZIP文件内容:', files);
 
       // 读取元数据
       let metadata: any = {
@@ -420,7 +409,7 @@ class ImportService {
       const coversFolder = zip.folder('covers');
       let covers = new Map<string, Blob>();
       if (coversFolder) {
-        console.log('🔍 发现封面文件夹');
+
         metadata.includeCovers = true;
 
         for (const [path, zipEntry] of Object.entries(coversFolder.files)) {
@@ -548,10 +537,10 @@ class ImportService {
       // 格式1: { books: [...] }
       // 格式2: [...]
       if (data.books && Array.isArray(data.books)) {
-        console.log('📋 识别为JSON格式1（包含books字段）');
+
         return data.books;
       } else if (Array.isArray(data)) {
-        console.log('📋 识别为JSON格式2（直接数组）');
+
         return data;
       } else {
         throw new Error('JSON格式不正确，必须是数组或包含books字段的对象');
@@ -579,7 +568,6 @@ class ImportService {
 
       // 解析表头
       const headers = this.parseCSVLine(lines[0]);
-      console.log('📋 CSV表头:', headers);
 
       // 解析数据行
       const data: any[] = [];
@@ -603,7 +591,6 @@ class ImportService {
         data.push(row);
       }
 
-      console.log(`📋 解析完成，共 ${data.length} 条数据`);
       return data;
     } catch (e) {
       console.error('❌ CSV解析失败:', e);
@@ -740,14 +727,11 @@ class ImportService {
       warnings: []
     };
 
-    console.log('📚 开始导入书籍，总数:', books.length);
-
     // 收集所有有效的书籍
     const validBooks: Omit<Book, 'id' | 'createTime' | 'updateTime'>[] = [];
 
     for (let i = 0; i < books.length; i++) {
       const row = books[i];
-      console.log(`\n📖 处理第 ${i + 1}/${books.length} 条数据`);
 
       try {
         // 验证必填字段
@@ -776,7 +760,7 @@ class ImportService {
         // 构造书籍对象
         const book = this.constructBook(row);
         validBooks.push(book);
-        console.log('✅ 书籍数据准备完成:', book);
+
         result.imported++;
 
       } catch (e) {
@@ -791,9 +775,9 @@ class ImportService {
     // 批量添加书籍到数据库
     if (validBooks.length > 0) {
       try {
-        console.log('💾 开始保存书籍到数据库...');
+
         await bookService.batchAddBooks(validBooks);
-        console.log('✅ 书籍保存成功!');
+
       } catch (e) {
         console.error('❌ 书籍保存失败:', e);
         result.errors.push({
@@ -806,7 +790,6 @@ class ImportService {
     }
 
     result.success = result.errors.length === 0;
-    console.log('\n📊 导入完成:', result);
 
     return result;
   }

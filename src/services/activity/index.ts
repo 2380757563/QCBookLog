@@ -24,23 +24,9 @@ const buildQueryString = (params: Record<string, any>): string => {
 };
 
 const activityService = {
-  async createActivity(activity: CreateActivityRequest): Promise<ActivityRecord | null> {
-    try {
-      const response: ActivityApiResponse<ActivityRecord> = await apiClient.post('/activities', {
-        ...activity,
-        readerId: getCurrentReaderId()
-      });
-
-      if (!response.success) {
-        throw new Error(response.message || '创建操作记录失败');
-      }
-
-      return response.data || null;
-    } catch (error) {
-      console.error('❌ 创建操作记录失败:', error);
-      return null;
-    }
-  },
+  // 注意：不再提供 createActivity 方法
+  // 操作记录应该由业务服务自动创建（书摘、阅读状态、阅读记录、阅读目标等）
+  // 前端通过查询接口获取聚合的操作记录数据
 
   async getActivities(filters?: ActivityFilters): Promise<ActivityRecord[]> {
     try {

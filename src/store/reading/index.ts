@@ -170,7 +170,6 @@ export const useReadingStore = defineStore('reading', () => {
     // 启动定时器
     startTimer();
 
-    console.log(`📖 开始阅读: 《${bookTitle}》 第${startPage}页`);
   };
 
   /**
@@ -187,7 +186,6 @@ export const useReadingStore = defineStore('reading', () => {
     // 停止定时器
     stopTimer();
 
-    console.log(`⏸️ 阅读已暂停，已读时长: ${formattedElapsedTime.value}`);
   };
 
   /**
@@ -204,7 +202,6 @@ export const useReadingStore = defineStore('reading', () => {
     // 重新启动定时器
     startTimer();
 
-    console.log(`▶️ 继续阅读`);
   };
 
   /**
@@ -228,8 +225,7 @@ export const useReadingStore = defineStore('reading', () => {
     const duration = Math.floor(elapsedSeconds / 60);
     const pagesRead = currentPage - startPage;
 
-    console.log(`✅ 结束阅读: 《${currentBookTitle}》`);
-    console.log(`   阅读时长: ${duration}分钟`);
+
     console.log(`   阅读页数: ${pagesRead}页 (第${startPage}页 -> 第${currentPage}页)`);
 
     // 调用后端API保存阅读记录
@@ -239,15 +235,13 @@ export const useReadingStore = defineStore('reading', () => {
         const startTime = timerState.value.startTime ? timerState.value.startTime.toISOString() : new Date().toISOString();
         const readerId = currentReaderId.value;
 
-        console.log('📝 准备保存阅读记录，参数验证:');
-        console.log('  bookId:', currentBookId);
-        console.log('  readerId:', readerId);
-        console.log('  startTime:', startTime);
+
+
+
         console.log('  endTime:', endTime.toISOString());
-        console.log('  duration:', duration);
-        console.log('  startPage:', startPage);
-        console.log('  endPage:', currentPage);
-        console.log('  pagesRead:', pagesRead);
+
+
+
 
         // 检查必要参数
         if (currentBookId == null) {
@@ -276,7 +270,7 @@ export const useReadingStore = defineStore('reading', () => {
           endPage: currentPage,
           pagesRead
         });
-        console.log('✅ 阅读记录已保存到后端');
+
       } catch (error) {
         console.error('❌ 保存阅读记录失败:', error);
         if (error instanceof Error) {
@@ -362,7 +356,6 @@ export const useReadingStore = defineStore('reading', () => {
       timerState.value.elapsedSeconds++;
     }, 1000);
 
-    console.log('⏱️ 计时器已启动');
   };
 
   /**
@@ -372,7 +365,7 @@ export const useReadingStore = defineStore('reading', () => {
     if (timerInterval !== null) {
       clearInterval(timerInterval);
       timerInterval = null;
-      console.log('⏹️ 计时器已停止');
+
     }
   };
 

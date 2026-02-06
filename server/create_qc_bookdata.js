@@ -13,7 +13,7 @@ async function createQcBookDataTable() {
         purchase_date TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (book_id) REFERENCES items(book_id) ON DELETE CASCADE ON UPDATE CASCADE
+        FOREIGN KEY (book_id) REFERENCES items(id) ON DELETE CASCADE ON UPDATE CASCADE
       )
     `).run();
     console.log('✅ qc_bookdata表创建成功');
@@ -36,9 +36,9 @@ async function createQcBookDataTable() {
     // 如果表为空，尝试初始化数据
     if (count === 0) {
       console.log('\n=== 初始化qc_bookdata表数据 ===');
-      
+
       // 获取所有书籍ID
-      const items = databaseService.talebookDb.prepare('SELECT book_id FROM items').all();
+      const items = databaseService.talebookDb.prepare('SELECT book_id as id FROM items').all();
       console.log(`找到 ${items.length} 本书籍需要初始化`);
       
       // 批量插入初始数据

@@ -249,7 +249,6 @@ const handleClearData = () => {
 // 处理读者切换
 const handleReaderChange = () => {
   // readerStore会自动保存到localStorage
-  console.log('读者已切换:', readerStore.currentReaderId);
 
   // 刷新书籍列表以更新阅读状态
   loadBooks();

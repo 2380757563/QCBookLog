@@ -274,7 +274,6 @@ const handleSearch = async () => {
     sources.value.isbnWork.loading = true;
     sources.value.dbr.loading = true;
 
-    console.log('🔍 开始搜索ISBN，优先使用免费API...');
     const results = await searchBookByISBN(isbn);
     
     sources.value.douban.loading = false;
@@ -290,17 +289,17 @@ const handleSearch = async () => {
     if (results.dbr) {
       activeSource.value = 'dbr';
       addToSearchHistory(isbn, results.dbr.title);
-      console.log('✅ 使用DBR数据源');
+
     } else if (results.isbnWork) {
       activeSource.value = 'isbnWork';
       addToSearchHistory(isbn, results.isbnWork.title);
-      console.log('✅ 使用公共图书API数据源');
+
     } else if (results.douban) {
       activeSource.value = 'douban';
       addToSearchHistory(isbn, results.douban.title);
-      console.log('✅ 使用豆瓣API数据源');
+
     } else {
-      console.log('⚠️ 所有免费API均未返回数据');
+
       // 自动切换到探数数据源，引导用户点击
       activeSource.value = 'tanshu';
     }
@@ -336,14 +335,13 @@ const searchTanshu = async () => {
   if (!sources.value.tanshu.data && !sources.value.tanshu.loading) {
     const confirmed = confirm('探数图书API为计费服务，是否确认调用？\n\n该服务仅在免费API无法找到书籍时建议使用。');
     if (!confirmed) {
-      console.log('❌ 用户取消了探数API调用');
+
       return;
     }
   }
 
   sources.value.tanshu.loading = true;
-  console.log('💰 用户主动触发探数图书API调用（计费服务）');
-  
+
   try {
     const result = await searchTanshuByISBN(isbn);
     sources.value.tanshu.data = result;
@@ -352,9 +350,9 @@ const searchTanshu = async () => {
     if (result) {
       activeSource.value = 'tanshu';
       addToSearchHistory(isbn, result.title);
-      console.log('✅ 探数图书API调用成功');
+
     } else {
-      console.log('⚠️ 探数图书API未返回数据');
+
     }
   } catch (error) {
     console.error('❌ 探数图书搜索失败:', error);
@@ -428,7 +426,8 @@ const useBookInfo = () => {
         binding1 = 2; // 精装
       }
 
-      console.log('装帧转换:', sourceData.binding, '-> binding1:', binding1, 'binding2:', binding2);
+
+      console.log('📄 [ISBNSearch.vue] sourceData 完整数据:', JSON.stringify(sourceData, null, 2));
 
       const bookData = {
         isbn: sourceData.isbn,
@@ -436,7 +435,7 @@ const useBookInfo = () => {
         author: sourceData.author,
         publisher: sourceData.publisher || '',
         publishYear: sourceData.publishYear,
-        pages: sourceData.pages,
+        pages: sourceData.pages ? parseInt(sourceData.pages) : undefined,
         binding1: binding1,
         binding2: binding2,
         book_type: binding1 === 0 ? 0 : 1,
@@ -444,7 +443,8 @@ const useBookInfo = () => {
         purchaseDate: now,
         purchasePrice: undefined,
         // 将API返回的价格字符串转换为数字作为标准价格
-        standardPrice: sourceData.price ? parseFloat(sourceData.price) : undefined,
+        // 去除"元"等非数字字符后再转换
+        standardPrice: sourceData.price ? parseFloat(sourceData.price.replace(/[^\d.]/g, '')) : undefined,
         readStatus: '未读' as const,
         readCompleteDate: undefined,
         rating: sourceData.rating,
@@ -455,6 +455,8 @@ const useBookInfo = () => {
         note: '',
         description: sourceData.description || ''
       };
+
+      console.log('📤 [ISBNSearch.vue] 准备发送给后端的书籍数据:', JSON.stringify(bookData, null, 2));
 
       // 显示进度条
       showProgressBar.value = true;
