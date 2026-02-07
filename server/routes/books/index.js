@@ -23,4 +23,8 @@ router.delete('/:id/cover', bookController.deleteBookCover);
 // 搜索路由
 router.get('/search', bookController.searchBooks);
 
+// 阅读状态路由
+router.get('/:id/reading-state', bookController.getReadingState);
+router.put('/:id/reading-state', bookController.updateReadingState);
+
 export default router;

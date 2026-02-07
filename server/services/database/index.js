@@ -299,6 +299,107 @@ class DatabaseService {
     }
   }
 
+  /**
+   * 验证 Calibre 数据库结构
+   */
+  validateCalibreSchema() {
+    this.ensureInitialized();
+    const calibreDb = this.connectionManager.getCalibreDb();
+    return validators.schema.validateCalibreSchema(calibreDb);
+  }
+
+  /**
+   * 验证 Talebook 数据库结构
+   */
+  validateTalebookSchema() {
+    this.ensureInitialized();
+    const talebookDb = this.connectionManager.getTalebookDb();
+    return validators.schema.validateTalebookSchema(talebookDb);
+  }
+
+  /**
+   * 获取 Calibre 数据库统计信息
+   */
+  getCalibreStats() {
+    this.ensureInitialized();
+    const calibreDb = this.connectionManager.getCalibreDb();
+    if (!calibreDb) {
+      return null;
+    }
+    try {
+      // 获取书籍数量
+      const bookCountResult = calibreDb.prepare('SELECT COUNT(*) as count FROM books').get();
+      const bookCount = bookCountResult.count || 0;
+
+      // 获取库UUID
+      let libraryUuid = null;
+      try {
+        const libraryUuidResult = calibreDb.prepare(`
+          SELECT value FROM metadata_plugins WHERE name = 'calibre_library_uuid'
+        `).get();
+        libraryUuid = libraryUuidResult ? libraryUuidResult.value : null;
+      } catch (error) {
+        // 如果 metadata_plugins 表不存在，尝试其他方式获取UUID
+        try {
+          const libConfig = calibreDb.prepare(`
+            SELECT value FROM preferences WHERE name = 'library_uuid'
+          `).get();
+          libraryUuid = libConfig ? libConfig.value : null;
+        } catch (e) {
+          // 忽略错误，UUID不是必需的
+        }
+      }
+
+      return {
+        bookCount,
+        libraryUuid,
+        dbPath: this.connectionManager.config.calibrePath
+      };
+    } catch (error) {
+      console.error('❌ 获取 Calibre 统计信息失败:', error.message);
+      return {
+        bookCount: 0,
+        libraryUuid: null,
+        dbPath: this.connectionManager.config.calibrePath,
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * 获取 Talebook 数据库统计信息
+   */
+  getTalebookStats() {
+    this.ensureInitialized();
+    const talebookDb = this.connectionManager.getTalebookDb();
+    if (!talebookDb) {
+      return null;
+    }
+    try {
+      // 获取书籍数量
+      const bookCountResult = talebookDb.prepare('SELECT COUNT(*) as count FROM items').get();
+      const bookCount = bookCountResult.count || 0;
+
+      // 获取用户数量
+      const userCountResult = talebookDb.prepare('SELECT COUNT(*) as count FROM users').get();
+      const userCount = userCountResult.count || 0;
+
+      return {
+        bookCount,
+        userCount,
+        dbPath: this.connectionManager.config.talebookPath
+      };
+    } catch (error) {
+      console.error('❌ 获取 Talebook 统计信息失败:', error.message);
+      return {
+        bookCount: 0,
+        userCount: 0,
+        dbPath: this.connectionManager.config.talebookPath,
+        error: error.message
+      };
+    }
+  }
+
   // ==================== 数据验证接口 ====================
 
   /**
@@ -382,7 +483,7 @@ class DatabaseService {
       const result = insertBook.run(
         book.title,
         book.timestamp || new Date().toISOString(),
-        book.pubdate || null,
+        book.pubdate || (book.publishYear ? `${book.publishYear}-01-01` : null),
         book.uuid || crypto.randomUUID(),
         book.has_cover || 0,
         book.series_index || 0,
@@ -469,8 +570,41 @@ class DatabaseService {
           INSERT OR IGNORE INTO items (book_id, book_type)
           VALUES (?, 1)
         `).run(bookId);
+        
+        // 10. 在 Talebook 数据库的 qc_bookdata 表中同步扩展数据
+         talebookDb.prepare(`
+           INSERT OR IGNORE INTO qc_bookdata (
+             book_id, 
+             page_count, 
+             standard_price, 
+             purchase_price, 
+             purchase_date, 
+             binding1, 
+             binding2, 
+             note,
+             total_reading_time,
+             read_pages,
+             reading_count,
+             last_read_date,
+             last_read_duration
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         `).run(
+           bookId,
+           book.pages ? parseInt(book.pages) || 0 : 0,           // page_count
+           book.standardPrice ? parseFloat(book.standardPrice) || 0 : 0,   // standard_price
+           book.purchasePrice ? parseFloat(book.purchasePrice) || 0 : 0,   // purchase_price
+           book.purchaseDate || null, // purchase_date
+           book.binding1 ? parseInt(book.binding1) || 0 : 0,        // binding1
+           book.binding2 ? parseInt(book.binding2) || 0 : 0,        // binding2
+           book.note || '',           // note
+           0,                         // total_reading_time
+           0,                         // read_pages
+           0,                         // reading_count
+           null,                      // last_read_date
+           0                          // last_read_duration
+         );
       } catch (e) {
-        console.warn('⚠️ 创建 items 记录失败:', e.message);
+        console.warn('⚠️ 创建 items 或 qc_bookdata 记录失败:', e.message);
       }
     }
 
@@ -569,8 +703,211 @@ class DatabaseService {
   }
 
   /**
-   * 辅助方法：获取事务包装器
+   * 获取书籍的阅读状态
    */
+  getReadingState(bookId, readerId = 0) {
+    this.ensureInitialized();
+    
+    if (!this.connectionManager.isTalebookAvailable()) {
+      console.warn('⚠️ Talebook 数据库不可用，返回默认阅读状态');
+      // 如果Talebook数据库不可用，返回默认状态
+      return {
+        book_id: bookId,
+        reader_id: readerId,
+        favorite: 0,
+        wants: 0,
+        read_state: 0,
+        online_read: 0,
+        download: 0
+      };
+    }
+    
+    const talebookDb = this.connectionManager.getTalebookDb();
+    if (!talebookDb) {
+      console.warn('⚠️ Talebook 数据库连接不可用，返回默认阅读状态');
+      return {
+        book_id: bookId,
+        reader_id: readerId,
+        favorite: 0,
+        wants: 0,
+        read_state: 0,
+        online_read: 0,
+        download: 0
+      };
+    }
+    
+    try {
+      const query = `
+        SELECT * FROM reading_state
+        WHERE book_id = ? AND reader_id = ?
+      `;
+      const result = talebookDb.prepare(query).get(bookId, readerId);
+      
+      if (result) {
+        return result;
+      } else {
+        // 如果没有找到记录，返回默认状态
+        return {
+          book_id: bookId,
+          reader_id: readerId,
+          favorite: 0,
+          wants: 0,
+          read_state: 0,
+          online_read: 0,
+          download: 0
+        };
+      }
+    } catch (error) {
+      console.warn(`⚠️ 获取书籍 ${bookId} 的阅读状态失败:`, error.message);
+      // 发生错误时返回默认状态
+      return {
+        book_id: bookId,
+        reader_id: readerId,
+        favorite: 0,
+        wants: 0,
+        read_state: 0,
+        online_read: 0,
+        download: 0
+      };
+    }
+  }
+
+  /**
+   * 更新书籍的阅读状态
+   */
+  updateReadingState(bookId, data, readerId = 0) {
+    this.ensureInitialized();
+    
+    if (!this.connectionManager.isTalebookAvailable()) {
+      throw new Error('Talebook 数据库不可用');
+    }
+    
+    const talebookDb = this.connectionManager.getTalebookDb();
+    if (!talebookDb) {
+      throw new Error('Talebook 数据库连接不可用');
+    }
+    
+    try {
+      // 检查是否已存在记录
+      const existing = this.getReadingState(bookId, readerId);
+
+      if (existing && Object.keys(existing).length > 0) {
+        // 更新现有记录
+        const updates = [];
+        const values = [];
+
+        if (data.favorite !== undefined) {
+          updates.push('favorite = ?');
+          values.push(data.favorite);
+          if (data.favorite === 1 && (!existing.favorite_date || existing.favorite === 0)) {
+            updates.push('favorite_date = ?');
+            values.push(new Date().toISOString());
+          }
+        }
+        if (data.wants !== undefined) {
+          updates.push('wants = ?');
+          values.push(data.wants);
+          if (data.wants === 1 && (!existing.wants_date || existing.wants === 0)) {
+            updates.push('wants_date = ?');
+            values.push(new Date().toISOString());
+          }
+        }
+        if (data.read_state !== undefined) {
+          updates.push('read_state = ?');
+          values.push(data.read_state);
+          if (data.read_state === 1 && !existing.read_date) {
+            updates.push('read_date = ?');
+            values.push(new Date().toISOString());
+          }
+        }
+        if (data.online_read !== undefined) {
+          updates.push('online_read = ?');
+          values.push(data.online_read);
+        }
+        if (data.download !== undefined) {
+          updates.push('download = ?');
+          values.push(data.download);
+        }
+
+        if (updates.length > 0) {
+          values.push(bookId, readerId);
+          const sql = `UPDATE reading_state SET ${updates.join(', ')} WHERE book_id = ? AND reader_id = ?`;
+          talebookDb.prepare(sql).run(values);
+        }
+        
+        return this.getReadingState(bookId, readerId);
+      } else {
+        // 创建新记录
+        const insertData = {
+          book_id: bookId,
+          reader_id: readerId,
+          favorite: data.favorite || 0,
+          wants: data.wants || 0,
+          read_state: data.read_state || 0,
+          online_read: data.online_read || 0,
+          download: data.download || 0
+        };
+
+        if (data.favorite === 1) {
+          insertData.favorite_date = new Date().toISOString();
+        }
+        if (data.wants === 1) {
+          insertData.wants_date = new Date().toISOString();
+        }
+        if (data.read_state === 1) {
+          insertData.read_date = new Date().toISOString();
+        }
+
+        talebookDb.prepare(`
+          INSERT INTO reading_state (
+            book_id, reader_id, favorite, wants, read_state, 
+            online_read, download, favorite_date, wants_date, read_date
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          insertData.book_id,
+          insertData.reader_id,
+          insertData.favorite,
+          insertData.wants,
+          insertData.read_state,
+          insertData.online_read,
+          insertData.download,
+          insertData.favorite_date || null,
+          insertData.wants_date || null,
+          insertData.read_date || null
+        );
+        
+        return this.getReadingState(bookId, readerId);
+      }
+    } catch (error) {
+      console.error(`❌ 更新书籍 ${bookId} 的阅读状态失败:`, error.message);
+      throw error;
+    }
+  }
+
+   /**
+    * 根据书籍ID获取Talebook扩展数据
+    */
+   getQcBookdataByBookId(bookId) {
+     this.ensureInitialized();
+     
+     if (!this.connectionManager.isTalebookAvailable()) {
+       console.warn('⚠️ Talebook 数据库不可用');
+       return null;
+     }
+     
+     try {
+       // 使用仓库方法获取数据
+       const result = this.repositories.talebook.qcBookdata.findByBookId(bookId);
+       return result || null;
+     } catch (error) {
+       console.warn(`⚠️ 获取书籍 ${bookId} 的扩展数据失败:`, error.message);
+       return null;
+     }
+   }
+
+   /**
+    * 辅助方法：获取事务包装器
+    */
   transaction(fn) {
     this.ensureInitialized();
     const db = this.connectionManager.getCalibreDb();

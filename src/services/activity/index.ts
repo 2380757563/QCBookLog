@@ -13,7 +13,7 @@ import type {
 
 const getCurrentReaderId = (): number => {
   const readerId = localStorage.getItem('currentReaderId');
-  return readerId ? Number(readerId) : 1;
+  return readerId ? Number(readerId) : 0;
 };
 
 const buildQueryString = (params: Record<string, any>): string => {

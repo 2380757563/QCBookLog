@@ -38,14 +38,29 @@ class DatabaseConnectionManager {
   loadConfig() {
     const config = readConfigSync();
     
+    // 获取项目根目录
+    const projectRoot = this.getProjectRoot();
+    
     // 默认数据库路径
-    const defaultCalibrePath = path.join(process.cwd(), 'data/calibre/metadata.db');
-    const defaultTalebookPath = path.join(process.cwd(), 'data/talebook/calibre-webserver.db');
+    const defaultCalibrePath = path.join(projectRoot, 'data/calibre/metadata.db');
+    const defaultTalebookPath = path.join(projectRoot, 'data/talebook/calibre-webserver.db');
 
     return {
       calibrePath: config.calibrePath || process.env.CALIBRE_DB_PATH || defaultCalibrePath,
       talebookPath: config.talebookPath || process.env.TALEBOOK_DB_PATH || defaultTalebookPath
     };
+  }
+  
+  /**
+   * 获取项目根目录
+   */
+  getProjectRoot() {
+    // 如果当前工作目录是server目录，则向上一级到达项目根目录
+    const currentDir = process.cwd();
+    if (path.basename(currentDir) === 'server') {
+      return path.dirname(currentDir);
+    }
+    return currentDir;
   }
 
   /**

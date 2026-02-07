@@ -586,8 +586,51 @@ const processAuthorDirectory = async (authorDir) => {
             // 生成封面URL
             const coverUrl = hasCover ? `/api/static/calibre/${book.path}/cover.jpg` : undefined;
             
+            // 从Talebook数据库获取扩展数据
+            let extendedData = {};
+            if (databaseService && databaseService.isTalebookAvailable && databaseService.isTalebookAvailable()) {
+              try {
+                const qcBookdata = databaseService.getQcBookdataByBookId(bookId);
+                if (qcBookdata) {
+                  extendedData = {
+                    pages: qcBookdata.page_count !== undefined && qcBookdata.page_count !== null ? qcBookdata.page_count : book.pages,
+                    standardPrice: qcBookdata.standard_price !== undefined && qcBookdata.standard_price !== null ? qcBookdata.standard_price : book.standard_price,
+                    purchasePrice: qcBookdata.purchase_price !== undefined && qcBookdata.purchase_price !== null ? qcBookdata.purchase_price : book.purchase_price,
+                    purchaseDate: qcBookdata.purchase_date || book.purchase_date,
+                    binding1: qcBookdata.binding1 !== undefined && qcBookdata.binding1 !== null ? qcBookdata.binding1 : book.binding1,
+                    binding2: qcBookdata.binding2 !== undefined && qcBookdata.binding2 !== null ? qcBookdata.binding2 : book.binding2,
+                    note: qcBookdata.note || book.note
+                  };
+                } else {
+                  // 即使qcBookdata为null，也确保基础字段存在
+                  extendedData = {
+                    pages: book.pages,
+                    standardPrice: book.standard_price,
+                    purchasePrice: book.purchase_price,
+                    purchaseDate: book.purchase_date,
+                    binding1: book.binding1,
+                    binding2: book.binding2,
+                    note: book.note
+                  };
+                }
+              } catch (extError) {
+                console.warn(`⚠️ 获取书籍 ${bookId} 的扩展数据失败:`, extError.message);
+                // 发生错误时，仍然使用基础数据
+                extendedData = {
+                  pages: book.pages,
+                  standardPrice: book.standard_price,
+                  purchasePrice: book.purchase_price,
+                  purchaseDate: book.purchase_date,
+                  binding1: book.binding1,
+                  binding2: book.binding2,
+                  note: book.note
+                };
+              }
+            }
+            
             book = {
               ...book,
+              ...extendedData, // 合并扩展数据
               hasCover: hasCover || !!book.has_cover,
               coverUrl: coverUrl,
               localCoverData: coverUrl
