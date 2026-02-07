@@ -1,0 +1,72 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+npminstall-debug.log
+
+# Dependencies
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# 数据文件
+data/
+server/data/
+*.db
+*.db-shm
+*.db-wal
+*.db.backup
+
+# 备份文件
+backup_*.db
+backup_*.json
+data/backup/
+server/data/backup/
+
+# 个人工作
+作业/
+.trae/
+
+# 环境配置
+.env
+
+# Windows 批处理
+*.bat
+*.ps1
+
+# SQL 文件
+*.sql
+
+# 副本文件
+* - 副本.md
+* - 副本.js
+* - 副本.cjs
+* - 副本.mjs
+
+# TypeScript
+*.tsbuildinfo
+
+# 临时数据库文件
+下载*.db
+
+# 临时配置文件
+README_START.md
+REQUIRE_ERROR_FIX.md
+CLEANUP_SUMMARY.md
+API_FIX_SUMMARY.md

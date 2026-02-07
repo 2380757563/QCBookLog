@@ -353,7 +353,7 @@ const form = reactive<Omit<Book, 'id' | 'createTime' | 'updateTime'> & { id?: st
   binding2: 0,
   book_type: 1, // 默认实体书
   coverUrl: '',
-  purchaseDate: '',
+  purchaseDate: '', // 空字符串表示未选择日期
   purchasePrice: undefined,
   standardPrice: undefined,
   readStatus: '未读',
@@ -599,10 +599,71 @@ const removeCalibreTag = (index: number) => {
   }
 };
 
+// 验证表单数据
+const validateForm = (): { valid: boolean; errors: string[] } => {
+  const errors: string[] = [];
+
+  // 必填字段验证
+  if (!form.title.trim()) {
+    errors.push('请填写书名');
+  }
+  if (!form.author.trim()) {
+    errors.push('请填写作者');
+  }
+  if (!form.isbn.trim()) {
+    errors.push('请填写ISBN');
+  }
+
+  // 可选字段格式验证
+  if (form.publishYear !== undefined && form.publishYear !== null) {
+    const currentYear = new Date().getFullYear();
+    if (form.publishYear < 1000 || form.publishYear > currentYear + 10) {
+      errors.push(`出版年份应在1000-${currentYear + 10}之间`);
+    }
+  }
+
+  if (form.pages !== undefined && form.pages !== null) {
+    if (form.pages < 0 || form.pages > 100000) {
+      errors.push('页数应在0-100000之间');
+    }
+  }
+
+  if (form.standardPrice !== undefined && form.standardPrice !== null) {
+    if (form.standardPrice < 0) {
+      errors.push('标准价格不能为负数');
+    }
+    if (form.standardPrice > 100000) {
+      errors.push('标准价格超出合理范围');
+    }
+  }
+
+  if (form.purchasePrice !== undefined && form.purchasePrice !== null) {
+    if (form.purchasePrice < 0) {
+      errors.push('购买价格不能为负数');
+    }
+    if (form.purchasePrice > 100000) {
+      errors.push('购买价格超出合理范围');
+    }
+  }
+
+  if (form.rating !== undefined && form.rating !== null) {
+    if (form.rating < 0 || form.rating > 5) {
+      errors.push('评分应在0-5之间');
+    }
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors
+  };
+};
+
 // 保存
   const handleSave = async () => {
-    if (!form.title.trim() || !form.author.trim() || !form.isbn.trim()) {
-      alert('请填写必填项');
+    // 验证表单
+    const validation = validateForm();
+    if (!validation.valid) {
+      alert('表单验证失败:\n' + validation.errors.join('\n'));
       return;
     }
 
@@ -635,6 +696,7 @@ const removeCalibreTag = (index: number) => {
         standardPrice: saveData.standardPrice,
         note: saveData.note,
         purchaseDate: saveData.purchaseDate,
+        publishYear: saveData.publishYear,
         groups: saveData.groups || []
       };
 
@@ -762,20 +824,20 @@ onMounted(async () => {
     const bookId = route.params.id as string;
     const book = await bookService.getBookById(parseInt(bookId));
     if (book) {
-      // 复制书籍信息到表单
-      Object.assign(form, book);
+      // 复制书籍信息到表单，同时确保关键字段不会为null
+      Object.assign(form, {
+        ...book,
+        publishYear: book.publishYear ?? undefined,
+        pages: book.pages ?? undefined,
+        standardPrice: book.standardPrice ?? undefined,
+        purchasePrice: book.purchasePrice ?? undefined,
+        purchaseDate: book.purchaseDate ? new Date(book.purchaseDate).toISOString().split('T')[0] : '',
+        readCompleteDate: book.readCompleteDate ? new Date(book.readCompleteDate).toISOString().split('T')[0] : '',
+      });
 
       // 保存原始阅读状态（用于比较是否变化）
       if (book.readStatus) {
         originalReadStatus.value = book.readStatus;
-      }
-
-      // 转换日期格式为 yyyy-MM-dd
-      if (book.purchaseDate) {
-        form.purchaseDate = new Date(book.purchaseDate).toISOString().split('T')[0];
-      }
-      if (book.readCompleteDate) {
-        form.readCompleteDate = new Date(book.readCompleteDate).toISOString().split('T')[0];
       }
 
       // 将tags字段（Calibre标签）复制到calibreTags字段
@@ -819,26 +881,17 @@ onMounted(async () => {
         isbnInput.value = query.isbn as string;
         
         // 转换日期格式为 yyyy-MM-dd
-        if (query.purchaseDate) {
-          form.purchaseDate = new Date(query.purchaseDate as string).toISOString().split('T')[0];
-        }
-        if (query.readCompleteDate) {
-          form.readCompleteDate = new Date(query.readCompleteDate as string).toISOString().split('T')[0];
-        }
+        form.purchaseDate = query.purchaseDate ? new Date(query.purchaseDate as string).toISOString().split('T')[0] : '';
+        form.readCompleteDate = query.readCompleteDate ? new Date(query.readCompleteDate as string).toISOString().split('T')[0] : '';
         
         // 设置标准价格（从查询参数中获取）
-        if (query.price) {
-          // 去除"元"等非数字字符后再转换
-          form.standardPrice = parseFloat((query.price as string).replace(/[^\d.]/g, ''));
-        }
+        form.standardPrice = query.price ? parseFloat((query.price as string).replace(/[^\d.]/g, '')) : undefined;
+        // 设置购入价格
+        form.purchasePrice = query.purchasePrice ? parseFloat((query.purchasePrice as string).replace(/[^\d.]/g, '')) : undefined;
         // 设置评分
-        if (query.rating) {
-          form.rating = parseFloat(query.rating as string);
-        }
+        form.rating = query.rating ? parseFloat(query.rating as string) : undefined;
         // 设置丛书
-        if (query.series) {
-          form.series = query.series as string;
-        }
+        form.series = query.series as string || '';
         // 设置Calibre标签
         if (query.tags) {
           try {

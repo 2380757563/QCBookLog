@@ -23,9 +23,19 @@ try {
   console.warn('⚠️ 或安装 Visual Studio Build Tools: https://visualstudio.microsoft.com/visual-cpp-build-tools/');
 }
 
+// 获取项目根目录
+const getProjectRoot = () => {
+  // 如果当前工作目录是server目录，则向上一级到达项目根目录
+  const currentDir = process.cwd();
+  if (path.basename(currentDir) === 'server') {
+    return path.dirname(currentDir);
+  }
+  return currentDir;
+};
+
 // 默认数据库路径（可被环境变量覆盖）
-let CALIBRE_DB_PATH = path.join(process.cwd(), 'data/calibre/metadata.db');
-let TALEBOOK_DB_PATH = path.join(process.cwd(), 'data/talebook/calibre-webserver.db');
+let CALIBRE_DB_PATH = path.join(getProjectRoot(), 'data/calibre/metadata.db');
+let TALEBOOK_DB_PATH = path.join(getProjectRoot(), 'data/talebook/calibre-webserver.db');
 
 // 优先级：1. 配置文件 2. 环境变量 3. 默认路径
 const config = readConfigSync();
@@ -1390,7 +1400,7 @@ class DatabaseService {
           book.title,
           book.author || '',
           new Date().toISOString(),
-          book.publishYear ? `${book.publishYear}-01-01` : new Date().toISOString(),
+          book.publishYear ? `${book.publishYear}-01-01` : null,
           book.uuid || '',
           book.hasCover ? 1 : 0,
           bookPath,

@@ -434,7 +434,7 @@ const useBookInfo = () => {
         title: sourceData.title,
         author: sourceData.author,
         publisher: sourceData.publisher || '',
-        publishYear: sourceData.publishYear,
+        publishYear: sourceData.publishYear ? parseInt(sourceData.publishYear) : undefined,
         pages: sourceData.pages ? parseInt(sourceData.pages) : undefined,
         binding1: binding1,
         binding2: binding2,
@@ -444,7 +444,7 @@ const useBookInfo = () => {
         purchasePrice: undefined,
         // 将API返回的价格字符串转换为数字作为标准价格
         // 去除"元"等非数字字符后再转换
-        standardPrice: sourceData.price ? parseFloat(sourceData.price.replace(/[^\d.]/g, '')) : undefined,
+        standardPrice: sourceData.price ? parseFloat(sourceData.price.toString().replace(/[^\d.]/g, '')) : undefined,
         readStatus: '未读' as const,
         readCompleteDate: undefined,
         rating: sourceData.rating,

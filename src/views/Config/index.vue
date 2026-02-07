@@ -447,7 +447,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onActivated } from 'vue';
+import { ref, onMounted, onActivated, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { useBookStore } from '@/store/book';
 
@@ -643,11 +643,50 @@ const executeSync = async () => {
   }
 };
 
+// 定时器引用
+let configSyncTimer = null;
+
+// 定期同步配置状态
+const startConfigSync = () => {
+  if (configSyncTimer) {
+    clearInterval(configSyncTimer);
+  }
+  
+  // 每30秒同步一次配置状态
+  configSyncTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') { // 仅在页面可见时同步
+      fetchCurrentConfig();
+    }
+  }, 30000); // 30秒
+};
+
+// 停止同步
+const stopConfigSync = () => {
+  if (configSyncTimer) {
+    clearInterval(configSyncTimer);
+    configSyncTimer = null;
+  }
+};
+
 // 组件挂载时获取同步状态
 onMounted(() => {
   if (selectedType.value === 'sync-status') {
     fetchSyncStatus();
   }
+  
+  // 启动配置同步
+  startConfigSync();
+  
+  // 监听页面可见性变化
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      // 页面变为可见时立即同步一次
+      fetchCurrentConfig();
+      startConfigSync(); // 重启定时器
+    } else {
+      stopConfigSync(); // 页面隐藏时停止定时器节省资源
+    }
+  });
 });
 
 // 组件激活时获取同步状态
@@ -655,6 +694,15 @@ onActivated(() => {
   if (selectedType.value === 'sync-status') {
     fetchSyncStatus();
   }
+  
+  // 重新启动配置同步
+  startConfigSync();
+});
+
+// 组件卸载时清理定时器
+onBeforeUnmount(() => {
+  stopConfigSync();
+  document.removeEventListener('visibilitychange', () => {});
 });
 
 // 检测数据库状态 - 简化版本，仅更新数据库状态，不自动触发弹窗
@@ -838,7 +886,7 @@ const fetchCurrentConfig = async () => {
         talebookNeedsReconfig: talebookNeedsReconfig.value
       });
       
-      // 如果当前不是同步状态页面，显示错误信息
+      // 如果当前不是同步状态页面，显示错误信息并切换到配置向导
       if (selectedType.value !== 'sync-status') {
         const errorMsg = calibreNeedsReconfig.value 
           ? calibreError.value 
@@ -846,96 +894,113 @@ const fetchCurrentConfig = async () => {
         if (errorMsg) {
           error.value = errorMsg;
         }
-      }
-    }
-
-    // 如果当前还没有选定类型，或者需要根据配置自动选择
-    if (selectedType.value === 'sync-status') {
-      // 保持当前选择，不自动切换
-      console.log('📋 当前是 sync-status 页面，不自动切换');
-    } else if (!currentPath.value) {
-      // 如果还没有设置当前路径，根据配置自动设置
-      const config = {
-        calibre: (calibreData.success && calibreData.calibreDbPath) ? {
-          path: calibreData.calibreDbPath,
-          exists: calibreData.exists,
-          valid: calibreData.valid,
-          isDefault: calibreData.isDefault,
-          needsReconfig: calibreData.needsReconfig
-        } : null,
-        talebook: (talebookData.success && talebookData.talebookDbPath) ? {
-          path: talebookData.talebookDbPath,
-          exists: talebookData.exists,
-          valid: talebookData.valid,
-          isDefault: talebookData.isDefault,
-          needsReconfig: talebookData.needsReconfig
-        } : null
-      };
-
-      if (config.calibre && !config.talebook) {
-        // 只有calibre配置
-        currentPath.value = config.calibre.path;
-        isDefault.value = config.calibre.isDefault || false;
-        selectedType.value = 'calibre';
-        // 如果数据库有效，显示完成步骤；否则根据情况显示验证步骤或选择步骤
-        if (config.calibre.valid) {
-          currentStep.value = 2;
-        } else if (config.calibre.exists) {
-          // 数据库存在但无效，显示错误并允许重新配置
-          currentStep.value = 2;
-          error.value = calibreData.error || '数据库验证失败';
-        } else {
-          // 数据库不存在，显示选择步骤
-          currentStep.value = 0;
-        }
-      } else if (!config.calibre && config.talebook) {
-        // 只有talebook配置
-        currentPath.value = config.talebook.path;
-        isDefault.value = config.talebook.isDefault || false;
-        selectedType.value = 'talebook';
-        // 如果数据库有效，显示完成步骤；否则根据情况显示验证步骤或选择步骤
-        if (config.talebook.valid) {
-          currentStep.value = 2;
-        } else if (config.talebook.exists) {
-          // 数据库存在但无效，显示错误并允许重新配置
-          currentStep.value = 2;
-          error.value = talebookData.error || '数据库验证失败';
-        } else {
-          // 数据库不存在，显示选择步骤
-          currentStep.value = 0;
-        }
-      } else if (config.calibre && config.talebook) {
-        // 两个数据库都已配置，根据 isDefault 或默认选择 calibre
-        if (config.talebook.isDefault) {
-          currentPath.value = config.talebook.path;
-          isDefault.value = true;
+        
+        // 自动切换到配置向导页面
+        if (calibreNeedsReconfig.value && !talebookNeedsReconfig.value) {
+          selectedType.value = 'calibre';
+          currentStep.value = 0; // 直接跳转到配置向导第一步
+        } else if (!calibreNeedsReconfig.value && talebookNeedsReconfig.value) {
           selectedType.value = 'talebook';
-          currentStep.value = config.talebook.valid ? 2 : (config.talebook.exists ? 2 : 0);
-          if (!config.talebook.valid && config.talebook.exists) {
-            error.value = talebookData.error || '数据库验证失败';
-          }
+          currentStep.value = 0; // 直接跳转到配置向导第一步
         } else {
-          // 默认使用 calibre
+          // 如果两个都需要重新配置，优先选择calibre
+          selectedType.value = 'calibre';
+          currentStep.value = 0; // 直接跳转到配置向导第一步
+        }
+      } else {
+        // 在同步状态页面，也标记需要重新配置的数据库
+        console.log('📋 在同步状态页面，检测到需要重新配置的数据库');
+      }
+    } else {
+      // 如果不需要重新配置，根据当前配置自动设置页面状态
+      // 如果当前还没有选定类型，或者需要根据配置自动选择
+      if (selectedType.value === 'sync-status') {
+        // 保持当前选择，不自动切换
+        console.log('📋 当前是 sync-status 页面，不自动切换');
+      } else if (!currentPath.value) {
+        // 如果还没有设置当前路径，根据配置自动设置
+        const config = {
+          calibre: (calibreData.success && calibreData.calibreDbPath) ? {
+            path: calibreData.calibreDbPath,
+            exists: calibreData.exists,
+            valid: calibreData.valid,
+            isDefault: calibreData.isDefault,
+            needsReconfig: calibreData.needsReconfig
+          } : null,
+          talebook: (talebookData.success && talebookData.talebookDbPath) ? {
+            path: talebookData.talebookDbPath,
+            exists: talebookData.exists,
+            valid: talebookData.valid,
+            isDefault: talebookData.isDefault,
+            needsReconfig: talebookData.needsReconfig
+          } : null
+        };
+
+        if (config.calibre && !config.talebook) {
+          // 只有calibre配置
           currentPath.value = config.calibre.path;
           isDefault.value = config.calibre.isDefault || false;
           selectedType.value = 'calibre';
-          currentStep.value = config.calibre.valid ? 2 : (config.calibre.exists ? 2 : 0);
-          if (!config.calibre.valid && config.calibre.exists) {
+          // 如果数据库有效，显示完成步骤；否则根据情况显示验证步骤或选择步骤
+          if (config.calibre.valid) {
+            currentStep.value = 2;
+          } else if (config.calibre.exists) {
+            // 数据库存在但无效，显示错误并允许重新配置
+            currentStep.value = 2;
             error.value = calibreData.error || '数据库验证失败';
+          } else {
+            // 数据库不存在，显示选择步骤
+            currentStep.value = 0;
           }
+        } else if (!config.calibre && config.talebook) {
+          // 只有talebook配置
+          currentPath.value = config.talebook.path;
+          isDefault.value = config.talebook.isDefault || false;
+          selectedType.value = 'talebook';
+          // 如果数据库有效，显示完成步骤；否则根据情况显示验证步骤或选择步骤
+          if (config.talebook.valid) {
+            currentStep.value = 2;
+          } else if (config.talebook.exists) {
+            // 数据库存在但无效，显示错误并允许重新配置
+            currentStep.value = 2;
+            error.value = talebookData.error || '数据库验证失败';
+          } else {
+            // 数据库不存在，显示选择步骤
+            currentStep.value = 0;
+          }
+        } else if (config.calibre && config.talebook) {
+          // 两个数据库都已配置，根据 isDefault 或默认选择 calibre
+          if (config.talebook.isDefault) {
+            currentPath.value = config.talebook.path;
+            isDefault.value = true;
+            selectedType.value = 'talebook';
+            currentStep.value = config.talebook.valid ? 2 : (config.talebook.exists ? 2 : 0);
+            if (!config.talebook.valid && config.talebook.exists) {
+              error.value = talebookData.error || '数据库验证失败';
+            }
+          } else {
+            // 默认使用 calibre
+            currentPath.value = config.calibre.path;
+            isDefault.value = config.calibre.isDefault || false;
+            selectedType.value = 'calibre';
+            currentStep.value = config.calibre.valid ? 2 : (config.calibre.exists ? 2 : 0);
+            if (!config.calibre.valid && config.calibre.exists) {
+              error.value = calibreData.error || '数据库验证失败';
+            }
+          }
+        } else {
+          // 两个数据库都未配置
+          currentStep.value = 0;
         }
-      } else {
-        // 两个数据库都未配置
-        currentStep.value = 0;
-      }
 
-      console.log('📋 自动设置当前配置:', {
-        selectedType: selectedType.value,
-        currentPath: currentPath.value,
-        currentStep: currentStep.value,
-        calibreValid: calibreValid.value,
-        talebookValid: talebookValid.value
-      });
+        console.log('📋 自动设置当前配置:', {
+          selectedType: selectedType.value,
+          currentPath: currentPath.value,
+          currentStep: currentStep.value,
+          calibreValid: calibreValid.value,
+          talebookValid: talebookValid.value
+        });
+      }
     }
   } catch (err) {
     console.error('❌ 获取配置失败:', err);
@@ -994,11 +1059,23 @@ const validateDb = async () => {
         ? data.errors.join(', ')
         : (data.error || '未知错误');
       error.value = `验证失败: ${errorMsg}`;
+      // 设置需要重新配置的标志
+      if (selectedType.value === 'calibre') {
+        calibreNeedsReconfig.value = true;
+      } else {
+        talebookNeedsReconfig.value = true;
+      }
     }
   } catch (err) {
     const errorMessage = (err as Error).message;
     console.error('验证数据库失败:', err);
     error.value = `验证失败: ${errorMessage}`;
+    // 设置需要重新配置的标志
+    if (selectedType.value === 'calibre') {
+      calibreNeedsReconfig.value = true;
+    } else {
+      talebookNeedsReconfig.value = true;
+    }
   } finally {
     loading.value = false;
   }
@@ -1079,11 +1156,23 @@ const saveConfig = async () => {
     } else {
       console.error('❌ 配置保存失败:', data.error);
       error.value = `保存失败: ${data.error || '未知错误'}`;
+      // 设置需要重新配置的标志
+      if (selectedType.value === 'calibre') {
+        calibreNeedsReconfig.value = true;
+      } else {
+        talebookNeedsReconfig.value = true;
+      }
     }
   } catch (err) {
     const errorMessage = (err as Error).message;
     console.error('❌ 保存配置异常:', err);
     error.value = `保存失败: ${errorMessage}`;
+    // 设置需要重新配置的标志
+    if (selectedType.value === 'calibre') {
+      calibreNeedsReconfig.value = true;
+    } else {
+      talebookNeedsReconfig.value = true;
+    }
   } finally {
     loading.value = false;
   }

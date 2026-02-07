@@ -463,6 +463,56 @@ async function deleteBookCover(req, res) {
   }
 }
 
+/**
+ * 获取书籍的阅读状态
+ */
+async function getReadingState(req, res) {
+  try {
+    const bookId = parseInt(req.params.id);
+    if (isNaN(bookId)) {
+      return res.status(400).json({ error: 'Invalid book ID' });
+    }
+
+    const readerId = parseInt(req.query.readerId) || 0;
+
+    const readingState = databaseService.getReadingState(bookId, readerId);
+    res.json(readingState);
+  } catch (error) {
+    console.error('❌ 获取阅读状态失败:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+/**
+ * 更新书籍的阅读状态
+ */
+async function updateReadingState(req, res) {
+  try {
+    const bookId = parseInt(req.params.id);
+    if (isNaN(bookId)) {
+      return res.status(400).json({ error: 'Invalid book ID' });
+    }
+
+    const readerId = parseInt(req.query.readerId) || 0;
+    const readingState = req.body;
+
+    if (readingState.read_state === undefined) {
+      return res.status(400).json({ error: 'read_state is required' });
+    }
+
+    const updatedState = databaseService.updateReadingState(bookId, readingState, readerId);
+
+    calibreService.clearBookCache();
+    calibreService.clearBooksListCache();
+    console.log(`🗑️ 已清除书籍 ${bookId} 的缓存`);
+
+    res.json(updatedState);
+  } catch (error) {
+    console.error('❌ 更新阅读状态失败:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+}
+
 export default {
   getAllBooks,
   getBookById,
@@ -471,5 +521,7 @@ export default {
   deleteBook,
   searchBooks,
   uploadBookCover,
-  deleteBookCover
+  deleteBookCover,
+  getReadingState,
+  updateReadingState
 };
