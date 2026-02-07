@@ -13,8 +13,8 @@ export default defineConfig({
   },
   server: {
     host: '0.0.0.0', // 允许外部设备访问
-    port: 7403, // 修改端口号为 7403
-    strictPort: true,
+    port: 8080, // 修改端口号为 8080
+    strictPort: false, // 不强制使用特定端口，如果被占用则自动递增
     allowedHosts: [
       'paxil-maritime-dance-contests.trycloudflare.com',
       '.trycloudflare.com',

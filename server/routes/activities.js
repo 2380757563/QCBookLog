@@ -21,7 +21,7 @@ router.get('/', async (req, res) => {
       limit
     } = req.query;
 
-    const readerId = parseInt(req.query.readerId) || 1;
+    const readerId = parseInt(req.query.readerId) || 0;
 
     const filters = {
       readerId,
@@ -52,7 +52,7 @@ router.get('/', async (req, res) => {
 router.get('/date/:date', async (req, res) => {
   try {
     const { date } = req.params;
-    const readerId = parseInt(req.query.readerId) || 1;
+    const readerId = parseInt(req.query.readerId) || 0;
     const activities = await activityService.getActivitiesByDate(date, readerId);
     res.json({
       success: true,

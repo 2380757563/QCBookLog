@@ -123,7 +123,8 @@ router.post('/', async (req, res) => {
     hasCover: false
   };
 
-    console.log('📚 [POST /books] 构建的书籍对象:', JSON.stringify(newBook, null, 2));
+  console.log('📚 [POST /books] 构建的书籍对象:', JSON.stringify(newBook, null, 2));
+  console.log('📅 [POST /books] publishYear字段:', newBook.publishYear, '类型:', typeof newBook.publishYear);
 
     console.log(`📚 书籍信息: ${newBook.title} - ${newBook.author}`);
 

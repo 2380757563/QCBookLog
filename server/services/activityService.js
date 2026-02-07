@@ -51,7 +51,7 @@ class ActivityService {
           NULL as endTime,
           NULL as duration,
           NULL as startPage,
-          page_num as endPage,
+          page as endPage,
           NULL as pagesRead,
           content,
           NULL as metadata,
@@ -193,8 +193,6 @@ class ActivityService {
         return [];
       }
 
-      const startDate = `${date} 00:00:00`;
-      const endDate = `${date} 23:59:59`;
       const readerFilter = readerId !== undefined ? `AND reader_id = ${readerId}` : '';
 
       const query = `
@@ -210,13 +208,13 @@ class ActivityService {
           NULL as endTime,
           NULL as duration,
           NULL as startPage,
-          page_num as endPage,
+          page as endPage,
           NULL as pagesRead,
           content,
           NULL as metadata,
           created_at as createdAt
         FROM qc_bookmarks
-        WHERE DATE(created_at) >= DATE('${startDate}') AND DATE(created_at) <= DATE('${endDate}')
+        WHERE DATE(created_at) = DATE('${date}')
 
         UNION ALL
 
@@ -238,7 +236,7 @@ class ActivityService {
           json_object('read_state', read_state, 'favorite', favorite, 'wants', wants) as metadata,
           read_date as createdAt
         FROM reading_state
-        WHERE DATE(read_date) >= DATE('${startDate}') AND DATE(read_date) <= DATE('${endDate}') ${readerFilter}
+        WHERE DATE(read_date) = DATE('${date}') ${readerFilter}
 
         UNION ALL
 
@@ -260,7 +258,7 @@ class ActivityService {
           NULL as metadata,
           created_at as createdAt
         FROM qc_reading_records
-        WHERE DATE(created_at) >= DATE('${startDate}') AND DATE(created_at) <= DATE('${endDate}') ${readerFilter}
+        WHERE DATE(created_at) = DATE('${date}') ${readerFilter}
 
         UNION ALL
 
@@ -282,7 +280,7 @@ class ActivityService {
           json_object('year', year, 'target', target, 'completed', completed) as metadata,
           created_at as createdAt
         FROM reading_goals
-        WHERE DATE(created_at) >= DATE('${startDate}') AND DATE(created_at) <= DATE('${endDate}') ${readerFilter}
+        WHERE DATE(created_at) = DATE('${date}') ${readerFilter}
 
         ORDER BY createdAt DESC
       `;

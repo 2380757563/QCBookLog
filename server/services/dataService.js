@@ -8,13 +8,22 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import fsSync from 'fs';
 
-// 数据目录路径
-export const DATA_DIR = path.join(process.cwd(), 'data');
+// 数据目录路径 - 使用相对于项目根目录的路径
+const getProjectRoot = () => {
+  // 如果当前工作目录是server目录，则向上一级到达项目根目录
+  const currentDir = process.cwd();
+  if (path.basename(currentDir) === 'server') {
+    return path.dirname(currentDir);
+  }
+  return currentDir;
+};
+
+export const DATA_DIR = path.join(getProjectRoot(), 'data');
 
 /**
  * 配置文件路径
  */
-const CONFIG_FILE = path.join(process.cwd(), 'data/metadata/config.json');
+const CONFIG_FILE = path.join(getProjectRoot(), 'data/metadata/config.json');
 
 /**
  * 读取配置文件

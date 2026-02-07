@@ -70,12 +70,12 @@ class BookRepository extends BaseRepository {
             JOIN books_tags_link btl ON t.id = btl.tag
             WHERE btl.book = b.id
           ) as tags,
-          COALESCE(
-            (
-              SELECT '[' || GROUP_CONCAT('"' || d.format || '"', ',') || ']'
-              FROM data d WHERE d.book = b.id
-            ),
-            '[]'
+          (
+            SELECT CASE 
+              WHEN (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='data') = 0 THEN '[]'
+              WHEN (SELECT COUNT(*) FROM data WHERE book = b.id) = 0 THEN '[]'
+              ELSE (SELECT '[' || GROUP_CONCAT('"' || d.format || '"', ',') || ']' FROM data d WHERE d.book = b.id)
+            END
           ) as formats
         FROM books b
         ORDER BY b.last_modified DESC
@@ -126,12 +126,12 @@ class BookRepository extends BaseRepository {
             JOIN books_tags_link btl ON t.id = btl.tag
             WHERE btl.book = b.id
           ) as tags,
-          COALESCE(
-            (
-              SELECT '[' || GROUP_CONCAT('"' || d.format || '"', ',') || ']'
-              FROM data d WHERE d.book = b.id
-            ),
-            '[]'
+          (
+            SELECT CASE 
+              WHEN (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='data') = 0 THEN '[]'
+              WHEN (SELECT COUNT(*) FROM data WHERE book = b.id) = 0 THEN '[]'
+              ELSE (SELECT '[' || GROUP_CONCAT('"' || d.format || '"', ',') || ']' FROM data d WHERE d.book = b.id)
+            END
           ) as formats
         FROM books b
         WHERE b.id = ?
@@ -396,11 +396,36 @@ class BookRepository extends BaseRepository {
 
       // 合并所有数据
       return books.map(book => {
+        const bookData = bookDataMap.get(book.id) || {};
+        
+        // 提取出版年份
+        let publishYear = null;
+        if (book.pubdate) {
+          const dateStr = String(book.pubdate);
+          const yearMatch = dateStr.match(/\d{4}/);
+          if (yearMatch) {
+            publishYear = parseInt(yearMatch[0]);
+          }
+        }
+        
         const enriched = {
           ...book,
+          publishYear: publishYear,
           book_type: bookTypeMap.get(book.id) || 1,
           groups: bookGroupsMap.get(book.id) || [],
-          ...bookDataMap.get(book.id) || {},
+          // 字段名转换：将数据库字段名转换为API字段名
+          pages: bookData.page_count || 0,
+          standardPrice: bookData.standard_price || 0,
+          purchasePrice: bookData.purchase_price || 0,
+          purchaseDate: bookData.purchase_date,
+          binding1: bookData.binding1 || 0,
+          binding2: bookData.binding2 || 0,
+          note: bookData.note || '',
+          total_reading_time: bookData.total_reading_time || 0,
+          read_pages: bookData.read_pages || 0,
+          reading_count: bookData.reading_count || 0,
+          last_read_date: bookData.last_read_date || null,
+          last_read_duration: bookData.last_read_duration || 0,
           favorite: readingStateMap.get(book.id)?.favorite || 0,
           wants: readingStateMap.get(book.id)?.wants || 0,
           read_state: readingStateMap.get(book.id)?.read_state || 0
@@ -428,21 +453,35 @@ class BookRepository extends BaseRepository {
    * 丰富单个书籍信息
    */
   enrichBook(book, readerId = 0) {
+    // 提取出版年份
+    let publishYear = null;
+    if (book.pubdate) {
+      // pubdate 可能是 ISO 日期格式或其他格式，提取年份部分
+      const dateStr = String(book.pubdate);
+      const yearMatch = dateStr.match(/\d{4}/);
+      if (yearMatch) {
+        publishYear = parseInt(yearMatch[0]);
+      }
+    }
+
     const enriched = {
       ...book,
+      publishYear: publishYear, // 添加出版年份字段
       book_type: 1,
       groups: [],
-      page_count: 0,
-      standard_price: 0,
-      purchase_price: 0,
-      binding1: 0,
-      binding2: 0,
-      note: '',
-      total_reading_time: 0,
-      read_pages: 0,
-      reading_count: 0,
-      last_read_date: null,
-      last_read_duration: 0,
+      // 字段名转换：将数据库字段名转换为API字段名
+      pages: book.page_count || 0,
+      standardPrice: book.standard_price || 0,
+      purchasePrice: book.purchase_price || 0,
+      purchaseDate: book.purchase_date,
+      binding1: book.binding1 || 0,
+      binding2: book.binding2 || 0,
+      note: book.note || '',
+      total_reading_time: book.total_reading_time || 0,
+      read_pages: book.read_pages || 0,
+      reading_count: book.reading_count || 0,
+      last_read_date: book.last_read_date || null,
+      last_read_duration: book.last_read_duration || 0,
       favorite: 0,
       wants: 0,
       read_state: 0

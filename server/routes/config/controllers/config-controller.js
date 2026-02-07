@@ -77,18 +77,72 @@ class ConfigController {
         }
       }
 
-      const pathExists = currentDbPath ? fs.existsSync(currentDbPath) : false;
+      // 规范化路径：如果在server目录下运行，转换为相对于项目根目录的路径
+      let normalizedPath = currentDbPath;
+      if (normalizedPath.includes('server' + path.sep + 'data')) {
+        // 将 server/data/... 转换为 data/...
+        normalizedPath = normalizedPath.replace(
+          path.join(process.cwd(), '..') + path.sep, 
+          path.join(process.cwd()) + path.sep
+        );
+        // 简化：如果路径包含 server/data，移除 server 部分
+        const serverDataIndex = normalizedPath.indexOf('server' + path.sep + 'data');
+        if (serverDataIndex !== -1) {
+          normalizedPath = path.join(
+            path.dirname(process.cwd()), // 项目根目录
+            normalizedPath.substring(serverDataIndex + 7) // 移除 'server/' 部分
+          );
+        }
+      }
+
+      const pathExists = normalizedPath ? fs.existsSync(normalizedPath) : false;
+
+      // 额外检查数据库是否可访问和有效
+      let isValid = false;
+      let error = null;
+      let stats = null;
+      let needsReconfig = false;
+
+      if (pathExists) {
+        try {
+          // 验证数据库结构
+          const result = databaseService.validateCalibreSchema();
+          isValid = result.isValid;
+          if (!isValid) {
+            error = `数据库结构无效: ${result.errors.join(', ')}`;
+          } else {
+            // 获取数据库统计信息
+            stats = databaseService.getCalibreStats();
+          }
+        } catch (dbError) {
+          isValid = false;
+          error = `数据库验证失败: ${dbError.message}`;
+          needsReconfig = true;
+        }
+      } else {
+        needsReconfig = true;
+        error = '数据库文件不存在';
+      }
 
       console.log('📋 GET /api/config/calibre-path - 返回配置:', {
         configCalibrePath: config.calibrePath,
-        currentDbPath,
-        pathExists
+        originalPath: currentDbPath,
+        normalizedPath: normalizedPath,
+        pathExists,
+        isValid,
+        error,
+        needsReconfig
       });
 
       res.json({
         success: true,
-        calibreDbPath: currentDbPath,
-        exists: pathExists
+        calibreDbPath: normalizedPath,
+        exists: pathExists,
+        valid: isValid,
+        error: error,
+        needsReconfig: needsReconfig,
+        stats: stats,
+        isDefault: config.isDefault || false
       });
     } catch (error) {
       console.error('❌ GET /api/config/calibre-path 错误:', error);
@@ -105,11 +159,13 @@ class ConfigController {
    */
   async setCalibrePath(req, res) {
     try {
-      const { calibrePath } = req.body;
-      console.log('📝 POST /api/config/calibre-path - 新路径:', calibrePath);
+      // 支持两种参数名称：calibrePath（旧版）和 calibreDir（新版）
+      const { calibrePath, calibreDir } = req.body;
+      const pathParam = calibrePath || calibreDir;
+      console.log('📝 POST /api/config/calibre-path - 新路径:', pathParam);
 
       // 如果是目录路径，自动添加 metadata.db
-      let dbPath = calibrePath;
+      let dbPath = pathParam;
       if (dbPath && !dbPath.endsWith('.db')) {
         dbPath = dbPath.endsWith('\\') || dbPath.endsWith('/') 
           ? dbPath + 'metadata.db' 
@@ -169,11 +225,13 @@ class ConfigController {
    */
   async validateCalibre(req, res) {
     try {
-      const { calibrePath } = req.body;
-      console.log('🔍 POST /api/config/validate-calibre - 验证路径:', calibrePath);
+      // 支持两种参数名称：calibrePath（旧版）和 calibreDir（新版）
+      const { calibrePath, calibreDir } = req.body;
+      const pathParam = calibrePath || calibreDir;
+      console.log('🔍 POST /api/config/validate-calibre - 验证路径:', pathParam);
 
       // 如果是目录路径，自动添加 metadata.db
-      let dbPath = calibrePath;
+      let dbPath = pathParam;
       if (dbPath && !dbPath.endsWith('.db')) {
         dbPath = dbPath.endsWith('\\') || dbPath.endsWith('/') 
           ? dbPath + 'metadata.db' 
@@ -244,18 +302,67 @@ class ConfigController {
         }
       }
 
-      const pathExists = currentDbPath ? fs.existsSync(currentDbPath) : false;
+      // 规范化路径：如果在server目录下运行，转换为相对于项目根目录的路径
+      let normalizedPath = currentDbPath;
+      if (normalizedPath.includes('server' + path.sep + 'data')) {
+        // 简化：如果路径包含 server/data，移除 server 部分
+        const serverDataIndex = normalizedPath.indexOf('server' + path.sep + 'data');
+        if (serverDataIndex !== -1) {
+          normalizedPath = path.join(
+            path.dirname(process.cwd()), // 项目根目录
+            normalizedPath.substring(serverDataIndex + 7) // 移除 'server/' 部分
+          );
+        }
+      }
+
+      const pathExists = normalizedPath ? fs.existsSync(normalizedPath) : false;
+
+      // 额外检查数据库是否可访问和有效
+      let isValid = false;
+      let error = null;
+      let stats = null;
+      let needsReconfig = false;
+
+      if (pathExists) {
+        try {
+          // 验证数据库结构
+          const result = databaseService.validateTalebookSchema();
+          isValid = result.isValid;
+          if (!isValid) {
+            error = `数据库结构无效: ${result.errors.join(', ')}`;
+          } else {
+            // 获取数据库统计信息
+            stats = databaseService.getTalebookStats();
+          }
+        } catch (dbError) {
+          isValid = false;
+          error = `数据库验证失败: ${dbError.message}`;
+          needsReconfig = true;
+        }
+      } else {
+        needsReconfig = true;
+        error = '数据库文件不存在';
+      }
 
       console.log('📋 GET /api/config/talebook-path - 返回配置:', {
         configTalebookPath: config.talebookPath,
-        currentDbPath,
-        pathExists
+        originalPath: currentDbPath,
+        normalizedPath: normalizedPath,
+        pathExists,
+        isValid,
+        error,
+        needsReconfig
       });
 
       res.json({
         success: true,
-        talebookDbPath: currentDbPath,
-        exists: pathExists
+        talebookDbPath: normalizedPath,
+        exists: pathExists,
+        valid: isValid,
+        error: error,
+        needsReconfig: needsReconfig,
+        stats: stats,
+        isDefault: config.isDefault || false
       });
     } catch (error) {
       console.error('❌ GET /api/config/talebook-path 错误:', error);
@@ -272,11 +379,13 @@ class ConfigController {
    */
   async setTalebookPath(req, res) {
     try {
-      const { talebookPath } = req.body;
-      console.log('📝 POST /api/config/talebook-path - 新路径:', talebookPath);
+      // 支持两种参数名称：talebookPath（旧版）和 talebookDir（新版）
+      const { talebookPath, talebookDir } = req.body;
+      const pathParam = talebookPath || talebookDir;
+      console.log('📝 POST /api/config/talebook-path - 新路径:', pathParam);
 
       // 如果是目录路径，自动添加 calibre-webserver.db
-      let dbPath = talebookPath;
+      let dbPath = pathParam;
       if (dbPath && !dbPath.endsWith('.db')) {
         dbPath = dbPath.endsWith('\\') || dbPath.endsWith('/') 
           ? dbPath + 'calibre-webserver.db' 
@@ -326,11 +435,13 @@ class ConfigController {
    */
   async validateTalebook(req, res) {
     try {
-      const { talebookPath } = req.body;
-      console.log('🔍 POST /api/config/validate-talebook - 验证路径:', talebookPath);
+      // 支持两种参数名称：talebookPath（旧版）和 talebookDir（新版）
+      const { talebookPath, talebookDir } = req.body;
+      const pathParam = talebookPath || talebookDir;
+      console.log('🔍 POST /api/config/validate-talebook - 验证路径:', pathParam);
 
       // 如果是目录路径，自动添加 calibre-webserver.db
-      let dbPath = talebookPath;
+      let dbPath = pathParam;
       if (dbPath && !dbPath.endsWith('.db')) {
         dbPath = dbPath.endsWith('\\') || dbPath.endsWith('/') 
           ? dbPath + 'calibre-webserver.db' 
@@ -448,6 +559,246 @@ class ConfigController {
       });
     } catch (error) {
       console.error('❌ 获取同步状态失败:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * 创建新数据库
+   */
+  async createDatabase(req, res) {
+    try {
+      console.log('📥 创建新数据库请求:', req.body);
+      
+      const { dbType, dbPath } = req.body;
+      
+      if (!dbType || !dbPath) {
+        return res.status(400).json({
+          success: false,
+          error: '数据库类型和路径不能为空'
+        });
+      }
+      
+      // 如果是相对路径，解析为项目目录下的 data 子目录
+      let absolutePath = dbPath;
+      if (!path.isAbsolute(dbPath)) {
+        const projectRoot = path.join(process.cwd(), '..');
+        absolutePath = path.resolve(projectRoot, dbPath);
+      } else {
+        absolutePath = path.resolve(dbPath);
+      }
+      
+      // 根据数据库类型创建相应目录和数据库
+      if (dbType === 'calibre') {
+        // 确保目录存在
+        const dbDir = path.dirname(absolutePath);
+        if (!fs.existsSync(dbDir)) {
+          await fsPromises.mkdir(dbDir, { recursive: true });
+        }
+        
+        // 如果传入的是目录，自动加上 metadata.db
+        const finalPath = absolutePath.endsWith('.db') ? absolutePath : path.join(absolutePath, 'metadata.db');
+        
+        // 如果数据库文件不存在，创建示例数据库结构
+        if (!fs.existsSync(finalPath)) {
+          const Database = (await import('better-sqlite3')).default;
+          const db = new Database(finalPath);
+          
+          // 创建基本的 Calibre 数据库结构
+          db.exec(`
+            CREATE TABLE IF NOT EXISTS books (
+              id INTEGER PRIMARY KEY,
+              title TEXT NOT NULL,
+              timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+              pubdate DATETIME,
+              uuid TEXT UNIQUE,
+              has_cover INTEGER DEFAULT 0,
+              path TEXT,
+              series_index REAL DEFAULT 1.0,
+              author_sort TEXT,
+              last_modified DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            
+            CREATE TABLE IF NOT EXISTS library_id (
+              id INTEGER PRIMARY KEY,
+              uuid TEXT UNIQUE
+            );
+            
+            CREATE TABLE IF NOT EXISTS authors (
+              id INTEGER PRIMARY KEY,
+              name TEXT NOT NULL,
+              sort TEXT
+            );
+            
+            CREATE TABLE IF NOT EXISTS books_authors_link (
+              book INTEGER NOT NULL,
+              author INTEGER NOT NULL,
+              PRIMARY KEY (book, author)
+            );
+          `);
+          
+          // 插入默认库UUID
+          const libUuid = 'library-' + crypto.randomUUID();
+          db.prepare('INSERT INTO library_id (uuid) VALUES (?)').run(libUuid);
+          
+          db.close();
+        }
+        
+        // 保存到配置
+        const existingConfig = await readConfig();
+        await saveConfig({
+          ...existingConfig,
+          calibrePath: finalPath,
+          lastUpdated: new Date().toISOString()
+        });
+        
+        res.json({
+          success: true,
+          message: 'Calibre 数据库创建成功',
+          dbPath: finalPath
+        });
+        
+      } else if (dbType === 'talebook') {
+        // 确保目录存在
+        const dbDir = path.dirname(absolutePath);
+        if (!fs.existsSync(dbDir)) {
+          await fsPromises.mkdir(dbDir, { recursive: true });
+        }
+        
+        // 如果传入的是目录，自动加上 calibre-webserver.db
+        const finalPath = absolutePath.endsWith('.db') ? absolutePath : path.join(absolutePath, 'calibre-webserver.db');
+        
+        // 如果数据库文件不存在，创建示例数据库结构
+        if (!fs.existsSync(finalPath)) {
+          const Database = (await import('better-sqlite3')).default;
+          const db = new Database(finalPath);
+          
+          // 创建基本的 Talebook 数据库结构
+          db.exec(`
+            CREATE TABLE IF NOT EXISTS items (
+              book_id TEXT PRIMARY KEY,
+              book_type TEXT DEFAULT 'book',
+              count_guest INTEGER DEFAULT 0,
+              count_visit INTEGER DEFAULT 0,
+              count_download INTEGER DEFAULT 0,
+              website TEXT,
+              collector_id INTEGER DEFAULT 0,
+              sole INTEGER DEFAULT 0,
+              book_count INTEGER DEFAULT 0,
+              create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            
+            CREATE TABLE IF NOT EXISTS users (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              username TEXT UNIQUE NOT NULL,
+              name TEXT,
+              email TEXT,
+              avatar TEXT,
+              admin INTEGER DEFAULT 0,
+              active INTEGER DEFAULT 1,
+              created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            
+            CREATE TABLE IF NOT EXISTS reading_state (
+              book_id TEXT,
+              reader_id INTEGER,
+              favorite INTEGER DEFAULT 0,
+              favorite_date DATETIME,
+              wants INTEGER DEFAULT 0,
+              wants_date DATETIME,
+              read_state INTEGER DEFAULT 0,
+              read_date DATETIME,
+              online_read INTEGER DEFAULT 0,
+              download INTEGER DEFAULT 0,
+              PRIMARY KEY (book_id, reader_id)
+            );
+            
+            CREATE TABLE IF NOT EXISTS qc_bookdata (
+              book_id TEXT PRIMARY KEY,
+              page_count INTEGER DEFAULT 0,
+              standard_price REAL DEFAULT 0.0,
+              purchase_price REAL DEFAULT 0.0,
+              purchase_date DATE,
+              binding1 TEXT,
+              binding2 TEXT,
+              note TEXT
+            );
+          `);
+          
+          // 插入默认管理员用户
+          db.prepare(`
+            INSERT OR IGNORE INTO users (username, name, admin, active) 
+            VALUES (?, ?, ?, ?)
+          `).run('admin', 'Administrator', 1, 1);
+          
+          db.close();
+        }
+        
+        // 保存到配置
+        const existingConfig = await readConfig();
+        await saveConfig({
+          ...existingConfig,
+          talebookPath: finalPath,
+          lastUpdated: new Date().toISOString()
+        });
+        
+        res.json({
+          success: true,
+          message: 'Talebook 数据库创建成功',
+          dbPath: finalPath
+        });
+        
+      } else {
+        res.status(400).json({
+          success: false,
+          error: '不支持的数据库类型: ' + dbType
+        });
+      }
+    } catch (error) {
+      console.error('❌ 创建数据库失败:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * 设置默认数据库
+   */
+  async setDefault(req, res) {
+    try {
+      console.log('📥 设置默认数据库请求:', req.body);
+
+      const { calibreDbPath, isDefault } = req.body;
+
+      if (!calibreDbPath) {
+        return res.status(400).json({
+          success: false,
+          error: '数据库路径不能为空'
+        });
+      }
+
+      // 保存到持久化配置文件，保留原有配置
+      console.log('💾 保存默认配置到文件...');
+      const existingConfig = await readConfig();
+      await saveConfig({
+        ...existingConfig, // 保留原有配置
+        isDefault: isDefault,
+        lastUpdated: new Date().toISOString()
+      });
+      console.log('✅ 默认配置已保存到文件');
+
+      res.json({
+        success: true,
+        message: '默认配置设置成功',
+        isDefault: isDefault
+      });
+    } catch (error) {
+      console.error('❌ 保存默认配置失败:', error);
       res.status(500).json({
         success: false,
         error: error.message
