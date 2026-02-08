@@ -9,6 +9,9 @@ import uploadMiddleware from './middleware/upload-middleware.js';
 
 const router = express.Router();
 
+// 搜索路由（必须在 /:id 之前）
+router.get('/search', bookController.searchBooks);
+
 // 书籍 CRUD 路由
 router.get('/', bookController.getAllBooks);
 router.get('/:id', bookController.getBookById);
@@ -19,9 +22,6 @@ router.delete('/:id', bookController.deleteBook);
 // 封面路由
 router.post('/:id/cover', uploadMiddleware.single('cover'), bookController.uploadBookCover);
 router.delete('/:id/cover', bookController.deleteBookCover);
-
-// 搜索路由
-router.get('/search', bookController.searchBooks);
 
 // 阅读状态路由
 router.get('/:id/reading-state', bookController.getReadingState);

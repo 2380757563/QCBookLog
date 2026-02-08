@@ -615,9 +615,26 @@ class DatabaseService {
    * 更新书籍（内部方法）
    */
   _updateBook(book) {
+    console.log('🔍 _updateBook 方法被调用');
+    console.log('🔍 book.id:', book.id);
+    console.log('🔍 book.standardPrice:', book.standardPrice);
+    console.log('🔍 book.purchasePrice:', book.purchasePrice);
+    console.log('🔍 book.binding1:', book.binding1);
+    console.log('🔍 book.binding2:', book.binding2);
+    console.log('🔍 book.paper1:', book.paper1);
+    console.log('🔍 book.edge1:', book.edge1);
+    console.log('🔍 book.edge2:', book.edge2);
+    console.log('🔍 book.note:', book.note);
+    
     const calibreDb = this.connectionManager.getCalibreDb();
+    const talebookDb = this.connectionManager.getTalebookDb();
+    
+    console.log('🔍 calibreDb:', calibreDb ? '存在' : '不存在');
+    console.log('🔍 talebookDb:', talebookDb ? '存在' : '不存在');
 
-    return this.transaction(() => {
+    this.transaction(() => {
+      console.log('🔍 事务开始执行');
+      
       // 1. 更新书籍基本信息
       const updates = [];
       const values = [];
@@ -629,6 +646,10 @@ class DatabaseService {
       if (book.pubdate !== undefined) {
         updates.push('pubdate = ?');
         values.push(book.pubdate);
+      }
+      if (book.publishYear !== undefined) {
+        updates.push('pubdate = ?');
+        values.push(book.publishYear ? `${book.publishYear}-01-01` : null);
       }
       if (book.has_cover !== undefined) {
         updates.push('has_cover = ?');
@@ -648,7 +669,25 @@ class DatabaseService {
         calibreDb.prepare(`UPDATE books SET ${updates.join(', ')} WHERE id = ?`).run(...values);
       }
 
-      // 2. 更新出版社
+      // 2. 更新作者
+      if (book.author !== undefined) {
+        calibreDb.prepare('DELETE FROM books_authors_link WHERE book = ?').run(book.id);
+        if (book.author) {
+          const authors = book.author.split(' & ');
+          const insertAuthorLink = calibreDb.prepare('INSERT INTO books_authors_link (book, author) VALUES (?, ?)');
+
+          authors.forEach(authorName => {
+            let author = calibreDb.prepare('SELECT id FROM authors WHERE name = ?').get(authorName.trim());
+            if (!author) {
+              const authorResult = calibreDb.prepare('INSERT INTO authors (name, sort) VALUES (?, ?)').run(authorName.trim(), authorName.trim());
+              author = { id: authorResult.lastInsertRowid };
+            }
+            insertAuthorLink.run(book.id, author.id);
+          });
+        }
+      }
+
+      // 3. 更新出版社
       if (book.publisher !== undefined) {
         calibreDb.prepare('DELETE FROM books_publishers_link WHERE book = ?').run(book.id);
         if (book.publisher) {
@@ -690,16 +729,103 @@ class DatabaseService {
         }
       }
 
-      // 5. 更新描述
+      // 5. 更新ISBN
+      if (book.isbn !== undefined) {
+        calibreDb.prepare('DELETE FROM identifiers WHERE book = ? AND type = ?').run(book.id, 'isbn');
+        if (book.isbn) {
+          calibreDb.prepare('INSERT INTO identifiers (book, type, val) VALUES (?, ?, ?)').run(book.id, 'isbn', book.isbn);
+        }
+      }
+
+      // 6. 更新描述
       if (book.description !== undefined) {
         calibreDb.prepare('DELETE FROM comments WHERE book = ?').run(book.id);
         if (book.description) {
           calibreDb.prepare('INSERT INTO comments (book, text) VALUES (?, ?)').run(book.id, book.description);
         }
       }
-
-      return this.getBookById(book.id);
+      
+      console.log('🔍 事务执行完成');
     })();
+
+    console.log('🔍 事务已提交，开始更新 qc_bookdata 表');
+    
+    // 6. 更新 Talebook 数据库中的 qc_bookdata 表（在事务外执行）
+    console.log('🔄 调试：talebookDb =', talebookDb ? '存在' : '不存在');
+    console.log('🔄 调试：book.id =', book.id);
+    console.log('🔄 调试：book.standardPrice =', book.standardPrice);
+    console.log('🔄 调试：book.purchasePrice =', book.purchasePrice);
+    console.log('🔄 调试：book.binding1 =', book.binding1);
+    console.log('🔄 调试：book.binding2 =', book.binding2);
+    console.log('🔄 调试：book.paper1 =', book.paper1);
+    console.log('🔄 调试：book.edge1 =', book.edge1);
+    console.log('🔄 调试：book.edge2 =', book.edge2);
+    console.log('🔄 调试：book.note =', book.note);
+    
+    if (talebookDb) {
+      try {
+        console.log('🔄 开始更新Talebook数据库中的qc_bookdata表...');
+        
+        // 处理前端发送的pages字段，兼容pageCount字段
+        let pageCount = 0;
+        if (book.pageCount) {
+          pageCount = parseInt(book.pageCount) || 0;
+        } else if (book.pages) {
+          pageCount = parseInt(String(book.pages).match(/\d+/)?.[0] || '0') || 0;
+        }
+
+        const existingBookData = talebookDb.prepare(`SELECT * FROM qc_bookdata WHERE book_id = ?`).get(book.id);
+        
+        if (existingBookData) {
+          console.log('🔄 更新现有qc_bookdata记录...');
+          talebookDb.prepare(`
+            UPDATE qc_bookdata
+            SET page_count = ?, standard_price = ?, purchase_price = ?, purchase_date = ?, binding1 = ?, binding2 = ?, paper1 = ?, edge1 = ?, edge2 = ?, note = ?
+            WHERE book_id = ?
+          `).run(
+            pageCount,
+            book.standardPrice !== undefined ? book.standardPrice : existingBookData.standard_price,
+            book.purchasePrice !== undefined ? book.purchasePrice : existingBookData.purchase_price,
+            book.purchaseDate !== undefined ? book.purchaseDate : existingBookData.purchase_date,
+            book.binding1 !== undefined ? book.binding1 : existingBookData.binding1,
+            book.binding2 !== undefined ? book.binding2 : existingBookData.binding2,
+            book.paper1 !== undefined ? book.paper1 : existingBookData.paper1,
+            book.edge1 !== undefined ? book.edge1 : existingBookData.edge1,
+            book.edge2 !== undefined ? book.edge2 : existingBookData.edge2,
+            book.note !== undefined ? book.note : existingBookData.note,
+            book.id
+          );
+          console.log('✅ qc_bookdata更新成功');
+        } else {
+          console.log('🔄 插入新qc_bookdata记录...');
+          talebookDb.prepare(`
+            INSERT INTO qc_bookdata (book_id, page_count, standard_price, purchase_price, purchase_date, binding1, binding2, paper1, edge1, edge2, note)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            book.id,
+            pageCount,
+            book.standardPrice || 0,
+            book.purchasePrice || 0,
+            book.purchaseDate || new Date().toISOString(),
+            book.binding1 || 0,
+            book.binding2 || 0,
+            book.paper1 || 0,
+            book.edge1 || 0,
+            book.edge2 || 0,
+            book.note || ''
+          );
+          console.log('✅ qc_bookdata插入成功');
+        }
+      } catch (talebookError) {
+        console.error('❌ 更新Talebook数据库中的qc_bookdata表失败:', talebookError.message);
+        console.error('❌ 错误堆栈:', talebookError.stack);
+        // 不影响主流程
+      }
+    } else {
+      console.warn('⚠️ talebookDb 为 null，跳过更新 qc_bookdata 表');
+    }
+
+    return this.getBookById(book.id);
   }
 
   /**
