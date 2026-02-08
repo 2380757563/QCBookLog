@@ -99,6 +99,44 @@
           </div>
         </div>
 
+        <div class="form-row">
+          <div class="form-item">
+            <label class="form-label">纸张</label>
+            <select v-model.number="form.paper1" class="form-select">
+              <option :value="0">未指定（默认）</option>
+              <option :value="1">胶版纸（双胶纸）</option>
+              <option :value="2">轻型纸</option>
+              <option :value="3">道林纸</option>
+              <option :value="4">铜版纸</option>
+              <option :value="5">牛皮纸</option>
+              <option :value="6">宣纸</option>
+              <option :value="7">进口特种纸</option>
+            </select>
+          </div>
+          <div class="form-item">
+            <label class="form-label">刷边位置</label>
+            <select v-model.number="form.edge1" class="form-select" @change="resetEdge2">
+              <option :value="0">无刷边（默认）</option>
+              <option :value="1">书口单侧</option>
+              <option :value="2">多侧（书口+天头/地脚）</option>
+              <option :value="3">全三边</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-item">
+            <label class="form-label">刷边工艺</label>
+            <select v-model.number="form.edge2" class="form-select" :disabled="form.edge1 === 0">
+              <option v-for="option in currentEdge2Options" :key="option.value" :value="option.value">
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
+          <div class="form-item">
+          </div>
+        </div>
+
         <div class="form-item">
           <label class="form-label">丛书系列</label>
           <input v-model="form.series" class="form-input" placeholder="所属丛书系列" />
@@ -351,6 +389,9 @@ const form = reactive<Omit<Book, 'id' | 'createTime' | 'updateTime'> & { id?: st
   pages: undefined,
   binding1: 1, // 默认平装（实体书）
   binding2: 0,
+  paper1: 0, // 默认未指定
+  edge1: 0, // 默认无刷边
+  edge2: 0, // 默认无细分
   book_type: 1, // 默认实体书
   coverUrl: '',
   purchaseDate: '', // 空字符串表示未选择日期
@@ -418,6 +459,55 @@ const currentBinding2Options = computed(() => {
 
 const resetBinding2 = () => {
   form.binding2 = 0;
+};
+
+const paper1Options = [
+  { value: 0, label: '未指定（默认）' },
+  { value: 1, label: '胶版纸（双胶纸）' },
+  { value: 2, label: '轻型纸' },
+  { value: 3, label: '道林纸' },
+  { value: 4, label: '铜版纸' },
+  { value: 5, label: '牛皮纸' },
+  { value: 6, label: '宣纸' },
+  { value: 7, label: '进口特种纸' }
+];
+
+const edge2OptionsMap: Record<number, { value: number; label: string }[]> = {
+  0: [
+    { value: 0, label: '无细分（默认）' }
+  ],
+  1: [
+    { value: 0, label: '无细分（默认）' },
+    { value: 1, label: '基础单色' },
+    { value: 2, label: '烫边（烫金/银）' },
+    { value: 3, label: '磨边（毛边）' },
+    { value: 4, label: '彩绘艺术刷边' },
+    { value: 5, label: '鎏金高端刷边' }
+  ],
+  2: [
+    { value: 0, label: '无细分（默认）' },
+    { value: 1, label: '基础单色' },
+    { value: 2, label: '烫边（烫金/银）' },
+    { value: 3, label: '磨边（毛边）' },
+    { value: 4, label: '彩绘艺术刷边' },
+    { value: 5, label: '鎏金高端刷边' }
+  ],
+  3: [
+    { value: 0, label: '无细分（默认）' },
+    { value: 1, label: '基础单色' },
+    { value: 2, label: '烫边（烫金/银）' },
+    { value: 3, label: '磨边（毛边）' },
+    { value: 4, label: '彩绘艺术刷边' },
+    { value: 5, label: '鎏金高端刷边' }
+  ]
+};
+
+const currentEdge2Options = computed(() => {
+  return edge2OptionsMap[form.edge1 || 0] || edge2OptionsMap[0];
+});
+
+const resetEdge2 = () => {
+  form.edge2 = 0;
 };
 
 // 返回
@@ -692,6 +782,9 @@ const validateForm = (): { valid: boolean; errors: string[] } => {
         // 确保这些字段被正确传递
         binding1: saveData.binding1,
         binding2: saveData.binding2,
+        paper1: saveData.paper1,
+        edge1: saveData.edge1,
+        edge2: saveData.edge2,
         purchasePrice: saveData.purchasePrice,
         standardPrice: saveData.standardPrice,
         note: saveData.note,
