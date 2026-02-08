@@ -94,6 +94,39 @@
               </span>
             </span>
           </div>
+          <div class="info-item" v-if="book.paper1 !== undefined && book.paper1 !== 0">
+            <span class="info-label">纸张</span>
+            <span class="info-value">
+              {{ 
+                book.paper1 === 1 ? '胶版纸（双胶纸）' :
+                book.paper1 === 2 ? '轻型纸' :
+                book.paper1 === 3 ? '道林纸' :
+                book.paper1 === 4 ? '铜版纸' :
+                book.paper1 === 5 ? '牛皮纸' :
+                book.paper1 === 6 ? '宣纸' :
+                book.paper1 === 7 ? '进口特种纸' : ''
+              }}
+            </span>
+          </div>
+          <div class="info-item" v-if="book.edge1 !== undefined && book.edge1 !== 0">
+            <span class="info-label">刷边</span>
+            <span class="info-value">
+              {{ 
+                book.edge1 === 1 ? '书口单侧' :
+                book.edge1 === 2 ? '多侧（书口+天头/地脚）' :
+                book.edge1 === 3 ? '全三边' : ''
+              }}
+              <span v-if="book.edge2 !== undefined && book.edge2 !== 0">
+                - {{ 
+                  book.edge2 === 1 ? '基础单色' :
+                  book.edge2 === 2 ? '烫边（烫金/银）' :
+                  book.edge2 === 3 ? '磨边（毛边）' :
+                  book.edge2 === 4 ? '彩绘艺术刷边' :
+                  book.edge2 === 5 ? '鎏金高端刷边' : ''
+                }}
+              </span>
+            </span>
+          </div>
           <div class="info-item" v-if="book.standardPrice">
             <span class="info-label">标准价格</span>
             <span class="info-value">¥{{ book.standardPrice.toFixed(2) }}</span>

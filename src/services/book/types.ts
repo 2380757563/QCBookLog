@@ -8,6 +8,9 @@ export interface Book {
   pages?: number;
   binding1?: number;
   binding2?: number;
+  paper1?: number;
+  edge1?: number;
+  edge2?: number;
   book_type: number;
   coverUrl?: string;
   purchaseDate?: string;

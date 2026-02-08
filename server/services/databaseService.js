@@ -772,6 +772,9 @@ class DatabaseService {
           purchase_date TEXT,
           binding1 INTEGER DEFAULT 0,
           binding2 INTEGER DEFAULT 0,
+          paper1 INTEGER DEFAULT 0,
+          edge1 INTEGER DEFAULT 0,
+          edge2 INTEGER DEFAULT 0,
           note TEXT,
           total_reading_time INTEGER DEFAULT 0,
           read_pages INTEGER DEFAULT 0,
@@ -795,7 +798,10 @@ class DatabaseService {
           { name: 'read_pages', sql: 'read_pages INTEGER DEFAULT 0' },
           { name: 'reading_count', sql: 'reading_count INTEGER DEFAULT 0' },
           { name: 'last_read_date', sql: 'last_read_date DATE DEFAULT NULL' },
-          { name: 'last_read_duration', sql: 'last_read_duration INTEGER DEFAULT 0' }
+          { name: 'last_read_duration', sql: 'last_read_duration INTEGER DEFAULT 0' },
+          { name: 'paper1', sql: 'paper1 INTEGER DEFAULT 0' },
+          { name: 'edge1', sql: 'edge1 INTEGER DEFAULT 0' },
+          { name: 'edge2', sql: 'edge2 INTEGER DEFAULT 0' }
         ];
 
         for (const field of requiredFields) {
@@ -997,7 +1003,14 @@ class DatabaseService {
         bookmarks: [],
         page_count: 0,
         standard_price: 0,
-        purchase_date: book.timestamp || new Date().toISOString()
+        purchase_price: 0,
+        purchase_date: book.timestamp || new Date().toISOString(),
+        binding1: 0,
+        binding2: 0,
+        paper1: 0,
+        edge1: 0,
+        edge2: 0,
+        note: ''
       }));
     }
 
@@ -1012,7 +1025,14 @@ class DatabaseService {
           bookmarks: [],
           page_count: 0,
           standard_price: 0,
-          purchase_date: book.timestamp || new Date().toISOString()
+          purchase_price: 0,
+          purchase_date: book.timestamp || new Date().toISOString(),
+          binding1: 0,
+          binding2: 0,
+          paper1: 0,
+          edge1: 0,
+          edge2: 0,
+          note: ''
         }));
       }
 
@@ -1044,7 +1064,7 @@ class DatabaseService {
       
       // 获取书籍扩展数据（页数、价格、购买日期、装帧、阅读追踪等）
       const bookDataQuery = `
-        SELECT book_id, page_count, standard_price, purchase_price, purchase_date, binding1, binding2, note,
+        SELECT book_id, page_count, standard_price, purchase_price, purchase_date, binding1, binding2, paper1, edge1, edge2, note,
                total_reading_time, read_pages, reading_count, last_read_date, last_read_duration
         FROM qc_bookdata
         WHERE book_id IN (${placeholders})
@@ -1059,6 +1079,9 @@ class DatabaseService {
           purchase_date: item.purchase_date,
           binding1: item.binding1 || 0,
           binding2: item.binding2 || 0,
+          paper1: item.paper1 || 0,
+          edge1: item.edge1 || 0,
+          edge2: item.edge2 || 0,
           note: item.note || '',
           // 阅读追踪字段
           total_reading_time: item.total_reading_time || 0,
@@ -1104,6 +1127,11 @@ class DatabaseService {
           standard_price: bookData.standard_price || 0,
           purchase_price: bookData.purchase_price || 0,
           purchase_date: bookData.purchase_date || book.timestamp || new Date().toISOString(),
+          binding1: bookData.binding1 || 0,
+          binding2: bookData.binding2 || 0,
+          paper1: bookData.paper1 || 0,
+          edge1: bookData.edge1 || 0,
+          edge2: bookData.edge2 || 0,
           note: bookData.note || '',
           // 阅读追踪字段
           total_reading_time: bookData.total_reading_time || 0,
@@ -1156,6 +1184,7 @@ class DatabaseService {
           bookmarks: [],
           page_count: 0,
           standard_price: 0,
+          purchase_price: 0,
           purchase_date: '',
           publishYear: publishYear,
           // 解析tags为数组
@@ -1163,7 +1192,14 @@ class DatabaseService {
           // 添加前端所需字段，兼容前端使用
           pages: 0,
           standardPrice: 0,
-          purchaseDate: book.timestamp || new Date().toISOString()
+          purchasePrice: 0,
+          purchaseDate: book.timestamp || new Date().toISOString(),
+          binding1: 0,
+          binding2: 0,
+          paper1: 0,
+          edge1: 0,
+          edge2: 0,
+          note: ''
         };
       });
     }
@@ -1276,6 +1312,9 @@ class DatabaseService {
         purchaseDate: bookWithType.purchase_date || '',
         binding1: bookWithType.binding1 || 0,
         binding2: bookWithType.binding2 || 0,
+        paper1: bookWithType.paper1 || 0,
+        edge1: bookWithType.edge1 || 0,
+        edge2: bookWithType.edge2 || 0,
         note: bookWithType.note || '',
         readStatus: '未读',
         readCompleteDate: ''
@@ -1701,8 +1740,8 @@ class DatabaseService {
 
           // 插入书籍到qc_bookdata表，包含所有新增字段
           this.talebookDb.prepare(`
-            INSERT INTO qc_bookdata (book_id, page_count, standard_price, purchase_price, purchase_date, binding1, binding2, note)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO qc_bookdata (book_id, page_count, standard_price, purchase_price, purchase_date, binding1, binding2, paper1, edge1, edge2, note)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(
             result.bookId,
             pageCount,
@@ -1711,6 +1750,9 @@ class DatabaseService {
             book.purchaseDate || new Date().toISOString(),
             book.binding1 || 0,
             book.binding2 || 0,
+            book.paper1 || 0,
+            book.edge1 || 0,
+            book.edge2 || 0,
             book.note || ''
           );
           console.log('✅ 书籍同步到 Talebook 数据库qc_bookdata表成功');
@@ -1725,21 +1767,24 @@ class DatabaseService {
             pageCount = parseInt(String(book.pages).match(/\d+/)?.[0] || String(existingBookData.page_count)) || 0;
           }
 
-            // 如果已存在，则更新数据
-            this.talebookDb.prepare(`
-              UPDATE qc_bookdata
-              SET page_count = ?, standard_price = ?, purchase_price = ?, purchase_date = ?, binding1 = ?, binding2 = ?, note = ?
-              WHERE book_id = ?
-            `).run(
-              pageCount,
-              book.standardPrice || existingBookData.standard_price || 0,
-              book.purchasePrice || existingBookData.purchase_price || 0,
-              book.purchaseDate || existingBookData.purchase_date || new Date().toISOString(),
-              book.binding1 !== undefined ? book.binding1 : existingBookData.binding1 || 0,
-              book.binding2 !== undefined ? book.binding2 : existingBookData.binding2 || 0,
-              book.note !== undefined ? book.note : (existingBookData.note || ''),
-              result.bookId
-            );
+          // 如果已存在，则更新数据
+          this.talebookDb.prepare(`
+            UPDATE qc_bookdata
+            SET page_count = ?, standard_price = ?, purchase_price = ?, purchase_date = ?, binding1 = ?, binding2 = ?, paper1 = ?, edge1 = ?, edge2 = ?, note = ?
+            WHERE book_id = ?
+          `).run(
+            pageCount,
+            book.standardPrice || existingBookData.standard_price || 0,
+            book.purchasePrice || existingBookData.purchase_price || 0,
+            book.purchaseDate || existingBookData.purchase_date || new Date().toISOString(),
+            book.binding1 !== undefined ? book.binding1 : existingBookData.binding1 || 0,
+            book.binding2 !== undefined ? book.binding2 : existingBookData.binding2 || 0,
+            book.paper1 !== undefined ? book.paper1 : existingBookData.paper1 || 0,
+            book.edge1 !== undefined ? book.edge1 : existingBookData.edge1 || 0,
+            book.edge2 !== undefined ? book.edge2 : existingBookData.edge2 || 0,
+            book.note !== undefined ? book.note : (existingBookData.note || ''),
+            result.bookId
+          );
           console.log('✅ 书籍更新到 Talebook 数据库qc_bookdata表成功');
         }
           
@@ -2051,30 +2096,33 @@ class DatabaseService {
             pageCount = parseInt(String(book.pages).match(/\d+/)?.[0] || '0') || 0;
           }
 
-        if (existingBookData) {
-          console.log('🔄 更新现有qc_bookdata记录...');
-          // 更新现有记录
-          const updateResult = this.talebookDb.prepare(`
-            UPDATE qc_bookdata
-            SET page_count = ?, standard_price = ?, purchase_price = ?, purchase_date = ?, binding1 = ?, binding2 = ?, note = ?
-            WHERE book_id = ?
-          `).run(
-            pageCount,
-            book.standardPrice || existingBookData.standard_price || 0,
-            book.purchasePrice || existingBookData.purchase_price || 0,
-            book.purchaseDate || existingBookData.purchase_date || new Date().toISOString(),
-            book.binding1 !== undefined ? book.binding1 : existingBookData.binding1 || 0,
-            book.binding2 !== undefined ? book.binding2 : existingBookData.binding2 || 0,
-            book.note !== undefined ? book.note : (existingBookData.note || ''),
-            bookId
-          );
+          if (existingBookData) {
+            console.log('🔄 更新现有qc_bookdata记录...');
+            // 更新现有记录
+            const updateResult = this.talebookDb.prepare(`
+              UPDATE qc_bookdata
+              SET page_count = ?, standard_price = ?, purchase_price = ?, purchase_date = ?, binding1 = ?, binding2 = ?, paper1 = ?, edge1 = ?, edge2 = ?, note = ?
+              WHERE book_id = ?
+            `).run(
+              pageCount,
+              book.standardPrice || existingBookData.standard_price || 0,
+              book.purchasePrice || existingBookData.purchase_price || 0,
+              book.purchaseDate || existingBookData.purchase_date || new Date().toISOString(),
+              book.binding1 !== undefined ? book.binding1 : existingBookData.binding1 || 0,
+              book.binding2 !== undefined ? book.binding2 : existingBookData.binding2 || 0,
+              book.paper1 !== undefined ? book.paper1 : existingBookData.paper1 || 0,
+              book.edge1 !== undefined ? book.edge1 : existingBookData.edge1 || 0,
+              book.edge2 !== undefined ? book.edge2 : existingBookData.edge2 || 0,
+              book.note !== undefined ? book.note : (existingBookData.note || ''),
+              bookId
+            );
             console.log('🔄 qc_bookdata更新结果，影响行数:', updateResult.changes);
           } else {
             console.log('🔄 插入新qc_bookdata记录...');
             // 插入新记录
             const insertResult = this.talebookDb.prepare(`
-              INSERT INTO qc_bookdata (book_id, page_count, standard_price, purchase_price, purchase_date, binding1, binding2, note)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              INSERT INTO qc_bookdata (book_id, page_count, standard_price, purchase_price, purchase_date, binding1, binding2, paper1, edge1, edge2, note)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
               bookId,
               pageCount,
@@ -2083,6 +2131,9 @@ class DatabaseService {
               book.purchaseDate || new Date().toISOString(),
               book.binding1 || 0,
               book.binding2 || 0,
+              book.paper1 || 0,
+              book.edge1 || 0,
+              book.edge2 || 0,
               book.note || ''
             );
             console.log('🔄 qc_bookdata插入结果，lastInsertRowid:', insertResult.lastInsertRowid);

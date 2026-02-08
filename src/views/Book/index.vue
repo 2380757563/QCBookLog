@@ -222,6 +222,48 @@
             </select>
           </div>
 
+          <!-- 纸张类型 -->
+          <div class="filter-section">
+            <label class="filter-label">纸张类型</label>
+            <select v-model="filterConditions.paper1" @change="saveFilterConditions()" class="filter-select">
+              <option :value="null">全部</option>
+              <option :value="0">未指定</option>
+              <option :value="1">胶版纸（双胶纸）</option>
+              <option :value="2">轻型纸</option>
+              <option :value="3">道林纸</option>
+              <option :value="4">铜版纸</option>
+              <option :value="5">牛皮纸</option>
+              <option :value="6">宣纸</option>
+              <option :value="7">进口特种纸</option>
+            </select>
+          </div>
+
+          <!-- 刷边位置 -->
+          <div class="filter-section">
+            <label class="filter-label">刷边位置</label>
+            <select v-model="filterConditions.edge1" @change="saveFilterConditions()" class="filter-select">
+              <option :value="null">全部</option>
+              <option :value="0">无刷边</option>
+              <option :value="1">书口单侧</option>
+              <option :value="2">多侧（书口+天头/地脚）</option>
+              <option :value="3">全三边</option>
+            </select>
+          </div>
+
+          <!-- 刷边工艺 -->
+          <div class="filter-section">
+            <label class="filter-label">刷边工艺</label>
+            <select v-model="filterConditions.edge2" @change="saveFilterConditions()" class="filter-select">
+              <option :value="null">全部</option>
+              <option :value="0">无细分</option>
+              <option :value="1">基础单色</option>
+              <option :value="2">烫边（烫金/银）</option>
+              <option :value="3">磨边（毛边）</option>
+              <option :value="4">彩绘艺术刷边</option>
+              <option :value="5">鎏金高端刷边</option>
+            </select>
+          </div>
+
           <!-- 出版社 -->
           <div class="filter-section">
             <label class="filter-label">出版社（模糊搜索）</label>
@@ -683,6 +725,9 @@ const filterConditions = ref({
   readStatus: '' as '未读' | '在读' | '已读' | '',
   binding1: null as number | null, // 书籍载体类型: 0=电子书, 1=平装, 2=精装, 3=线装
   binding2: null as number | null, // 装帧类型
+  paper1: null as number | null, // 纸张类型
+  edge1: null as number | null, // 刷边位置
+  edge2: null as number | null, // 刷边工艺
   publisher: '' as string,
   author: '' as string
 });
@@ -807,6 +852,21 @@ const filteredBooks = computed(() => {
   // 装帧类型筛选
   if (filterConditions.value.binding2 !== null) {
     books = books.filter(b => b.binding2 === filterConditions.value.binding2);
+  }
+
+  // 纸张类型筛选
+  if (filterConditions.value.paper1 !== null) {
+    books = books.filter(b => b.paper1 === filterConditions.value.paper1);
+  }
+
+  // 刷边位置筛选
+  if (filterConditions.value.edge1 !== null) {
+    books = books.filter(b => b.edge1 === filterConditions.value.edge1);
+  }
+
+  // 刷边工艺筛选
+  if (filterConditions.value.edge2 !== null) {
+    books = books.filter(b => b.edge2 === filterConditions.value.edge2);
   }
 
   // 出版社模糊搜索

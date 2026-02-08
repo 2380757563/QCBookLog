@@ -558,9 +558,15 @@ const processAuthorDirectory = async (authorDir) => {
 
       // 方案1：优先从数据库读取
       try {
-        if (databaseService && databaseService.isCalibreAvailable && databaseService.isCalibreAvailable()) {
+        const dbService = databaseService && databaseService.default ? databaseService.default : null;
+        console.log(`🔍 调试信息：databaseService = ${databaseService ? '存在' : '不存在'}`);
+        console.log(`🔍 调试信息：dbService = ${dbService ? '存在' : '不存在'}`);
+        console.log(`🔍 调试信息：dbService.isCalibreAvailable = ${dbService && dbService.isCalibreAvailable ? '存在' : '不存在'}`);
+        console.log(`🔍 调试信息：dbService.isCalibreAvailable() = ${dbService && dbService.isCalibreAvailable ? dbService.isCalibreAvailable() : 'N/A'}`);
+        
+        if (dbService && dbService.isCalibreAvailable && dbService.isCalibreAvailable()) {
           // 直接调用数据库服务的getBookById方法
-          book = databaseService.getBookById(bookId);
+          book = dbService.getBookById(bookId);
           
           console.log(`✅ 从数据库获取书籍: ${book ? '成功' : '失败'}`);
           
@@ -588,9 +594,9 @@ const processAuthorDirectory = async (authorDir) => {
             
             // 从Talebook数据库获取扩展数据
             let extendedData = {};
-            if (databaseService && databaseService.isTalebookAvailable && databaseService.isTalebookAvailable()) {
+            if (dbService && dbService.isTalebookAvailable && dbService.isTalebookAvailable()) {
               try {
-                const qcBookdata = databaseService.getQcBookdataByBookId(bookId);
+                const qcBookdata = dbService.getQcBookdataByBookId(bookId);
                 if (qcBookdata) {
                   extendedData = {
                     pages: qcBookdata.page_count !== undefined && qcBookdata.page_count !== null ? qcBookdata.page_count : book.pages,
@@ -599,6 +605,9 @@ const processAuthorDirectory = async (authorDir) => {
                     purchaseDate: qcBookdata.purchase_date || book.purchase_date,
                     binding1: qcBookdata.binding1 !== undefined && qcBookdata.binding1 !== null ? qcBookdata.binding1 : book.binding1,
                     binding2: qcBookdata.binding2 !== undefined && qcBookdata.binding2 !== null ? qcBookdata.binding2 : book.binding2,
+                    paper1: qcBookdata.paper1 !== undefined && qcBookdata.paper1 !== null ? qcBookdata.paper1 : book.paper1,
+                    edge1: qcBookdata.edge1 !== undefined && qcBookdata.edge1 !== null ? qcBookdata.edge1 : book.edge1,
+                    edge2: qcBookdata.edge2 !== undefined && qcBookdata.edge2 !== null ? qcBookdata.edge2 : book.edge2,
                     note: qcBookdata.note || book.note
                   };
                 } else {
@@ -610,6 +619,9 @@ const processAuthorDirectory = async (authorDir) => {
                     purchaseDate: book.purchase_date,
                     binding1: book.binding1,
                     binding2: book.binding2,
+                    paper1: book.paper1,
+                    edge1: book.edge1,
+                    edge2: book.edge2,
                     note: book.note
                   };
                 }
@@ -623,6 +635,9 @@ const processAuthorDirectory = async (authorDir) => {
                   purchaseDate: book.purchase_date,
                   binding1: book.binding1,
                   binding2: book.binding2,
+                  paper1: book.paper1,
+                  edge1: book.edge1,
+                  edge2: book.edge2,
                   note: book.note
                 };
               }
