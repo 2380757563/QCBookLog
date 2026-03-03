@@ -5,6 +5,7 @@
  */
 
 import databaseService from './database/index.js';
+import calibreService from './calibreService.js';
 
 /**
  * qcDataService类
@@ -15,17 +16,17 @@ class QcDataService {
   }
 
   /**
-   * 检查Talebook数据库是否可用
+   * 检查数据库是否可用
    */
   isAvailable() {
-    return databaseService.isTalebookAvailable();
+    return databaseService.isQcBooklogAvailable();
   }
 
   /**
    * 获取数据库连接（每次都获取最新连接）
    */
   getDb() {
-    return databaseService.talebookDb;
+    return databaseService.isQcBooklogAvailable() ? databaseService.getQcBooklogDb() : null;
   }
 
   /**
@@ -36,10 +37,60 @@ class QcDataService {
   }
 
   /**
+   * 获取当前 Calibre 库的 UUID
+   */
+  getCurrentLibraryUuid() {
+    return databaseService.connectionManager?.getCurrentLibraryUuid() || '';
+  }
+
+  /**
+   * 确保书籍映射存在（使用复合键：library_uuid + calibre_book_id）
+   */
+  ensureBookMapping(bookId, bookTitle = null, bookAuthor = null) {
+    if (!this.isAvailable() || !bookId || bookId <= 0) {
+      console.warn('⚠️ ensureBookMapping 跳过: 数据库不可用或 bookId 无效', { bookId, isAvailable: this.isAvailable() });
+      return null;
+    }
+
+    const libraryUuid = this.getCurrentLibraryUuid();
+    console.log('📚 ensureBookMapping - libraryUuid:', libraryUuid, 'bookId:', bookId);
+
+    if (!libraryUuid) {
+      console.error('❌ libraryUuid 为空，无法创建书籍映射');
+      return null;
+    }
+
+    const existingMapping = this.db.prepare(`
+      SELECT id, calibre_book_id FROM qc_book_mapping 
+      WHERE library_uuid = ? AND calibre_book_id = ?
+    `).get(libraryUuid, bookId);
+
+    if (existingMapping) {
+      console.log('✅ 找到已存在的映射:', existingMapping);
+      return existingMapping;
+    }
+
+    console.log('📝 创建新的书籍映射:', { libraryUuid, bookId, bookTitle, bookAuthor });
+    try {
+      const result = this.db.prepare(`
+        INSERT INTO qc_book_mapping (library_uuid, calibre_book_id, talebook_book_id, title, author)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(libraryUuid, bookId, bookId, bookTitle, bookAuthor);
+
+      const newId = result.lastInsertRowid;
+      console.log('✅ 书籍映射创建成功, id:', newId);
+      return { id: newId, calibre_book_id: bookId };
+    } catch (insertError) {
+      console.error('❌ 创建书籍映射失败:', insertError.message);
+      return null;
+    }
+  }
+
+  /**
    * 更新数据库连接
    */
   updateConnection() {
-    this.db = databaseService.talebookDb;
+    this.db = databaseService.isQcBooklogAvailable() ? databaseService.getQcBooklogDb() : null;
     console.log('🔄 qcDataService 数据库连接已更新:', this.db ? '已连接' : '未连接');
     
     // 启用外键约束
@@ -58,7 +109,7 @@ class QcDataService {
    */
   createGroup(groupData) {
     if (!this.isAvailable()) {
-      throw new Error('Talebook数据库不可用');
+      throw new Error('QCBookLog数据库不可用');
     }
 
     try {
@@ -72,8 +123,12 @@ class QcDataService {
       );
       
       return {
-        id: result.lastInsertRowid,
-        ...groupData,
+        id: String(result.lastInsertRowid),
+        name: groupData.name,
+        sort: result.lastInsertRowid,
+        parentId: null,
+        bookCount: 0,
+        description: groupData.description || '',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
@@ -85,6 +140,7 @@ class QcDataService {
 
   /**
    * 获取所有分组
+   * 返回格式匹配前端 BookGroup 类型
    */
   getAllGroups() {
     if (!this.isAvailable()) {
@@ -92,8 +148,31 @@ class QcDataService {
     }
 
     try {
-      const query = 'SELECT * FROM qc_groups ORDER BY name';
-      return this.db.prepare(query).all();
+      const query = `
+        SELECT 
+          g.id, 
+          g.name, 
+          g.description,
+          g.color,
+          g.created_at,
+          g.updated_at,
+          (SELECT COUNT(*) FROM qc_book_groups bg WHERE bg.group_id = g.id) as bookCount
+        FROM qc_groups g
+        ORDER BY g.name
+      `;
+      const groups = this.db.prepare(query).all();
+      
+      return groups.map(g => ({
+        id: String(g.id),
+        name: g.name,
+        sort: g.id,
+        parentId: null,
+        bookCount: g.bookCount || 0,
+        description: g.description || '',
+        color: g.color,
+        created_at: g.created_at,
+        updated_at: g.updated_at
+      }));
     } catch (error) {
       console.error('❌ 获取所有分组失败:', error.message);
       return [];
@@ -102,6 +181,7 @@ class QcDataService {
 
   /**
    * 根据ID获取分组
+   * 返回格式匹配前端 BookGroup 类型
    */
   getGroupById(groupId) {
     if (!this.isAvailable()) {
@@ -109,8 +189,33 @@ class QcDataService {
     }
 
     try {
-      const query = 'SELECT * FROM qc_groups WHERE id = ?';
-      return this.db.prepare(query).get(groupId);
+      const query = `
+        SELECT 
+          g.id, 
+          g.name, 
+          g.description,
+          g.color,
+          g.created_at,
+          g.updated_at,
+          (SELECT COUNT(*) FROM qc_book_groups bg WHERE bg.group_id = g.id) as bookCount
+        FROM qc_groups g
+        WHERE g.id = ?
+      `;
+      const group = this.db.prepare(query).get(groupId);
+      
+      if (!group) return null;
+      
+      return {
+        id: String(group.id),
+        name: group.name,
+        sort: group.id,
+        parentId: null,
+        bookCount: group.bookCount || 0,
+        description: group.description || '',
+        color: group.color,
+        created_at: group.created_at,
+        updated_at: group.updated_at
+      };
     } catch (error) {
       console.error(`❌ 获取分组ID ${groupId} 失败:`, error.message);
       return null;
@@ -122,7 +227,7 @@ class QcDataService {
    */
   updateGroup(groupId, groupData) {
     if (!this.isAvailable()) {
-      throw new Error('Talebook数据库不可用');
+      throw new Error('QCBookLog数据库不可用');
     }
 
     try {
@@ -142,8 +247,12 @@ class QcDataService {
       }
       
       return {
-        id: groupId,
-        ...groupData,
+        id: String(groupId),
+        name: groupData.name,
+        sort: groupId,
+        parentId: null,
+        bookCount: 0,
+        description: groupData.description || '',
         updated_at: new Date().toISOString()
       };
     } catch (error) {
@@ -157,7 +266,7 @@ class QcDataService {
    */
   deleteGroup(groupId) {
     if (!this.isAvailable()) {
-      throw new Error('Talebook数据库不可用');
+      throw new Error('QCBookLog数据库不可用');
     }
 
     try {
@@ -180,19 +289,55 @@ class QcDataService {
   // ----------------------
 
   /**
+   * 确保书籍在 qc_bookdata 表中存在
+   * @param {number} bookId - 书籍ID
+   * @returns {boolean} 是否成功
+   */
+  ensureBookInBookdata(bookId) {
+    if (!this.isAvailable() || !bookId || bookId <= 0) {
+      return false;
+    }
+
+    try {
+      const existing = this.db.prepare('SELECT book_id FROM qc_bookdata WHERE book_id = ?').get(bookId);
+      if (existing) {
+        return true;
+      }
+
+      this.db.prepare(`
+        INSERT OR IGNORE INTO qc_bookdata (book_id, page_count, created_at, updated_at)
+        VALUES (?, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `).run(bookId);
+      console.log(`✅ 创建 qc_bookdata 记录: book_id=${bookId}`);
+      return true;
+    } catch (error) {
+      console.error(`❌ 确保 qc_bookdata 记录失败:`, error.message);
+      return false;
+    }
+  }
+
+  /**
    * 添加书籍到分组
    */
   addBookToGroup(bookId, groupId) {
     if (!this.isAvailable()) {
-      throw new Error('Talebook数据库不可用');
+      throw new Error('QCBookLog数据库不可用');
     }
 
     try {
+      this.ensureBookInBookdata(bookId);
+
+      // 获取 mapping_id
+      const mapping = this.db.prepare('SELECT id FROM qc_book_mapping WHERE calibre_book_id = ?').get(bookId);
+      if (!mapping) {
+        throw new Error(`未找到书籍映射: calibre_book_id=${bookId}`);
+      }
+
       const query = `
-        INSERT OR IGNORE INTO qc_book_groups (book_id, group_id)
+        INSERT OR IGNORE INTO qc_book_groups (mapping_id, group_id)
         VALUES (?, ?)
       `;
-      const result = this.db.prepare(query).run(bookId, groupId);
+      const result = this.db.prepare(query).run(mapping.id, groupId);
       return result.changes > 0;
     } catch (error) {
       console.error(`❌ 添加书籍ID ${bookId} 到分组ID ${groupId} 失败:`, error.message);
@@ -205,15 +350,21 @@ class QcDataService {
    */
   removeBookFromGroup(bookId, groupId) {
     if (!this.isAvailable()) {
-      throw new Error('Talebook数据库不可用');
+      throw new Error('QCBookLog数据库不可用');
     }
 
     try {
+      // 获取 mapping_id
+      const mapping = this.db.prepare('SELECT id FROM qc_book_mapping WHERE calibre_book_id = ?').get(bookId);
+      if (!mapping) {
+        throw new Error(`未找到书籍映射: calibre_book_id=${bookId}`);
+      }
+
       const query = `
         DELETE FROM qc_book_groups
-        WHERE book_id = ? AND group_id = ?
+        WHERE mapping_id = ? AND group_id = ?
       `;
-      const result = this.db.prepare(query).run(bookId, groupId);
+      const result = this.db.prepare(query).run(mapping.id, groupId);
       return result.changes > 0;
     } catch (error) {
       console.error(`❌ 从分组ID ${groupId} 移除书籍ID ${bookId} 失败:`, error.message);
@@ -230,10 +381,12 @@ class QcDataService {
     }
 
     try {
+      // 注意：qc_book_groups 表使用 mapping_id，需要通过 qc_book_mapping 转换
       const query = `
         SELECT g.* FROM qc_groups g
         JOIN qc_book_groups bg ON g.id = bg.group_id
-        WHERE bg.book_id = ?
+        JOIN qc_book_mapping m ON bg.mapping_id = m.id
+        WHERE m.calibre_book_id = ?
         ORDER BY g.name
       `;
       return this.db.prepare(query).all(bookId);
@@ -252,8 +405,10 @@ class QcDataService {
     }
 
     try {
+      // 注意：qc_book_groups 表使用 mapping_id，需要通过 qc_book_mapping 获取 calibre_book_id
       const query = `
-        SELECT bg.book_id FROM qc_book_groups bg
+        SELECT m.calibre_book_id as book_id FROM qc_book_groups bg
+        JOIN qc_book_mapping m ON bg.mapping_id = m.id
         WHERE bg.group_id = ?
       `;
       const results = this.db.prepare(query).all(groupId);
@@ -273,14 +428,16 @@ class QcDataService {
    */
   createBookmark(bookmarkData) {
     if (!this.isAvailable()) {
-      throw new Error('Talebook数据库不可用');
+      throw new Error('QCBookLog数据库不可用');
     }
 
     try {
-      // 支持 camelCase 和 snake_case 两种字段名
+      console.log('📝 createBookmark 收到的数据:', JSON.stringify(bookmarkData, null, 2));
       const bookId = bookmarkData.bookId || bookmarkData.book_id;
       let bookTitle = bookmarkData.bookTitle || bookmarkData.book_title || null;
       let bookAuthor = bookmarkData.bookAuthor || bookmarkData.book_author || null;
+
+      console.log('📚 解析后的 bookId:', bookId, 'bookTitle:', bookTitle, 'bookAuthor:', bookAuthor);
 
       // 从Calibre数据库获取书籍信息（如果提供了 book_id）
       if (bookId && (!bookTitle || !bookAuthor)) {
@@ -307,17 +464,41 @@ class QcDataService {
         }
       }
 
+      // 确保书籍映射存在（使用复合键）
+      let mappingId = null;
+      if (bookId && bookId > 0) {
+        const mapping = this.ensureBookMapping(bookId, bookTitle, bookAuthor);
+        console.log('📚 ensureBookMapping 返回:', mapping);
+        mappingId = mapping ? mapping.id : null;
+      } else {
+        console.error('❌ bookId 无效:', bookId);
+      }
+
+      console.log('📚 最终 mappingId:', mappingId);
+
+      if (!mappingId) {
+        throw new Error('无法创建书籍映射');
+      }
+
       const query = `
-        INSERT INTO qc_bookmarks (book_id, book_title, book_author, content, note, page, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        INSERT INTO qc_bookmarks (mapping_id, user_id, chapter, pos, pos_type, text, note, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `;
+      const pos = bookmarkData.pos || bookmarkData.pageNum || bookmarkData.page || bookmarkData.pageNumber || 0;
+      console.log('📄 保存页码信息 - pos:', pos, '原始数据:', {
+        pos: bookmarkData.pos,
+        pageNum: bookmarkData.pageNum,
+        page: bookmarkData.page,
+        pageNumber: bookmarkData.pageNumber
+      });
       const result = this.db.prepare(query).run(
-        bookId,
-        bookTitle,
-        bookAuthor,
-        bookmarkData.content,
-        bookmarkData.note || null,
-        bookmarkData.page || null
+        mappingId,
+        bookmarkData.userId || 0,
+        bookmarkData.chapter || null,
+        pos,
+        bookmarkData.pos_type || 'chapter',
+        bookmarkData.text || bookmarkData.content || '',
+        bookmarkData.note || null
       );
 
       const bookmarkId = result.lastInsertRowid;
@@ -325,28 +506,37 @@ class QcDataService {
       // 处理标签（直接存储标签名称到 qc_bookmark_tags）
       if (bookmarkData.tags && Array.isArray(bookmarkData.tags) && bookmarkData.tags.length > 0) {
         for (const tag of bookmarkData.tags) {
-          if (tag && tag.trim() !== '') {
+          // 确保 tag 是字符串类型
+          const tagStr = typeof tag === 'string' ? tag : (tag && tag.name ? tag.name : String(tag));
+          if (tagStr && tagStr.trim() !== '') {
             const insertTagQuery = `
-              INSERT OR IGNORE INTO qc_bookmark_tags (bookmark_id, tag_name)
+              INSERT OR IGNORE INTO qc_bookmark_tags (bookmark_id, tag_id)
               VALUES (?, ?)
             `;
-            this.db.prepare(insertTagQuery).run(bookmarkId, tag);
+            this.db.prepare(insertTagQuery).run(bookmarkId, tagStr.trim());
           }
         }
       }
 
       return {
         id: bookmarkId,
+        mapping_id: mappingId,
         book_id: bookId,
-        bookId: bookId, // 同时返回 camelCase
+        bookId: bookId,
         bookTitle: bookTitle,
         bookAuthor: bookAuthor,
-        book_title: bookTitle, // 同时返回 snake_case
-        book_author: bookAuthor, // 同时返回 snake_case
-        ...bookmarkData,
+        book_title: bookTitle,
+        book_author: bookAuthor,
+        chapter: bookmarkData.chapter,
+        pos: pos,
+        pageNum: pos,
+        page: pos,
+        text: bookmarkData.text || bookmarkData.content,
+        content: bookmarkData.text || bookmarkData.content,
+        note: bookmarkData.note,
+        tags: bookmarkData.tags || [],
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        // 添加 createTime 和 updateTime 字段（兼容前端）
         createTime: new Date().toISOString(),
         updateTime: new Date().toISOString()
       };
@@ -365,46 +555,91 @@ class QcDataService {
     }
 
     try {
-      const query = 'SELECT * FROM qc_bookmarks ORDER BY created_at DESC';
+      const query = `
+        SELECT bm.*, m.title as book_title, m.author as book_author, m.calibre_book_id as book_id
+        FROM qc_bookmarks bm
+        LEFT JOIN qc_book_mapping m ON bm.mapping_id = m.id
+        ORDER BY bm.created_at DESC
+      `;
       const bookmarks = this.db.prepare(query).all();
 
-      // 为每个书摘获取标签信息（从 qc_bookmark_tags 直接读取标签名称）
       const bookmarkIds = bookmarks.map(b => b.id);
       const bookmarkTags = new Map();
 
       if (bookmarkIds.length > 0) {
         const placeholders = bookmarkIds.map(() => '?').join(',');
         const tagsQuery = `
-          SELECT bookmark_id, tag_name
+          SELECT bookmark_id, tag_id
           FROM qc_bookmark_tags
           WHERE bookmark_id IN (${placeholders})
         `;
         const tags = this.db.prepare(tagsQuery).all(...bookmarkIds);
 
-        // 将标签按bookmark_id分组
         for (const tag of tags) {
           if (!bookmarkTags.has(tag.bookmark_id)) {
             bookmarkTags.set(tag.bookmark_id, []);
           }
-          bookmarkTags.get(tag.bookmark_id).push(tag.tag_name);
+          bookmarkTags.get(tag.bookmark_id).push(tag.tag_id);
         }
       }
 
-      // 将标签信息合并到书摘对象中，并统一字段名
+      // 获取所有书籍信息用于构建封面URL
+      const bookIds = [...new Set(bookmarks.map(b => b.book_id).filter(id => id))];
+      const bookPathMap = new Map();
+      
+      if (bookIds.length > 0 && databaseService.isCalibreAvailable()) {
+        try {
+          const calibreDb = databaseService.calibreDb;
+          const placeholders = bookIds.map(() => '?').join(',');
+          const booksQuery = `SELECT id, path FROM books WHERE id IN (${placeholders})`;
+          const books = calibreDb.prepare(booksQuery).all(...bookIds);
+          books.forEach(book => bookPathMap.set(book.id, book.path));
+        } catch (e) {
+          console.warn('⚠️ 获取书籍路径失败:', e.message);
+        }
+      }
+
       const enrichedBookmarks = bookmarks.map(bookmark => {
         const tags = bookmarkTags.get(bookmark.id) || [];
+        const bookId = bookmark.book_id;
+        
+        // 构建封面URL（使用书籍路径）
+        let coverUrl = null;
+        if (bookId) {
+          const bookPath = bookPathMap.get(bookId);
+          if (bookPath) {
+            coverUrl = `/api/static/calibre/${encodeURIComponent(bookPath)}/cover.jpg`;
+          } else {
+            // 降级：使用bookId（可能不工作，但保持兼容）
+            coverUrl = `/api/static/calibre/${bookId}/cover.jpg`;
+          }
+        }
+        
         return {
-          ...bookmark,
-          // 兼容性处理：使用 book_title 和 book_author 作为 bookTitle 和 bookAuthor
-          bookTitle: bookmark.book_title,
-          bookAuthor: bookmark.book_author,
-          pageNum: bookmark.page, // 将 page 字段映射为 pageNum
+          id: bookmark.id,
+          mapping_id: bookmark.mapping_id,
+          user_id: bookmark.user_id,
+          chapter: bookmark.chapter,
+          pos: bookmark.pos,
+          pos_type: bookmark.pos_type,
+          text: bookmark.text,
+          note: bookmark.note,
+          book_id: bookId,
+          bookId: bookId,
+          bookTitle: bookmark.book_title || '未知书籍',
+          bookAuthor: bookmark.book_author || '',
+          book_title: bookmark.book_title,
+          book_author: bookmark.book_author,
+          pageNum: bookmark.pos,
+          pageNumber: bookmark.pos,
+          content: bookmark.text,
           tags: tags,
-          // 添加 createTime 和 updateTime 字段（兼容前端）
-          createTime: bookmark.created_at,
-          updateTime: bookmark.updated_at,
+          coverUrl: coverUrl,
+          localCoverData: coverUrl,
           created_at: bookmark.created_at,
-          updated_at: bookmark.updated_at
+          updated_at: bookmark.updated_at,
+          createTime: bookmark.created_at,
+          updateTime: bookmark.updated_at
         };
       });
 
@@ -424,36 +659,59 @@ class QcDataService {
     }
 
     try {
-      const query = 'SELECT * FROM qc_bookmarks WHERE id = ?';
+      const query = `
+        SELECT bm.*, m.title as book_title, m.author as book_author, m.calibre_book_id as book_id
+        FROM qc_bookmarks bm
+        LEFT JOIN qc_book_mapping m ON bm.mapping_id = m.id
+        WHERE bm.id = ?
+      `;
       const bookmark = this.db.prepare(query).get(bookmarkId);
       if (bookmark) {
-        console.log('🔍 qcDataService获取到的书摘数据:', bookmark);
-        console.log('🔍 qcDataService获取到的created_at:', bookmark.created_at);
-        console.log('🔍 qcDataService获取到的updated_at:', bookmark.updated_at);
-        
-        // 兼容性处理：统一字段名，确保前端能正确访问
+        // 获取标签
+        const tagsQuery = `
+          SELECT tag_id FROM qc_bookmark_tags WHERE bookmark_id = ?
+        `;
+        const tagRows = this.db.prepare(tagsQuery).all(bookmarkId);
+        const tags = tagRows.map(t => t.tag_id);
+
+        // 获取书籍路径用于构建封面URL
+        let coverUrl = null;
+        if (bookmark.book_id && databaseService.isCalibreAvailable()) {
+          try {
+            const calibreDb = databaseService.calibreDb;
+            const book = calibreDb.prepare('SELECT path FROM books WHERE id = ?').get(bookmark.book_id);
+            if (book && book.path) {
+              coverUrl = `/api/static/calibre/${encodeURIComponent(book.path)}/cover.jpg`;
+            }
+          } catch (e) {
+            console.warn('⚠️ 获取书籍路径失败:', e.message);
+          }
+        }
+
         const result = {
           id: bookmark.id,
+          mapping_id: bookmark.mapping_id,
           book_id: bookmark.book_id,
+          bookId: bookmark.book_id,
           bookTitle: bookmark.book_title,
           bookAuthor: bookmark.book_author,
-          bookId: bookmark.book_id, // 添加 bookId 字段（驼峰命名）
-          content: bookmark.content,
+          book_title: bookmark.book_title,
+          book_author: bookmark.book_author,
+          chapter: bookmark.chapter,
+          pos: bookmark.pos,
+          pos_type: bookmark.pos_type,
+          text: bookmark.text,
+          content: bookmark.text,
           note: bookmark.note,
-          page: bookmark.page,
-          pageNum: bookmark.page, // 添加 pageNum 字段
-          tags: [], // 标签需要单独查询
+          pageNum: bookmark.pos,
+          pageNumber: bookmark.pos,
+          tags: tags,
+          coverUrl: coverUrl,
           created_at: bookmark.created_at,
           updated_at: bookmark.updated_at,
-          // 添加 createTime 和 updateTime 字段（兼容前端）
           createTime: bookmark.created_at,
           updateTime: bookmark.updated_at
         };
-        
-        console.log('🔍 qcDataService返回的书摘数据:', result);
-        console.log('🔍 qcDataService返回的created_at:', result.created_at);
-        console.log('🔍 qcDataService返回的updated_at:', result.updated_at);
-        
         return result;
       }
       return null;
@@ -472,50 +730,53 @@ class QcDataService {
     }
 
     try {
-      console.log('🔍 getBookmarksByBookId - bookId:', bookId, '类型:', typeof bookId);
+      const libraryUuid = this.getCurrentLibraryUuid();
+      const mapping = this.db.prepare(`
+        SELECT id FROM qc_book_mapping 
+        WHERE library_uuid = ? AND calibre_book_id = ?
+      `).get(libraryUuid, bookId);
+
+      if (!mapping) {
+        return [];
+      }
 
       const query = `
-        SELECT * FROM qc_bookmarks
-        WHERE book_id = ?
-        ORDER BY created_at DESC
+        SELECT bm.*, m.title as book_title, m.author as book_author, m.calibre_book_id as book_id
+        FROM qc_bookmarks bm
+        JOIN qc_book_mapping m ON bm.mapping_id = m.id
+        WHERE bm.mapping_id = ?
+        ORDER BY bm.created_at DESC
       `;
-      const bookmarks = this.db.prepare(query).all(bookId);
+      const bookmarks = this.db.prepare(query).all(mapping.id);
 
-      console.log(`🔍 找到 ${bookmarks.length} 条书摘`);
-
-      // 为每个书摘获取标签信息（从 qc_bookmark_tags 直接读取标签名称）
       const bookmarkIds = bookmarks.map(b => b.id);
       const bookmarkTags = new Map();
 
       if (bookmarkIds.length > 0) {
         const placeholders = bookmarkIds.map(() => '?').join(',');
         const tagsQuery = `
-          SELECT bookmark_id, tag_name
+          SELECT bookmark_id, tag_id
           FROM qc_bookmark_tags
           WHERE bookmark_id IN (${placeholders})
         `;
         const tags = this.db.prepare(tagsQuery).all(...bookmarkIds);
 
-        // 将标签按bookmark_id分组
         for (const tag of tags) {
           if (!bookmarkTags.has(tag.bookmark_id)) {
             bookmarkTags.set(tag.bookmark_id, []);
           }
-          bookmarkTags.get(tag.bookmark_id).push(tag.tag_name);
+          bookmarkTags.get(tag.bookmark_id).push(tag.tag_id);
         }
       }
 
-      // 将标签信息合并到书摘对象中，并统一字段名
       const enrichedBookmarks = bookmarks.map(bookmark => {
         const tags = bookmarkTags.get(bookmark.id) || [];
         return {
           ...bookmark,
-          // 兼容性处理：使用 book_title 和 book_author 作为 bookTitle 和 bookAuthor
-          bookTitle: bookmark.book_title,
-          bookAuthor: bookmark.book_author,
-          pageNum: bookmark.page, // 将 page 字段映射为 pageNum
+          pageNum: bookmark.pos,
+          pageNumber: bookmark.pos,
+          content: bookmark.text,
           tags: tags,
-          // 添加 createTime 和 updateTime 字段（兼容前端）
           createTime: bookmark.created_at,
           updateTime: bookmark.updated_at,
           created_at: bookmark.created_at,
@@ -535,77 +796,31 @@ class QcDataService {
    */
   updateBookmark(bookmarkId, bookmarkData) {
     if (!this.isAvailable()) {
-      throw new Error('Talebook数据库不可用');
+      throw new Error('QCBookLog数据库不可用');
     }
 
     try {
-      // 获取当前书摘信息
       const currentBookmark = this.db.prepare('SELECT * FROM qc_bookmarks WHERE id = ?').get(bookmarkId);
       if (!currentBookmark) {
         return null;
       }
 
-      // 支持 camelCase 和 snake_case 两种字段名
-      const newBookId = bookmarkData.bookId !== undefined ? bookmarkData.bookId : bookmarkData.book_id;
-      const bookId = newBookId !== undefined ? newBookId : currentBookmark.book_id;
-
-      // 当book_id发生变化时，重新从Calibre获取书籍信息
-      const isBookIdChanged = newBookId !== undefined && newBookId !== currentBookmark.book_id;
-
-      let bookTitle = currentBookmark.book_title;
-      let bookAuthor = currentBookmark.book_author;
-
-      if (isBookIdChanged) {
-        console.log('📚 书籍ID已变化，从 Calibre 获取新书籍信息');
-        console.log('旧 book_id:', currentBookmark.book_id, '新 book_id:', bookId);
-        try {
-          const calibreDb = databaseService.calibreDb;
-          if (calibreDb) {
-            const bookInfo = calibreDb.prepare(`
-              SELECT b.title,
-                (SELECT GROUP_CONCAT(a.name, ' & ')
-                 FROM authors a
-                 JOIN books_authors_link bal ON a.id = bal.author
-                 WHERE bal.book = b.id) as author
-              FROM books b
-              WHERE b.id = ?
-            `).get(bookId);
-
-            if (bookInfo) {
-              bookTitle = bookInfo.title;
-              bookAuthor = bookInfo.author;
-              console.log('📚 从Calibre获取到书籍信息:', bookTitle, bookAuthor);
-            }
-          }
-        } catch (error) {
-          console.warn('⚠️ 获取书籍信息失败:', error.message);
-        }
-      }
-
-      // 只有在book_id没有变化时才使用前端传入的书籍信息
-      if (!isBookIdChanged) {
-        bookTitle = bookmarkData.bookTitle !== undefined ? bookmarkData.bookTitle :
-                    bookmarkData.book_title !== undefined ? bookmarkData.book_title : bookTitle;
-        bookAuthor = bookmarkData.bookAuthor !== undefined ? bookmarkData.bookAuthor :
-                     bookmarkData.book_author !== undefined ? bookmarkData.book_author : bookAuthor;
-      }
-
-      // 支持多种页码字段名
-      const page = bookmarkData.pageNum !== undefined ? bookmarkData.pageNum :
-                   bookmarkData.page !== undefined ? bookmarkData.page : currentBookmark.page;
+      const pos = bookmarkData.pos !== undefined ? bookmarkData.pos :
+                  bookmarkData.pageNum !== undefined ? bookmarkData.pageNum :
+                  bookmarkData.pageNumber !== undefined ? bookmarkData.pageNumber :
+                  currentBookmark.pos;
 
       const query = `
         UPDATE qc_bookmarks
-        SET book_id = ?, book_title = ?, book_author = ?, content = ?, note = ?, page = ?, updated_at = CURRENT_TIMESTAMP
+        SET chapter = ?, pos = ?, pos_type = ?, text = ?, note = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `;
       const result = this.db.prepare(query).run(
-        bookId,
-        bookTitle,
-        bookAuthor,
-        bookmarkData.content,
+        bookmarkData.chapter !== undefined ? bookmarkData.chapter : currentBookmark.chapter,
+        pos,
+        bookmarkData.pos_type || currentBookmark.pos_type || 'chapter',
+        bookmarkData.text !== undefined ? bookmarkData.text : (bookmarkData.content !== undefined ? bookmarkData.content : currentBookmark.text),
         bookmarkData.note !== undefined ? bookmarkData.note : currentBookmark.note,
-        page,
         bookmarkId
       );
 
@@ -613,39 +828,45 @@ class QcDataService {
         return null;
       }
 
-      // 更新标签（直接存储标签名称到 qc_bookmark_tags）
       if (bookmarkData.tags && Array.isArray(bookmarkData.tags)) {
-        // 删除旧标签
         const deleteTagsQuery = `DELETE FROM qc_bookmark_tags WHERE bookmark_id = ?`;
         this.db.prepare(deleteTagsQuery).run(bookmarkId);
 
-        // 插入新标签
         const insertTagQuery = `
-          INSERT OR IGNORE INTO qc_bookmark_tags (bookmark_id, tag_name)
+          INSERT OR IGNORE INTO qc_bookmark_tags (bookmark_id, tag_id)
           VALUES (?, ?)
         `;
         const insertTag = this.db.prepare(insertTagQuery);
 
         for (const tag of bookmarkData.tags) {
-          if (tag && tag.trim() !== '') {
-            insertTag.run(bookmarkId, tag);
+          // 确保 tag 是字符串类型
+          const tagStr = typeof tag === 'string' ? tag : (tag && tag.name ? tag.name : String(tag));
+          if (tagStr && tagStr.trim() !== '') {
+            insertTag.run(bookmarkId, tagStr.trim());
           }
         }
       }
 
+      const mapping = this.db.prepare('SELECT * FROM qc_book_mapping WHERE id = ?').get(currentBookmark.mapping_id);
+
       return {
         id: bookmarkId,
-        book_id: bookId,
-        bookId: bookId, // 同时返回 camelCase
-        bookTitle: bookTitle,
-        bookAuthor: bookAuthor,
-        book_title: bookTitle, // 同时返回 snake_case
-        book_author: bookAuthor, // 同时返回 snake_case
-        ...bookmarkData,
-        created_at: bookmarkData.created_at || currentBookmark.created_at,
+        mapping_id: currentBookmark.mapping_id,
+        book_id: mapping ? mapping.calibre_book_id : null,
+        bookId: mapping ? mapping.calibre_book_id : null,
+        bookTitle: mapping ? mapping.title : null,
+        bookAuthor: mapping ? mapping.author : null,
+        book_title: mapping ? mapping.title : null,
+        book_author: mapping ? mapping.author : null,
+        chapter: bookmarkData.chapter !== undefined ? bookmarkData.chapter : currentBookmark.chapter,
+        pos: pos,
+        text: bookmarkData.text !== undefined ? bookmarkData.text : (bookmarkData.content !== undefined ? bookmarkData.content : currentBookmark.text),
+        content: bookmarkData.text !== undefined ? bookmarkData.text : (bookmarkData.content !== undefined ? bookmarkData.content : currentBookmark.text),
+        note: bookmarkData.note !== undefined ? bookmarkData.note : currentBookmark.note,
+        tags: bookmarkData.tags || [],
+        created_at: currentBookmark.created_at,
         updated_at: new Date().toISOString(),
-        // 添加 createTime 和 updateTime 字段（兼容前端）
-        createTime: bookmarkData.created_at || currentBookmark.created_at,
+        createTime: currentBookmark.created_at,
         updateTime: new Date().toISOString()
       };
     } catch (error) {
@@ -659,7 +880,7 @@ class QcDataService {
    */
   deleteBookmark(bookmarkId) {
     if (!this.isAvailable()) {
-      throw new Error('Talebook数据库不可用');
+      throw new Error('QCBookLog数据库不可用');
     }
 
     try {
@@ -677,7 +898,7 @@ class QcDataService {
    */
   deleteBookBookmarks(bookId) {
     if (!this.isAvailable()) {
-      throw new Error('Talebook数据库不可用');
+      throw new Error('QCBookLog数据库不可用');
     }
 
     try {
@@ -690,81 +911,30 @@ class QcDataService {
     }
   }
 
-  // ----------------------
-  // 数据迁移 (从JSON文件到数据库)
-  // ----------------------
-
   /**
-   * 从JSON文件迁移分组数据到数据库
+   * 搜索书摘
    */
-  async migrateGroupsFromJson(groupsJsonPath) {
-    // 这里实现从JSON文件迁移分组数据到数据库的逻辑
-    // 例如读取 groups.json 文件并将数据导入到 qc_groups 表
-    console.log('🔄 开始从JSON迁移分组数据...');
-    // 实现代码...
-    console.log('✅ 分组数据迁移完成');
-  }
-
-  /**
-   * 从JSON文件迁移书摘数据到数据库
-   */
-  async migrateBookmarksFromJson(bookmarksJsonPath) {
-    // 这里实现从JSON文件迁移书摘数据到数据库的逻辑
-    // 例如读取 bookmarks.json 文件并将数据导入到 qc_bookmarks 表
-    console.log('🔄 开始从JSON迁移书摘数据...');
-    // 实现代码...
-    console.log('✅ 书摘数据迁移完成');
-  }
-
-  // ----------------------
-  // 数据导出
-  // ----------------------
-
-  /**
-   * 导出分组数据为JSON格式
-   */
-  exportGroupsToJson() {
-    const groups = this.getAllGroups();
-    return JSON.stringify(groups, null, 2);
-  }
-
-  /**
-   * 导出书摘数据为JSON格式
-   */
-  exportBookmarksToJson() {
-    const bookmarks = this.getAllBookmarks();
-    return JSON.stringify(bookmarks, null, 2);
-  }
-
-  // ----------------------
-  // 书摘标签管理
-  // ----------------------
-
-  /**
-   * 获取书摘的所有标签（直接从 qc_bookmark_tags 读取标签名称）
-   */
-  getBookmarkTags(bookmarkId) {
+  searchBookmarks(keyword) {
     if (!this.isAvailable()) {
       return [];
     }
 
     try {
       const query = `
-        SELECT tag_name
-        FROM qc_bookmark_tags
-        WHERE bookmark_id = ?
-        ORDER BY tag_name
+        SELECT * FROM qc_bookmarks
+        WHERE content LIKE ? OR chapter LIKE ?
+        ORDER BY created_at DESC
       `;
-      const results = this.db.prepare(query).all(bookmarkId);
-      return results.map(r => r.tag_name);
+      const pattern = `%${keyword}%`;
+      return this.db.prepare(query).all(pattern, pattern);
     } catch (error) {
-      console.error(`❌ 获取书摘ID ${bookmarkId} 的标签失败:`, error.message);
+      console.error('❌ 搜索书摘失败:', error.message);
       return [];
     }
   }
 
   /**
-   * 获取所有书摘标签（去重）
+   * 获取所有书摘标签（带数量）
    */
   getAllBookmarkTags() {
     if (!this.isAvailable()) {
@@ -773,12 +943,14 @@ class QcDataService {
 
     try {
       const query = `
-        SELECT DISTINCT tag_name
+        SELECT
+          tag_id,
+          COUNT(*) as count
         FROM qc_bookmark_tags
-        ORDER BY tag_name
+        GROUP BY tag_id
+        ORDER BY count DESC, tag_id ASC
       `;
-      const results = this.db.prepare(query).all();
-      return results.map(r => r.tag_name);
+      return this.db.prepare(query).all();
     } catch (error) {
       console.error('❌ 获取所有书摘标签失败:', error.message);
       return [];
@@ -786,22 +958,142 @@ class QcDataService {
   }
 
   /**
-   * 删除指定标签（从所有书摘中移除该标签）
+   * 获取指定书摘的标签
    */
-  deleteTag(tagName) {
+  getBookmarkTags(bookmarkId) {
     if (!this.isAvailable()) {
-      throw new Error('Talebook数据库不可用');
+      return [];
     }
 
     try {
       const query = `
-        DELETE FROM qc_bookmark_tags
-        WHERE tag_name = ?
+        SELECT tag_id
+        FROM qc_bookmark_tags
+        WHERE bookmark_id = ?
+        ORDER BY tag_id ASC
       `;
-      const result = this.db.prepare(query).run(tagName);
-      return result.changes;
+      const tags = this.db.prepare(query).all(bookmarkId);
+      return tags.map(t => t.tag_id);
     } catch (error) {
-      console.error('❌ 删除标签失败:', error.message);
+      console.error(`❌ 获取书摘ID ${bookmarkId} 的标签失败:`, error.message);
+      return [];
+    }
+  }
+
+  // ----------------------
+  // 愿望清单管理 (wishlist)
+  // ----------------------
+
+  /**
+   * 获取愿望清单
+   */
+  getWishlist(readerId = 0) {
+    if (!this.isAvailable()) {
+      return [];
+    }
+
+    try {
+      const query = `
+        SELECT * FROM qc_wishlist
+        WHERE user_id = ? OR reader_id = ?
+        ORDER BY created_at DESC
+      `;
+      return this.db.prepare(query).all(readerId, readerId);
+    } catch (error) {
+      console.error('❌ 获取愿望清单失败:', error.message);
+      return [];
+    }
+  }
+
+  /**
+   * 添加到愿望清单
+   */
+  addToWishlist(readerId, wishlistData) {
+    if (!this.isAvailable()) {
+      throw new Error('QCBookLog数据库不可用');
+    }
+
+    try {
+      const query = `
+        INSERT INTO qc_wishlist (user_id, reader_id, isbn, title, author, notes, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `;
+      const result = this.db.prepare(query).run(
+        readerId,
+        readerId,
+        wishlistData.isbn,
+        wishlistData.title || '',
+        wishlistData.author || '',
+        wishlistData.notes || ''
+      );
+      
+      return {
+        id: result.lastInsertRowid,
+        reader_id: readerId,
+        user_id: readerId,
+        ...wishlistData,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('❌ 添加到愿望清单失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 更新愿望清单项
+   */
+  updateWishlistItem(wishlistId, updateData) {
+    if (!this.isAvailable()) {
+      throw new Error('QCBookLog数据库不可用');
+    }
+
+    try {
+      const query = `
+        UPDATE qc_wishlist
+        SET title = ?, author = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `;
+      const result = this.db.prepare(query).run(
+        updateData.title || '',
+        updateData.author || '',
+        updateData.notes || '',
+        wishlistId
+      );
+      
+      if (result.changes === 0) {
+        return null;
+      }
+      
+      return {
+        id: wishlistId,
+        ...updateData,
+        updated_at: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error(`❌ 更新愿望清单项ID ${wishlistId} 失败:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 从愿望清单中移除
+   */
+  removeFromWishlist(readerId, isbn) {
+    if (!this.isAvailable()) {
+      throw new Error('QCBookLog数据库不可用');
+    }
+
+    try {
+      const query = `
+        DELETE FROM qc_wishlist
+        WHERE (user_id = ? OR reader_id = ?) AND isbn = ?
+      `;
+      const result = this.db.prepare(query).run(readerId, readerId, isbn);
+      return result.changes > 0;
+    } catch (error) {
+      console.error('❌ 从愿望清单移除失败:', error.message);
       throw error;
     }
   }
@@ -815,42 +1107,53 @@ class QcDataService {
    */
   getOrCreateReadingGoal(readerId, year) {
     if (!this.isAvailable()) {
-      throw new Error('Talebook数据库不可用');
+      throw new Error('QCBookLog数据库不可用');
     }
 
     try {
-      const query = `
-        SELECT * FROM reading_goals
-        WHERE reader_id = ? AND year = ?
-      `;
-      let goal = this.db.prepare(query).get(readerId || 0, year);
+      // 确保用户存在（支持 readerId >= 0）
+      const actualReaderId = readerId !== undefined && readerId !== null ? readerId : 0;
+      const existingUser = this.db.prepare('SELECT id FROM qc_users WHERE id = ?').get(actualReaderId);
+      if (!existingUser) {
+        this.db.prepare(`
+          INSERT OR IGNORE INTO qc_users (id, username, display_name)
+          VALUES (?, ?, ?)
+        `).run(actualReaderId, `user_${actualReaderId}`, actualReaderId === 0 ? '默认用户' : `用户${actualReaderId}`);
+      }
 
-      if (!goal) {
-        const insertQuery = `
-          INSERT INTO reading_goals (reader_id, year, target, completed)
-          VALUES (?, ?, 0, 0)
-        `;
-        const result = this.db.prepare(insertQuery).run(readerId || 0, year);
-        goal = {
-          id: result.lastInsertRowid,
-          reader_id: readerId || 0,
+      const existingGoal = this.db.prepare(`
+        SELECT * FROM qc_reading_goals
+        WHERE user_id = ? AND goal_type = 'yearly' AND start_date = ?
+      `).get(actualReaderId, `${year}-01-01`);
+
+      if (existingGoal) {
+        return {
+          id: existingGoal.id,
+          readerId: existingGoal.user_id,
           year: year,
-          target: 0,
-          completed: 0
+          target: existingGoal.target_value,
+          completed: existingGoal.current_value,
+          created_at: existingGoal.created_at,
+          updated_at: existingGoal.updated_at
         };
       }
 
+      const result = this.db.prepare(`
+        INSERT INTO qc_reading_goals (user_id, goal_type, target_value, current_value, start_date, status)
+        VALUES (?, 'yearly', 12, 0, ?, 'active')
+      `).run(actualReaderId, `${year}-01-01`);
+
       return {
-        id: goal.id,
-        readerId: goal.reader_id,
-        year: goal.year,
-        target: goal.target,
-        completed: goal.completed,
-        created_at: goal.created_at,
-        updated_at: goal.updated_at
+        id: result.lastInsertRowid,
+        readerId: actualReaderId,
+        year: year,
+        target: 12,
+        completed: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       };
     } catch (error) {
-      console.error('❌ 获取阅读目标失败:', error.message);
+      console.error('❌ 获取或创建阅读目标失败:', error.message);
       throw error;
     }
   }
@@ -858,20 +1161,20 @@ class QcDataService {
   /**
    * 更新阅读目标
    */
-  updateReadingGoal(goalId, goalData) {
+  updateReadingGoal(goalId, updateData) {
     if (!this.isAvailable()) {
-      throw new Error('Talebook数据库不可用');
+      throw new Error('QCBookLog数据库不可用');
     }
 
     try {
       const query = `
-        UPDATE reading_goals
-        SET target = ?, completed = ?, updated_at = CURRENT_TIMESTAMP
+        UPDATE qc_reading_goals
+        SET target_value = ?, current_value = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
       `;
       const result = this.db.prepare(query).run(
-        goalData.target,
-        goalData.completed || 0,
+        updateData.target || 12,
+        updateData.completed || 0,
         goalId
       );
 
@@ -879,10 +1182,15 @@ class QcDataService {
         return null;
       }
 
+      const goal = this.db.prepare('SELECT * FROM qc_reading_goals WHERE id = ?').get(goalId);
       return {
-        id: goalId,
-        ...goalData,
-        updated_at: new Date().toISOString()
+        id: goal.id,
+        readerId: goal.user_id,
+        year: new Date(goal.start_date).getFullYear(),
+        target: goal.target_value,
+        completed: goal.current_value,
+        created_at: goal.created_at,
+        updated_at: goal.updated_at
       };
     } catch (error) {
       console.error('❌ 更新阅读目标失败:', error.message);
@@ -891,236 +1199,23 @@ class QcDataService {
   }
 
   /**
-   * 增加已完成数量
+   * 增加阅读目标已完成数量
    */
   incrementReadingGoalCompleted(goalId) {
     if (!this.isAvailable()) {
-      throw new Error('Talebook数据库不可用');
+      throw new Error('QCBookLog数据库不可用');
     }
 
     try {
-      const query = `
-        UPDATE reading_goals
-        SET completed = completed + 1, updated_at = CURRENT_TIMESTAMP
+      const result = this.db.prepare(`
+        UPDATE qc_reading_goals
+        SET current_value = current_value + 1, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
-      `;
-      const result = this.db.prepare(query).run(goalId);
+      `).run(goalId);
+
       return result.changes > 0;
     } catch (error) {
-      console.error('❌ 增加已完成数量失败:', error.message);
-      throw error;
-    }
-  }
-
-  // ----------------------
-  // 阅读热力图管理 (reading_heatmap)
-  // ----------------------
-
-  /**
-   * 获取指定年份的阅读热力图数据
-   */
-  getReadingHeatmap(readerId, year) {
-    if (!this.isAvailable()) {
-      return {};
-    }
-
-    try {
-      const query = `
-        SELECT date, bookmark_count
-        FROM reading_heatmap
-        WHERE reader_id = ? AND date LIKE ?
-        ORDER BY date
-      `;
-      const results = this.db.prepare(query).all(
-        readerId || 0,
-        `${year}-%`
-      );
-
-      const heatmapData = {};
-      for (const row of results) {
-        heatmapData[row.date] = row.bookmark_count;
-      }
-
-      return heatmapData;
-    } catch (error) {
-      console.error('❌ 获取阅读热力图失败:', error.message);
-      return {};
-    }
-  }
-
-  /**
-   * 更新或插入阅读热力图数据
-   */
-  upsertReadingHeatmap(readerId, date, bookmarkCount) {
-    if (!this.isAvailable()) {
-      throw new Error('Talebook数据库不可用');
-    }
-
-    try {
-      const query = `
-        INSERT INTO reading_heatmap (reader_id, date, bookmark_count)
-        VALUES (?, ?, ?)
-        ON CONFLICT(reader_id, date) DO UPDATE SET
-          bookmark_count = excluded.bookmark_count
-      `;
-      this.db.prepare(query).run(readerId || 0, date, bookmarkCount);
-      return true;
-    } catch (error) {
-      console.error('❌ 更新阅读热力图失败:', error.message);
-      throw error;
-    }
-  }
-
-  /**
-   * 从书摘重新计算热力图数据
-   */
-  recalculateHeatmapFromBookmarks(readerId, year) {
-    if (!this.isAvailable()) {
-      throw new Error('Talebook数据库不可用');
-    }
-
-    try {
-      // 清除当年的热力图数据
-      this.db.prepare(`
-        DELETE FROM reading_heatmap
-        WHERE reader_id = ? AND date LIKE ?
-      `).run(readerId || 0, `${year}-%`);
-
-      // 从书摘统计每日数量
-      const query = `
-        SELECT DATE(created_at) as date, COUNT(*) as count
-        FROM qc_bookmarks
-        WHERE DATE(created_at) LIKE ?
-        GROUP BY DATE(created_at)
-      `;
-      const results = this.db.prepare(query).all(`${year}-%`);
-
-      // 批量插入热力图数据
-      for (const row of results) {
-        this.upsertReadingHeatmap(readerId || 0, row.date, row.count);
-      }
-
-      return results.length;
-    } catch (error) {
-      console.error('❌ 重新计算热力图失败:', error.message);
-      throw error;
-    }
-  }
-
-  // ----------------------
-  // 愿望清单管理 (wishlist)
-  // ----------------------
-
-  /**
-   * 获取愿望清单
-   */
-  getWishlist(readerId) {
-    if (!this.isAvailable()) {
-      return [];
-    }
-
-    try {
-      const query = `
-        SELECT * FROM wishlist
-        WHERE reader_id = ?
-        ORDER BY created_at DESC
-      `;
-      return this.db.prepare(query).all(readerId || 0);
-    } catch (error) {
-      console.error('❌ 获取愿望清单失败:', error.message);
-      return [];
-    }
-  }
-
-  /**
-   * 添加到愿望清单
-   */
-  addToWishlist(readerId, wishlistItem) {
-    if (!this.isAvailable()) {
-      throw new Error('Talebook数据库不可用');
-    }
-
-    try {
-      const query = `
-        INSERT INTO wishlist (reader_id, isbn, title, author, notes)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(reader_id, isbn) DO UPDATE SET
-          title = excluded.title,
-          author = excluded.author,
-          notes = excluded.notes
-      `;
-      const result = this.db.prepare(query).run(
-        readerId || 0,
-        wishlistItem.isbn,
-        wishlistItem.title || null,
-        wishlistItem.author || null,
-        wishlistItem.notes || null
-      );
-
-      return {
-        id: result.lastInsertRowid,
-        readerId: readerId || 0,
-        ...wishlistItem,
-        created_at: new Date().toISOString()
-      };
-    } catch (error) {
-      console.error('❌ 添加到愿望清单失败:', error.message);
-      throw error;
-    }
-  }
-
-  /**
-   * 从愿望清单中移除
-   */
-  removeFromWishlist(readerId, isbn) {
-    if (!this.isAvailable()) {
-      throw new Error('Talebook数据库不可用');
-    }
-
-    try {
-      const query = `
-        DELETE FROM wishlist
-        WHERE reader_id = ? AND isbn = ?
-      `;
-      const result = this.db.prepare(query).run(readerId || 0, isbn);
-      return result.changes > 0;
-    } catch (error) {
-      console.error('❌ 从愿望清单移除失败:', error.message);
-      throw error;
-    }
-  }
-
-  /**
-   * 更新愿望清单项
-   */
-  updateWishlistItem(wishlistId, wishlistData) {
-    if (!this.isAvailable()) {
-      throw new Error('Talebook数据库不可用');
-    }
-
-    try {
-      const query = `
-        UPDATE wishlist
-        SET title = ?, author = ?, notes = ?
-        WHERE id = ?
-      `;
-      const result = this.db.prepare(query).run(
-        wishlistData.title || null,
-        wishlistData.author || null,
-        wishlistData.notes || null,
-        wishlistId
-      );
-
-      if (result.changes === 0) {
-        return null;
-      }
-
-      return {
-        id: wishlistId,
-        ...wishlistData
-      };
-    } catch (error) {
-      console.error('❌ 更新愿望清单项失败:', error.message);
+      console.error('❌ 增加阅读目标已完成数量失败:', error.message);
       throw error;
     }
   }

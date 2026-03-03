@@ -40,4 +40,28 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+/**
+ * 更新读者备注
+ */
+router.put('/:id/note', async (req, res) => {
+  try {
+    const readerId = parseInt(req.params.id);
+    const { note } = req.body;
+
+    if (isNaN(readerId)) {
+      return res.status(400).json({ error: 'Invalid reader ID' });
+    }
+
+    if (typeof note !== 'string') {
+      return res.status(400).json({ error: 'Note must be a string' });
+    }
+
+    const result = databaseService.updateReaderNote(readerId, note);
+    res.json(result);
+  } catch (error) {
+    console.error('❌ 更新读者备注失败:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

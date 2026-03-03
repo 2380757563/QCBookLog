@@ -5,8 +5,8 @@
   "main": "app.js",
   "type": "module",
   "scripts": {
-    "start": "node app.js",
-    "dev": "node --watch app.js",
+    "start": "node loader.js",
+    "dev": "node --watch loader.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "test:performance": "node test-performance.js"
   },
@@ -32,6 +32,7 @@
     "lazystream": "^1.0.1",
     "lodash": "^4.17.23",
     "multer": "^1.4.5-lts.1",
+    "node-cache": "^5.1.2",
     "sqlite3": "^5.1.7",
     "unzipper": "^0.12.3",
     "uuid": "^9.0.1",

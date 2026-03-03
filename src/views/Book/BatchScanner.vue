@@ -10,17 +10,18 @@
     </div>
 
     <!-- 进度条 -->
-    <div v-if="isProcessing" class="progress-section">
+    <div v-if="isProcessing || isReseearching" class="progress-section">
       <div class="progress-header">
-        <span class="progress-label">{{ progressText }}</span>
-        <span class="progress-percent">{{ progressPercent }}%</span>
+        <span class="progress-label">{{ isReseearching ? `更换书源 ${reseearchProgress.current}/${reseearchProgress.total}` : progressText }}</span>
+        <span class="progress-percent">{{ isReseearching ? Math.round((reseearchProgress.current / reseearchProgress.total) * 100) : progressPercent }}%</span>
       </div>
       <div class="progress-bar">
-        <div class="progress-fill" :style="{ width: progressPercent + '%' }"></div>
+        <div class="progress-fill" :style="{ width: (isReseearching ? Math.round((reseearchProgress.current / reseearchProgress.total) * 100) : progressPercent) + '%' }"></div>
       </div>
       <div class="progress-detail">
         正在处理: {{ currentProcessingBook?.title || '加载中...' }}
       </div>
+      <button v-if="isReseearching" class="cancel-btn" @click="cancelReseearch = true">取消</button>
     </div>
 
     <!-- 扫描输入区域 -->
@@ -50,9 +51,42 @@
     <div v-if="isbnList.length > 0" class="isbn-list-section">
       <div class="section-header">
         <h2>已扫描ISBN ({{ isbnList.length }})</h2>
-        <button class="clear-btn" @click="clearAll" :disabled="isProcessing">
-          清空
+        <div class="header-actions">
+          <button class="clear-btn" @click="clearAll" :disabled="isProcessing || isReseearching">
+            清空
+          </button>
+        </div>
+      </div>
+      <div class="isbn-selection-actions">
+        <button
+          class="selection-btn small"
+          @click="selectAllIsbnItems"
+          :disabled="isProcessing || isReseearching"
+        >
+          全选
         </button>
+        <button
+          class="selection-btn small"
+          @click="invertIsbnSelection"
+          :disabled="isProcessing || isReseearching"
+        >
+          反选
+        </button>
+        <button
+          class="selection-btn small danger"
+          @click="deleteSelectedIsbnItems"
+          :disabled="isProcessing || isReseearching || selectedIsbnItems.length === 0"
+        >
+          删除({{ selectedIsbnItems.length }})
+        </button>
+        <button
+          class="selection-btn small primary"
+          @click="batchSearchSelected"
+          :disabled="isProcessing || isReseearching"
+        >
+          批量搜索
+        </button>
+        <span class="selection-hint">点击复选框选择ISBN</span>
       </div>
       <div class="isbn-list">
         <div
@@ -63,9 +97,21 @@
             'found': item.data, 
             'not-found': !item.data && !item.searching, 
             'error': item.error,
-            'new': item.isNew || newlyAddedIsbns.includes(item.isbn)
+            'new': item.isNew || newlyAddedIsbns.includes(item.isbn),
+            'selected': selectedIsbnItems.includes(item.isbn)
           }]"
+          @click="toggleIsbnSelection(item.isbn)"
+          @contextmenu.prevent="toggleIsbnSelection(item.isbn)"
         >
+          <div class="isbn-checkbox">
+            <input
+              type="checkbox"
+              :checked="selectedIsbnItems.includes(item.isbn)"
+              @change="toggleIsbnSelection(item.isbn)"
+              @click.stop
+              :disabled="isProcessing || isReseearching"
+            />
+          </div>
           <div class="isbn-info">
             <span v-if="item.isNew || newlyAddedIsbns.includes(item.isbn)" class="new-badge">新</span>
             <span class="isbn-number">{{ item.isbn }}</span>
@@ -73,29 +119,30 @@
             <span v-else-if="item.searching" class="status-text searching">搜索中...</span>
             <span v-else-if="item.error" class="status-text error">{{ item.error }}</span>
             <span v-else class="status-text pending">待搜索</span>
+            <span v-if="item.data" class="source-indicator">来源: {{ item.data.source }}</span>
           </div>
           <div class="isbn-actions">
             <button
               v-if="!item.data && !item.searching"
               class="action-btn search-again"
-              @click="searchSingle(index)"
-              :disabled="isProcessing"
+              @click.stop="searchSingle(index)"
+              :disabled="isProcessing || isReseearching"
             >
               搜索
             </button>
             <button
               v-if="!item.data && !item.searching"
               class="action-btn remove"
-              @click="removeIsbn(index)"
-              :disabled="isProcessing"
+              @click.stop="removeIsbn(index)"
+              :disabled="isProcessing || isReseearching"
             >
               删除
             </button>
             <button
               v-if="item.data"
               class="action-btn remove"
-              @click="removeIsbn(index)"
-              :disabled="isProcessing"
+              @click.stop="removeIsbn(index)"
+              :disabled="isProcessing || isReseearching"
             >
               删除
             </button>
@@ -133,6 +180,14 @@
               title="反转选择状态"
             >
               反选
+            </button>
+            <button
+              class="change-source-btn"
+              @click="openSourceSelector"
+              :disabled="isProcessing || isReseearching || previewBooks.length === 0"
+              title="更换书源重新搜索"
+            >
+              更换书源
             </button>
           </div>
           <button
@@ -213,6 +268,167 @@
         </div>
       </div>
     </div>
+
+    <!-- 书源选择弹窗 -->
+    <div v-if="showSourceSelector" class="source-selector-dialog">
+      <div class="source-dialog-content">
+        <div class="dialog-icon">📚</div>
+        <h3 class="dialog-title">选择书源</h3>
+        <p class="dialog-message">
+          已选择 {{ selectedBooks.length }} 本书籍，请选择要使用的书源进行重新搜索
+        </p>
+        <div class="source-list">
+          <div
+            v-for="(config, key) in API_CONFIGS"
+            :key="key"
+            :class="['source-option', { 'selected': selectedSource === key }]"
+            @click="selectedSource = key"
+          >
+            <div class="source-radio">
+              <input
+                type="radio"
+                :id="`source-${key}`"
+                :value="key"
+                v-model="selectedSource"
+              />
+              <label :for="`source-${key}`">
+                <span class="source-name">{{ config.name }}</span>
+                <span class="source-desc">{{ config.description }}</span>
+              </label>
+            </div>
+            <div class="source-badges">
+              <span v-if="config.isFree" class="badge free">免费</span>
+              <span v-else class="badge paid">计费</span>
+              <span v-if="lastUsedSource === key" class="badge recent">最近使用</span>
+            </div>
+          </div>
+        </div>
+        <div class="dialog-buttons">
+          <button class="dialog-btn cancel-btn" @click="closeSourceSelector">
+            取消
+          </button>
+          <button class="dialog-btn confirm-btn" @click="reSearchWithSource">
+            开始搜索
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 搜索结果对比视图 -->
+    <div v-if="showCompareView" class="compare-view-dialog">
+      <div class="compare-dialog-content">
+        <div class="compare-header">
+          <h3 class="dialog-title">搜索结果对比</h3>
+          <button class="close-icon" @click="closeCompareView">✕</button>
+        </div>
+        <div class="compare-actions">
+          <button class="apply-all-btn" @click="applyAllNewData">
+            应用所有新结果
+          </button>
+          <button class="close-btn" @click="closeCompareView">
+            关闭
+          </button>
+        </div>
+        <div class="compare-list">
+          <div
+            v-for="[isbn, data] in Array.from(compareData.entries())"
+            :key="isbn"
+            class="compare-item"
+          >
+            <div class="compare-item-header">
+              <span class="compare-isbn">ISBN: {{ isbn }}</span>
+              <div class="compare-item-actions">
+                <button
+                  v-if="data.new"
+                  class="apply-btn"
+                  @click="applyNewData(isbn)"
+                >
+                  应用新结果
+                </button>
+                <button
+                  v-if="!data.new"
+                  class="retry-btn"
+                  @click="retryFailedSearch(isbn)"
+                >
+                  重试
+                </button>
+              </div>
+            </div>
+            <div class="compare-content">
+              <div class="compare-column old-data">
+                <h4>原数据 {{ data.old ? `(${data.old.source})` : '(无)' }}</h4>
+                <div v-if="data.old" class="data-card">
+                  <div class="data-row">
+                    <span class="data-label">书名:</span>
+                    <span class="data-value">{{ data.old.title }}</span>
+                  </div>
+                  <div class="data-row">
+                    <span class="data-label">作者:</span>
+                    <span class="data-value">{{ data.old.author }}</span>
+                  </div>
+                  <div class="data-row">
+                    <span class="data-label">出版社:</span>
+                    <span class="data-value">{{ data.old.publisher || '无' }}</span>
+                  </div>
+                  <div class="data-row">
+                    <span class="data-label">出版年:</span>
+                    <span class="data-value">{{ data.old.publishYear || '无' }}</span>
+                  </div>
+                  <div class="data-row">
+                    <span class="data-label">评分:</span>
+                    <span class="data-value">{{ data.old.rating || '无' }}</span>
+                  </div>
+                  <div class="data-row">
+                    <span class="data-label">丛书:</span>
+                    <span class="data-value">{{ data.old.series || '无' }}</span>
+                  </div>
+                  <div class="data-row">
+                    <span class="data-label">标签:</span>
+                    <span class="data-value">{{ data.old.tags?.join(', ') || '无' }}</span>
+                  </div>
+                </div>
+                <div v-else class="no-data">无原数据</div>
+              </div>
+              <div class="compare-arrow">→</div>
+              <div class="compare-column new-data">
+                <h4>新数据 {{ data.new ? `(${data.new.source})` : '(搜索失败)' }}</h4>
+                <div v-if="data.new" class="data-card">
+                  <div class="data-row" :class="{ 'changed': data.old?.title !== data.new.title }">
+                    <span class="data-label">书名:</span>
+                    <span class="data-value">{{ data.new.title }}</span>
+                  </div>
+                  <div class="data-row" :class="{ 'changed': data.old?.author !== data.new.author }">
+                    <span class="data-label">作者:</span>
+                    <span class="data-value">{{ data.new.author }}</span>
+                  </div>
+                  <div class="data-row" :class="{ 'changed': data.old?.publisher !== data.new.publisher }">
+                    <span class="data-label">出版社:</span>
+                    <span class="data-value">{{ data.new.publisher || '无' }}</span>
+                  </div>
+                  <div class="data-row" :class="{ 'changed': data.old?.publishYear !== data.new.publishYear }">
+                    <span class="data-label">出版年:</span>
+                    <span class="data-value">{{ data.new.publishYear || '无' }}</span>
+                  </div>
+                  <div class="data-row" :class="{ 'changed': data.old?.rating !== data.new.rating }">
+                    <span class="data-label">评分:</span>
+                    <span class="data-value">{{ data.new.rating || '无' }}</span>
+                  </div>
+                  <div class="data-row" :class="{ 'changed': data.old?.series !== data.new.series }">
+                    <span class="data-label">丛书:</span>
+                    <span class="data-value">{{ data.new.series || '无' }}</span>
+                  </div>
+                  <div class="data-row" :class="{ 'changed': JSON.stringify(data.old?.tags) !== JSON.stringify(data.new.tags) }">
+                    <span class="data-label">标签:</span>
+                    <span class="data-value">{{ data.new.tags?.join(', ') || '无' }}</span>
+                  </div>
+                </div>
+                <div v-else class="no-data error">搜索失败</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -221,8 +437,9 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useBookStore } from '@/store/book';
 import { bookService } from '@/services/book';
-import { searchBookByISBN } from '@/services/common/isbnApi';
+import { searchBookByISBN, searchBookByISBNWithSource } from '@/services/common/isbnApi';
 import type { BookSearchResult } from '@/services/common/isbnApi/types';
+import { API_CONFIGS } from '@/services/common/isbnApi/apiConfig';
 
 const router = useRouter();
 const route = useRoute();
@@ -236,6 +453,16 @@ const importResult = ref<any>(null);
 const currentProcessingBook = ref<any>(null);
 const newlyAddedIsbns = ref<string[]>([]); // 新添加的ISBN，用于高亮显示
 const showExitConfirmDialog = ref(false); // 是否显示退出确认弹窗
+
+const selectedIsbnItems = ref<string[]>([]); // 选中的ISBN项（用于更换书源）
+const showSourceSelector = ref(false); // 是否显示书源选择弹窗
+const selectedSource = ref<string>('dbr'); // 选中的书源
+const isReseearching = ref(false); // 是否正在重新搜索
+const reseearchProgress = ref({ current: 0, total: 0 }); // 重新搜索进度
+const showCompareView = ref(false); // 是否显示对比视图
+const compareData = ref<Map<string, { old: BookSearchResult | null; new: BookSearchResult | null }>>(new Map()); // 对比数据
+const lastUsedSource = ref<string>(localStorage.getItem('batch_scanner_last_source') || 'dbr'); // 记忆上次使用的书源
+const cancelReseearch = ref(false); // 是否取消重新搜索
 
 // ISBN列表
 interface IsbnItem {
@@ -259,36 +486,45 @@ const loadFromStorage = () => {
     if (saved) {
       const parsed = JSON.parse(saved);
       // 确保加载的数据包含书籍信息
-      isbnList.value = parsed.map(item => ({
-        ...item,
+      isbnList.value = parsed.map((item: IsbnItem) => {
         // 如果数据中没有书籍信息，尝试从缓存恢复
-        data: item.data || getBookFromCache(item.isbn)
-      }));
+        const data = item.data || getBookFromCache(item.isbn);
+        if (data) {
+          console.log(`📊 [BatchScanner.loadFromStorage] ISBN ${item.isbn} 恢复数据:`, {
+            rating: data.rating,
+            series: data.series,
+            tags: data.tags,
+            tagsCount: data.tags?.length || 0
+          });
+        }
+        return {
+          ...item,
+          data: data
+        };
+      });
       
       return true;
     }
-  } catch (e) {
+  } catch (e: unknown) {
+    console.error('📊 [BatchScanner.loadFromStorage] 加载失败:', e);
   }
   return false;
 };
 
-// 保存到本地存储
 const saveToStorage = () => {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(isbnList.value));
-  } catch (e) {
+  } catch (e: unknown) {
   }
 };
 
-// 清空本地存储
 const clearStorage = () => {
   try {
     localStorage.removeItem(STORAGE_KEY);
-  } catch (e) {
+  } catch (e: unknown) {
   }
 };
 
-// 书籍信息缓存相关方法
 const getBookFromCache = (isbn: string): BookSearchResult | null => {
   try {
     const cacheData = localStorage.getItem(BOOK_CACHE_KEY);
@@ -296,7 +532,7 @@ const getBookFromCache = (isbn: string): BookSearchResult | null => {
       const cache = JSON.parse(cacheData);
       return cache[isbn] || null;
     }
-  } catch (e) {
+  } catch (e: unknown) {
   }
   return null;
 };
@@ -307,14 +543,14 @@ const saveBookToCache = (isbn: string, bookData: BookSearchResult) => {
     const cache = cacheData ? JSON.parse(cacheData) : {};
     cache[isbn] = bookData;
     localStorage.setItem(BOOK_CACHE_KEY, JSON.stringify(cache));
-  } catch (e) {
+  } catch (e: unknown) {
   }
 };
 
 const clearBookCache = () => {
   try {
     localStorage.removeItem(BOOK_CACHE_KEY);
-  } catch (e) {
+  } catch (e: unknown) {
   }
 };
 
@@ -325,7 +561,7 @@ const hasCachedBooks = () => {
       const cache = JSON.parse(cacheData);
       return Object.keys(cache).length > 0;
     }
-  } catch (e) {
+  } catch (e: unknown) {
   }
   return false;
 };
@@ -335,10 +571,22 @@ const hasLoadedFromStorage = loadFromStorage();
 
 // 预览书籍列表
 const previewBooks = computed(() => {
-  return isbnList.value
+  const books = isbnList.value
     .filter(item => item.data !== null)
-    .map(item => item.data!)
+    .map(item => {
+      console.log(`📊 [previewBooks] ISBN ${item.isbn} 数据:`, {
+        rating: item.data?.rating,
+        series: item.data?.series,
+        tags: item.data?.tags,
+        tagsCount: item.data?.tags?.length || 0,
+        source: item.data?.source
+      });
+      return item.data!;
+    })
     .filter(book => book !== null);
+  
+  console.log(`📊 [previewBooks] 共 ${books.length} 本书籍预览`);
+  return books;
 });
 
 // 进度文本
@@ -433,7 +681,7 @@ const removeIsbn = (index: number) => {
           localStorage.setItem(BOOK_CACHE_KEY, JSON.stringify(cache));
         }
       }
-    } catch (e) {
+    } catch (e: unknown) {
     }
   }
 
@@ -470,6 +718,204 @@ const invertSelection = () => {
   selectedBooks.value = allIsbns.filter(isbn => !selectedBooks.value.includes(isbn));
 };
 
+const toggleIsbnSelection = (isbn: string) => {
+  const index = selectedIsbnItems.value.indexOf(isbn);
+  if (index > -1) {
+    selectedIsbnItems.value.splice(index, 1);
+  } else {
+    selectedIsbnItems.value.push(isbn);
+  }
+};
+
+const selectAllIsbnItems = () => {
+  selectedIsbnItems.value = isbnList.value.map(item => item.isbn);
+};
+
+const deselectAllIsbnItems = () => {
+  selectedIsbnItems.value = [];
+};
+
+const invertIsbnSelection = () => {
+  const allIsbns = isbnList.value.map(item => item.isbn);
+  selectedIsbnItems.value = allIsbns.filter(isbn => !selectedIsbnItems.value.includes(isbn));
+};
+
+const deleteSelectedIsbnItems = () => {
+  if (selectedIsbnItems.value.length === 0) return;
+  
+  if (!confirm(`确定要删除选中的 ${selectedIsbnItems.value.length} 个ISBN吗？`)) {
+    return;
+  }
+  
+  isbnList.value = isbnList.value.filter(item => !selectedIsbnItems.value.includes(item.isbn));
+  selectedIsbnItems.value = [];
+  saveToStorage();
+};
+
+const batchSearchSelected = async () => {
+  const itemsToSearch = selectedIsbnItems.value.length > 0 
+    ? isbnList.value.filter(item => selectedIsbnItems.value.includes(item.isbn) && !item.data)
+    : isbnList.value.filter(item => !item.data);
+  
+  if (itemsToSearch.length === 0) {
+    alert('所有选中的ISBN都已搜索完成');
+    return;
+  }
+  
+  isProcessing.value = true;
+  totalItems.value = itemsToSearch.length;
+  currentIndex.value = 0;
+  
+  for (let i = 0; i < itemsToSearch.length; i++) {
+    const item = itemsToSearch[i];
+    const index = isbnList.value.findIndex(i => i.isbn === item.isbn);
+    if (index === -1) continue;
+    
+    currentIndex.value++;
+    currentProcessingBook.value = item;
+    
+    await searchSingle(index);
+    
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  
+  isProcessing.value = false;
+  currentIndex.value = 0;
+  currentProcessingBook.value = null;
+  totalItems.value = 0;
+};
+
+const openSourceSelector = () => {
+  if (selectedBooks.value.length === 0) {
+    alert('请先选择要更换书源的书籍');
+    return;
+  }
+  selectedSource.value = lastUsedSource.value;
+  showSourceSelector.value = true;
+};
+
+const closeSourceSelector = () => {
+  showSourceSelector.value = false;
+};
+
+const saveLastUsedSource = (source: string) => {
+  lastUsedSource.value = source;
+  localStorage.setItem('batch_scanner_last_source', source);
+};
+
+const reSearchWithSource = async () => {
+  if (selectedBooks.value.length === 0) return;
+  
+  showSourceSelector.value = false;
+  isReseearching.value = true;
+  cancelReseearch.value = false;
+  reseearchProgress.value = { current: 0, total: selectedBooks.value.length };
+  
+  saveLastUsedSource(selectedSource.value);
+  compareData.value.clear();
+  
+  const failedItems: string[] = [];
+  
+  for (let i = 0; i < selectedBooks.value.length; i++) {
+    if (cancelReseearch.value) {
+      break;
+    }
+    
+    const isbn = selectedBooks.value[i];
+    const item = isbnList.value.find(i => i.isbn === isbn);
+    
+    if (!item) continue;
+    
+    reseearchProgress.value.current = i + 1;
+    currentProcessingBook.value = { title: item.data?.title || isbn, isbn };
+    
+    const oldData = item.data ? { ...item.data } : null;
+    
+    try {
+      const result = await searchBookByISBNWithSource(isbn, selectedSource.value);
+      
+      if (result) {
+        compareData.value.set(isbn, { old: oldData, new: result });
+        item.data = result;
+        item.error = null;
+        saveBookToCache(isbn, result);
+      } else {
+        failedItems.push(isbn);
+        compareData.value.set(isbn, { old: oldData, new: null });
+      }
+    } catch (error) {
+      console.error(`重新搜索失败 [${isbn}]:`, error);
+      failedItems.push(isbn);
+      compareData.value.set(isbn, { old: oldData, new: null });
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, 300));
+  }
+  
+  isReseearching.value = false;
+  currentProcessingBook.value = null;
+  
+  if (compareData.value.size > 0 && !cancelReseearch.value) {
+    showCompareView.value = true;
+  }
+  
+  if (failedItems.length > 0 && !cancelReseearch.value) {
+    alert(`以下ISBN搜索失败: ${failedItems.join(', ')}`);
+  }
+};
+
+const closeCompareView = () => {
+  showCompareView.value = false;
+  compareData.value.clear();
+};
+
+const applyNewData = (isbn: string) => {
+  const data = compareData.value.get(isbn);
+  if (data?.new) {
+    const item = isbnList.value.find(i => i.isbn === isbn);
+    if (item) {
+      item.data = data.new;
+      saveBookToCache(isbn, data.new);
+    }
+  }
+};
+
+const applyAllNewData = () => {
+  compareData.value.forEach((data, isbn) => {
+    if (data.new) {
+      const item = isbnList.value.find(i => i.isbn === isbn);
+      if (item) {
+        item.data = data.new;
+        saveBookToCache(isbn, data.new);
+      }
+    }
+  });
+  closeCompareView();
+};
+
+const retryFailedSearch = async (isbn: string) => {
+  const item = isbnList.value.find(i => i.isbn === isbn);
+  if (!item) return;
+  
+  item.searching = true;
+  item.error = null;
+  
+  try {
+    const result = await searchBookByISBNWithSource(isbn, selectedSource.value);
+    if (result) {
+      item.data = result;
+      saveBookToCache(isbn, result);
+    } else {
+      item.error = '未找到书籍信息';
+    }
+  } catch (error) {
+    console.error(`重试搜索失败 [${isbn}]:`, error);
+    item.error = '搜索失败，请重试';
+  } finally {
+    item.searching = false;
+  }
+};
+
 // 搜索单个ISBN
 const searchSingle = async (index: number) => {
   const item = isbnList.value[index];
@@ -478,6 +924,12 @@ const searchSingle = async (index: number) => {
   // 先检查缓存
   const cachedBook = getBookFromCache(item.isbn);
   if (cachedBook) {
+    console.log(`📊 [BatchScanner] ISBN ${item.isbn} 从缓存获取数据:`, {
+      rating: cachedBook.rating,
+      series: cachedBook.series,
+      tags: cachedBook.tags,
+      tagsCount: cachedBook.tags?.length || 0
+    });
     item.data = cachedBook;
     item.error = null;
     return;
@@ -491,13 +943,24 @@ const searchSingle = async (index: number) => {
     // 使用豆瓣和DBR作为数据源
     const results = await searchBookByISBN(item.isbn);
 
+    console.log(`📊 [BatchScanner] ISBN ${item.isbn} 搜索结果:`, JSON.stringify(results, null, 2));
+
     // 优先使用DBR，然后是豆瓣
     const bestResult = results.dbr || results.douban || results.isbnWork || results.tanshu;
 
     if (bestResult) {
+      console.log(`📊 [BatchScanner] ISBN ${item.isbn} 最佳结果详情:`, {
+        source: bestResult.source,
+        title: bestResult.title,
+        rating: bestResult.rating,
+        series: bestResult.series,
+        tags: bestResult.tags,
+        tagsCount: bestResult.tags?.length || 0
+      });
       item.data = bestResult;
       // 立即存储到缓存
       saveBookToCache(item.isbn, bestResult);
+      console.log(`📊 [BatchScanner] ISBN ${item.isbn} 已缓存`);
     } else {
       item.error = '未找到书籍信息';
     }
@@ -563,9 +1026,23 @@ const importAll = async () => {
     currentIndex.value++;
     currentProcessingBook.value = bookData;
 
+    console.log(`📊 [BatchScanner.importAll] 导入书籍 ${i + 1}/${booksToImport.length}:`, {
+      isbn: bookData.isbn,
+      title: bookData.title,
+      rating: bookData.rating,
+      series: bookData.series,
+      tags: bookData.tags,
+      source: bookData.source
+    });
+
     // 检查是否从缓存获取
     const fromCache = getBookFromCache(bookData.isbn);
     if (fromCache) {
+      console.log(`📊 [BatchScanner.importAll] 从缓存获取的数据:`, {
+        rating: fromCache.rating,
+        series: fromCache.series,
+        tags: fromCache.tags
+      });
     }
 
     try {
@@ -576,18 +1053,19 @@ const importAll = async () => {
         publisher: bookData.publisher || '',
         publishYear: bookData.publishYear,
         pages: bookData.pages,
-        binding: bookData.binding || '',
+        binding1: bookData.binding1 || 0,
+        binding2: bookData.binding2 || 0,
+        book_type: bookData.book_type || 1,
         coverUrl: bookData.coverUrl || '',
         purchaseDate: undefined,
         purchasePrice: undefined,
-        // 去除"元"等非数字字符后再转换
         standardPrice: bookData.price ? parseFloat(bookData.price.replace(/[^\d.]/g, '')) : undefined,
         readStatus: '未读' as const,
         readCompleteDate: undefined,
-        rating: undefined,
-        tags: [],
+        rating: bookData.rating,
+        tags: bookData.tags?.filter((t): t is string => typeof t === 'string') || [],
         groups: [],
-        series: undefined,
+        series: bookData.series || '',
         note: '',
         description: bookData.description || ''
       });
@@ -699,7 +1177,7 @@ const processRouteIsbn = () => {
   if (typeof isbnParam === 'string') {
     isbns = isbnParam.split(',').map(s => s.trim()).filter(Boolean);
   } else if (Array.isArray(isbnParam)) {
-    isbns = isbnParam.map(s => s?.trim()).filter(Boolean);
+    isbns = isbnParam.map(s => s?.trim()).filter((s): s is string => Boolean(s));
   }
   // 记录新添加的ISBN
   newlyAddedIsbns.value = isbns;
@@ -1015,6 +1493,30 @@ onUnmounted(() => {
 
 .selection-btn:hover:not(:disabled) {
   background-color: rgba(76, 175, 80, 0.1);
+}
+
+.selection-btn.small {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.selection-btn.danger {
+  color: #f44336;
+  border-color: #f44336;
+}
+
+.selection-btn.danger:hover:not(:disabled) {
+  background-color: #ffebee;
+}
+
+.selection-btn.primary {
+  background-color: #4CAF50;
+  color: #fff;
+  border-color: #4CAF50;
+}
+
+.selection-btn.primary:hover:not(:disabled) {
+  background-color: #45a049;
 }
 
 .selection-btn:disabled {
@@ -1559,6 +2061,435 @@ onUnmounted(() => {
 
   .import-all-btn {
     width: 100%;
+  }
+}
+
+/* ISBN多选相关样式 */
+.isbn-checkbox {
+  display: flex;
+  align-items: center;
+  padding-right: 12px;
+}
+
+.isbn-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.isbn-item.selected {
+  background-color: #e3f2fd;
+  border-left-color: #2196F3;
+}
+
+.isbn-selection-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background-color: rgba(33, 150, 243, 0.1);
+  border-radius: 8px;
+}
+
+.selection-btn.small {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.selection-hint {
+  font-size: 12px;
+  color: var(--text-hint, #999);
+  margin-left: auto;
+}
+
+.source-indicator {
+  font-size: 11px;
+  color: #FF6B35;
+  background-color: rgba(255, 107, 53, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  margin-top: 4px;
+  display: inline-block;
+}
+
+.change-source-btn {
+  padding: 8px 16px;
+  background-color: #FF6B35;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.change-source-btn:hover:not(:disabled) {
+  background-color: #e55a2b;
+}
+
+.change-source-btn:disabled {
+  background-color: var(--text-disabled, #ccc);
+  cursor: not-allowed;
+}
+
+.cancel-btn {
+  margin-top: 12px;
+  padding: 8px 24px;
+  background-color: #f44336;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  width: 100%;
+}
+
+.cancel-btn:hover {
+  background-color: #d32f2f;
+}
+
+/* 书源选择弹窗 */
+.source-selector-dialog {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  animation: fadeIn 0.2s ease;
+}
+
+.source-dialog-content {
+  background-color: #fff;
+  padding: 32px;
+  border-radius: 16px;
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  animation: slideUp 0.3s ease;
+}
+
+.source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 20px 0;
+}
+
+.source-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border: 2px solid var(--border-light, #e0e0e0);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.source-option:hover {
+  border-color: #2196F3;
+  background-color: rgba(33, 150, 243, 0.05);
+}
+
+.source-option.selected {
+  border-color: #2196F3;
+  background-color: rgba(33, 150, 243, 0.1);
+}
+
+.source-radio {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.source-radio input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.source-radio label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.source-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary, #333);
+}
+
+.source-desc {
+  font-size: 12px;
+  color: var(--text-secondary, #666);
+}
+
+.source-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.badge.free {
+  background-color: #e8f5e9;
+  color: #4CAF50;
+}
+
+.badge.paid {
+  background-color: #fff3e0;
+  color: #FF9800;
+}
+
+.badge.recent {
+  background-color: #e3f2fd;
+  color: #2196F3;
+}
+
+/* 对比视图弹窗 */
+.compare-view-dialog {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  animation: fadeIn 0.2s ease;
+}
+
+.compare-dialog-content {
+  background-color: #fff;
+  border-radius: 16px;
+  max-width: 900px;
+  width: 95%;
+  max-height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  animation: slideUp 0.3s ease;
+}
+
+.compare-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border-light, #e0e0e0);
+}
+
+.compare-header .dialog-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.close-icon {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: none;
+  font-size: 20px;
+  color: var(--text-secondary, #666);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background-color 0.2s ease;
+}
+
+.close-icon:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.compare-actions {
+  display: flex;
+  gap: 12px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border-light, #e0e0e0);
+}
+
+.apply-all-btn {
+  padding: 10px 20px;
+  background-color: #4CAF50;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.apply-all-btn:hover {
+  background-color: #45a049;
+}
+
+.compare-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.compare-item {
+  margin-bottom: 20px;
+  padding: 16px;
+  border: 1px solid var(--border-light, #e0e0e0);
+  border-radius: 12px;
+}
+
+.compare-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.compare-isbn {
+  font-family: monospace;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #333);
+}
+
+.compare-item-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.apply-btn {
+  padding: 6px 12px;
+  background-color: #4CAF50;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.apply-btn:hover {
+  background-color: #45a049;
+}
+
+.retry-btn {
+  padding: 6px 12px;
+  background-color: #2196F3;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.retry-btn:hover {
+  background-color: #0b7dda;
+}
+
+.compare-content {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.compare-column {
+  background-color: var(--bg-primary, #f5f5f5);
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.compare-column h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #333);
+}
+
+.compare-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: var(--text-hint, #999);
+}
+
+.data-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.data-row {
+  display: flex;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.data-row.changed {
+  background-color: rgba(255, 193, 7, 0.2);
+  padding: 4px;
+  border-radius: 4px;
+  margin: -4px;
+  padding: 4px;
+}
+
+.data-label {
+  font-weight: 500;
+  color: var(--text-secondary, #666);
+  min-width: 60px;
+}
+
+.data-value {
+  color: var(--text-primary, #333);
+  flex: 1;
+}
+
+.no-data {
+  text-align: center;
+  padding: 20px;
+  color: var(--text-hint, #999);
+  font-size: 14px;
+}
+
+.no-data.error {
+  color: #f44336;
+}
+
+@media (max-width: 768px) {
+  .compare-content {
+    grid-template-columns: 1fr;
+  }
+  
+  .compare-arrow {
+    transform: rotate(90deg);
+    justify-content: flex-start;
+    padding-left: 20px;
+  }
+  
+  .compare-dialog-content {
+    max-height: 90vh;
   }
 }
 </style>

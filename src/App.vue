@@ -157,9 +157,8 @@ onMounted(async () => {
 // 检测数据库状态
 const checkDatabaseStatus = async () => {
   try {
-    // 如果已经在配置页面，不显示弹窗，避免无限循环
-    if (route.path === '/config' || route.path.startsWith('/config')) {
-
+    const currentPath = window.location.pathname;
+    if (currentPath === '/config' || currentPath.startsWith('/config')) {
       databaseChecked.value = true;
       return;
     }
@@ -170,20 +169,14 @@ const checkDatabaseStatus = async () => {
     if (result.success) {
       const { calibre, talebook } = result.data;
       
-      // 如果 Calibre 或 Talebook 数据库无效，显示弹窗并跳转到配置页面
       if (!calibre.valid || !talebook.valid) {
-
-        // 显示弹窗
         showDatabaseModal.value = true;
-        // 跳转到配置页面
-        router.push('/config?tab=sync-status');
       }
     }
     
     databaseChecked.value = true;
   } catch (error) {
     console.error('检测数据库状态失败:', error);
-    // 即使检测失败，也标记为已检查，避免重复检测
     databaseChecked.value = true;
   }
 };

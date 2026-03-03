@@ -1,68 +1,125 @@
-version: '3.8'
+# QC Booklog Docker Compose 配置
+# 完整的容器化部署方案
 
 services:
-  # 前端服务
+  # 前端服务 - Nginx
   frontend:
     build:
       context: .
       dockerfile: Dockerfile
+    image: crpi-bpk9dy6331fn5ymt.cn-hangzhou.personal.cr.aliyuncs.com/unripora/qc-booklog-frontend:20260302
     container_name: qc-booklog-frontend
     ports:
-      - "80:80"
+      - "${FRONTEND_PORT:-80}:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - qc-booklog-network
     restart: unless-stopped
     environment:
       - NODE_ENV=production
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-  # 后端服务
+  # 后端服务 - Node.js
   backend:
     build:
-      context: .
-      dockerfile: server/Dockerfile
+      context: ./server
+      dockerfile: Dockerfile
+    image: crpi-bpk9dy6331fn5ymt.cn-hangzhou.personal.cr.aliyuncs.com/unripora/qc-booklog-backend:20260302
     container_name: qc-booklog-backend
-    ports:
-      - "7401:7401"
-    volumes:
-      # 挂载Calibre数据库目录
-      - ${CALIBRE_DB_PATH:-D:/anz/calibre}:/app/calibre:ro
-      # 挂载应用数据目录
-      - qc-booklog-data:/app/data
-      # 挂载日志目录
-      - qc-booklog-logs:/app/data/logs
+    user: root
     networks:
       - qc-booklog-network
+    ports:
+      - "${BACKEND_PORT:-7401}:7401"
+    volumes:
+      # ========== 外部数据库（读写同步）==========
+      # Calibre数据库目录（包含书籍和封面）
+      - ./moni/book:/app/calibre
+      # Talebook数据库目录
+      - ./moni:/app/talebook
+      # ========== 应用自有数据（读写）==========
+      # 应用数据持久化（包含qc-booklog.db）
+      - qc-booklog-data:/app/data
+      # 日志持久化
+      - qc-booklog-logs:/app/data/logs
+      # 备份目录
+      - qc-booklog-backup:/app/data/backup
     restart: unless-stopped
     environment:
+      # 基础配置
       - NODE_ENV=production
       - PORT=7401
-      # Calibre数据库路径（容器内路径）
+      # 数据库路径配置（容器内路径）
       - CALIBRE_DB_PATH=/app/calibre/metadata.db
-      # Talebook数据库路径
-      - TALEBOOK_DB_PATH=/app/data/calibre-webserver.db
+      - TALEBOOK_DB_PATH=/app/talebook/calibre-webserver.db
+      - QCBOOKLOG_DB_PATH=/app/data/qc-booklog.db
+      # 日志配置
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOG_PATH=/app/data/logs
+      # API密钥配置
+      - TANSHU_API_KEY=bc621345d6f1908f5fff0c062708ed1d
+      - DOUBAN_API_KEY=0ac44ae016490db2204ce0a042db2916
+      - ISBN_WORK_API_KEY=ae1718d4587744b0b79f940fbef69e77
+      # 文件上传配置
+      - MAX_FILE_SIZE=${MAX_FILE_SIZE:-20}
+      # CORS配置
+      - CORS_ORIGIN=${CORS_ORIGIN:-*}
+      # 同步调度配置
+      - SYNC_INTERVAL=${SYNC_INTERVAL:-300000}
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:7401/api/books', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      test: ["CMD", "curl", "-f", "http://localhost:7401/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
 
 # 网络定义
 networks:
   qc-booklog-network:
     driver: bridge
+    name: qc-booklog-network
 
 # 数据卷定义
 volumes:
   qc-booklog-data:
     driver: local
+    name: qc-booklog-data
   qc-booklog-logs:
     driver: local
+    name: qc-booklog-logs
+  qc-booklog-backup:
+    driver: local
+    name: qc-booklog-backup

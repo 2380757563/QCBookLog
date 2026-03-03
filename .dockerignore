@@ -1,0 +1,68 @@
+# Dependencies
+node_modules
+server/node_modules
+
+# Build output
+dist
+server/dist
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Data files
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Backup files
+backup_*.db
+backup_*.json
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Test files
+*.test.js
+*.spec.js
+test_*.js
+
+# Temporary files
+*.tmp
+*.temp
+.cache
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Other
+.trae/
+作业/
+*.bat
+*.ps1
+*.sql

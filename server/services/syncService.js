@@ -679,8 +679,8 @@ class SyncService {
             // 不存在，添加到Talebook数据库
             // items表存储统计信息
             databaseService.talebookDb.prepare(`
-              INSERT INTO items (book_id, book_type, create_time)
-              VALUES (?, ?, ?)
+              INSERT INTO items (book_id, count_guest, count_visit, count_download, website, sole, book_type, book_count, create_time)
+              VALUES (?, 0, 0, 0, '', 0, ?, 1, ?)
             `).run(
               book.id,
               book.book_type || 1,
@@ -722,8 +722,8 @@ class SyncService {
           // 批量删除items表中的记录（使用book_id作为主键）
           const deleteItemsStmt = databaseService.talebookDb.prepare(`DELETE FROM items WHERE book_id = ?`);
 
-          // 批量删除qc_book_groups表中的关联记录
-          const deleteGroupsStmt = databaseService.talebookDb.prepare(`DELETE FROM qc_book_groups WHERE book_id = ?`);
+          // 批量删除qc_book_groups表中的关联记录（在qcBooklogDb中）
+          const deleteGroupsStmt = databaseService.qcBooklogDb ? databaseService.qcBooklogDb.prepare(`DELETE FROM qc_book_groups WHERE book_id = ?`) : null;
 
           // 批量删除reading_state表中的关联记录
           const deleteReadingStateStmt = databaseService.talebookDb.prepare(`DELETE FROM reading_state WHERE book_id = ?`);
@@ -735,10 +735,16 @@ class SyncService {
               const itemsResult = deleteItemsStmt.run(id);
               console.log(`🗑️ 删除Talebook items表记录: book_id=${id}, 影响行数: ${itemsResult.changes}`);
               
-              // 删除关联的分组记录
-              const groupsResult = deleteGroupsStmt.run(id);
-              if (groupsResult.changes > 0) {
-                console.log(`🗑️ 删除Talebook qc_book_groups表记录: book_id=${id}, 影响行数: ${groupsResult.changes}`);
+              // 删除关联的分组记录（在qcBooklogDb中）
+              if (deleteGroupsStmt) {
+                try {
+                  const groupsResult = deleteGroupsStmt.run(id);
+                  if (groupsResult.changes > 0) {
+                    console.log(`🗑️ 删除QCBookLog qc_book_groups表记录: book_id=${id}, 影响行数: ${groupsResult.changes}`);
+                  }
+                } catch (e) {
+                  console.log(`⚠️ 删除qc_book_groups表记录失败: ${e.message}`);
+                }
               }
               
               // 删除关联的阅读状态记录

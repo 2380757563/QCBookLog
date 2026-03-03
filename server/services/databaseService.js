@@ -6,7 +6,6 @@
 import path from 'path';
 import crypto from 'crypto';
 import { createRequire } from 'module';
-import { readConfigSync } from './dataService.js';
 import fsSync from 'fs';
 
 // 使用同步 require 导入 better-sqlite3
@@ -33,30 +32,50 @@ const getProjectRoot = () => {
   return currentDir;
 };
 
+// 将相对路径转换为绝对路径
+const resolveDbPath = (dbPath) => {
+  if (!dbPath) return dbPath;
+  
+  // 统一路径分隔符为正斜杠（兼容 Linux/Docker 环境）
+  let normalizedPath = dbPath.replace(/\\/g, '/');
+  
+  // 检查是否为绝对路径（支持 Linux 风格 /path 和 Windows 风格 C:/path）
+  if (normalizedPath.startsWith('/') || /^[A-Za-z]:/.test(normalizedPath)) {
+    return normalizedPath;
+  }
+  
+  // 相对路径基于项目根目录解析
+  const projectRoot = getProjectRoot();
+  return path.resolve(projectRoot, normalizedPath).replace(/\\/g, '/');
+};
+
 // 默认数据库路径（可被环境变量覆盖）
 let CALIBRE_DB_PATH = path.join(getProjectRoot(), 'data/calibre/metadata.db');
 let TALEBOOK_DB_PATH = path.join(getProjectRoot(), 'data/talebook/calibre-webserver.db');
+let QC_BOOKLOG_DB_PATH = path.join(getProjectRoot(), 'data/qc_booklog.db');
 
-// 优先级：1. 配置文件 2. 环境变量 3. 默认路径
-const config = readConfigSync();
-if (config.calibrePath) {
-  CALIBRE_DB_PATH = config.calibrePath;
-  console.log('✅ 使用配置文件中的 Calibre 数据库:', CALIBRE_DB_PATH);
-} else if (process.env.CALIBRE_DB_PATH) {
-  CALIBRE_DB_PATH = process.env.CALIBRE_DB_PATH;
+// Calibre 数据库路径 - 优先使用环境变量
+if (process.env.CALIBRE_DB_PATH) {
+  CALIBRE_DB_PATH = resolveDbPath(process.env.CALIBRE_DB_PATH);
   console.log('✅ 使用环境变量指定的 Calibre 数据库:', CALIBRE_DB_PATH);
 } else {
   console.log('ℹ️ 使用默认 Calibre 数据库路径:', CALIBRE_DB_PATH);
 }
 
-if (config.talebookPath) {
-  TALEBOOK_DB_PATH = config.talebookPath;
-  console.log('✅ 使用配置文件中的 Talebook 数据库:', TALEBOOK_DB_PATH);
-} else if (process.env.TALEBOOK_DB_PATH) {
-  TALEBOOK_DB_PATH = process.env.TALEBOOK_DB_PATH;
+// Talebook 数据库路径 - 优先使用环境变量
+if (process.env.TALEBOOK_DB_PATH) {
+  TALEBOOK_DB_PATH = resolveDbPath(process.env.TALEBOOK_DB_PATH);
   console.log('✅ 使用环境变量指定的 Talebook 数据库:', TALEBOOK_DB_PATH);
 } else {
   console.log('ℹ️ 使用默认 Talebook 数据库路径:', TALEBOOK_DB_PATH);
+}
+
+// QCBookLog 数据库路径 - 优先使用环境变量
+if (process.env.QC_BOOKLOG_DB_PATH) {
+  QC_BOOKLOG_DB_PATH = resolveDbPath(process.env.QC_BOOKLOG_DB_PATH);
+  console.log('✅ 使用环境变量指定的 QCBookLog 数据库:', QC_BOOKLOG_DB_PATH);
+} else {
+  console.log('ℹ️ 使用默认 QCBookLog 数据库路径:', QC_BOOKLOG_DB_PATH);
 }
 
 /**
@@ -66,6 +85,7 @@ class DatabaseService {
   constructor() {
     this.calibreDb = null;
     this.talebookDb = null;
+    this.qcBooklogDb = null;
     this.initDatabases();
   }
 
@@ -75,6 +95,7 @@ class DatabaseService {
   initDatabases() {
     this.initCalibreDatabase();
     this.initTalebookDatabase();
+    this.initQcBooklogDatabase();
     // 初始化后进行完整性检查
     this.checkDatabaseIntegrity();
   }
@@ -168,8 +189,15 @@ class DatabaseService {
    * 确保 qc_bookdata 表有所有必需的列
    */
   ensureQcBookdataColumns() {
+    // 使用 qcBooklogDb 而不是 talebookDb，因为 qc_bookdata 表在 qc_booklog.db 中
+    const db = this.qcBooklogDb || this.talebookDb;
+    if (!db) {
+      console.warn('⚠️ 没有可用的数据库连接，跳过 qc_bookdata 列检查');
+      return;
+    }
+    
     try {
-      const columns = this.talebookDb.prepare('PRAGMA table_info(qc_bookdata)').all();
+      const columns = db.prepare('PRAGMA table_info(qc_bookdata)').all();
       const columnNames = new Set(columns.map(c => c.name));
 
       const requiredFields = [
@@ -185,7 +213,7 @@ class DatabaseService {
       for (const field of requiredFields) {
         if (!columnNames.has(field.name)) {
           try {
-            this.talebookDb.prepare(`ALTER TABLE qc_bookdata ADD COLUMN ${field.sql}`).run();
+            db.prepare(`ALTER TABLE qc_bookdata ADD COLUMN ${field.sql}`).run();
             console.log(`✅ 添加 ${field.name} 列到 qc_bookdata 表`);
           } catch (error) {
             if (!error.message.includes('duplicate column name')) {
@@ -196,6 +224,41 @@ class DatabaseService {
       }
     } catch (error) {
       console.error('❌ 检查/添加 qc_bookdata 列失败:', error.message);
+    }
+  }
+
+  /**
+   * 确保 qc_users 表有所有必需的列
+   */
+  ensureQcUsersColumns() {
+    const db = this.qcBooklogDb;
+    if (!db) {
+      console.warn('⚠️ 没有可用的数据库连接，跳过 qc_users 列检查');
+      return;
+    }
+    
+    try {
+      const columns = db.prepare('PRAGMA table_info(qc_users)').all();
+      const columnNames = new Set(columns.map(c => c.name));
+
+      const requiredFields = [
+        { name: 'note', sql: 'note TEXT' }
+      ];
+
+      for (const field of requiredFields) {
+        if (!columnNames.has(field.name)) {
+          try {
+            db.prepare(`ALTER TABLE qc_users ADD COLUMN ${field.sql}`).run();
+            console.log(`✅ 添加 ${field.name} 列到 qc_users 表`);
+          } catch (error) {
+            if (!error.message.includes('duplicate column name')) {
+              console.error(`❌ 添加 ${field.name} 列失败:`, error.message);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('❌ 检查/添加 qc_users 列失败:', error.message);
     }
   }
 
@@ -302,6 +365,585 @@ class DatabaseService {
       console.error('❌ Talebook 数据库连接失败:', error.message);
       console.error('❌ 错误堆栈:', error.stack);
       this.talebookDb = null;
+    }
+  }
+
+  /**
+   * 初始化 QCBookLog 数据库连接
+   */
+  initQcBooklogDatabase() {
+    try {
+      console.log('🔄 初始化 QCBookLog 数据库连接...');
+      console.log('🔄 数据库路径:', QC_BOOKLOG_DB_PATH);
+      
+      if (!Database) {
+        console.warn('⚠️ 数据库服务不可用，QCBookLog 功能将不可用');
+        return;
+      }
+
+      // 确保数据库目录存在
+      const dbDir = path.dirname(QC_BOOKLOG_DB_PATH);
+      if (!fsSync.existsSync(dbDir)) {
+        console.log('📂 创建数据库目录:', dbDir);
+        fsSync.mkdirSync(dbDir, { recursive: true });
+        console.log('✅ 数据库目录创建成功');
+      }
+
+      // 检查数据库文件是否存在，不存在则自动创建
+      let isNewDatabase = false;
+      if (!fsSync.existsSync(QC_BOOKLOG_DB_PATH)) {
+        console.log('📝 QCBookLog 数据库文件不存在，自动创建...');
+        isNewDatabase = true;
+      }
+
+      this.qcBooklogDb = new Database(QC_BOOKLOG_DB_PATH);
+      console.log('✅ QCBookLog 数据库对象创建成功');
+      this.qcBooklogDb.pragma('journal_mode = WAL');
+      console.log('✅ QCBookLog WAL 模式已启用');
+      this.qcBooklogDb.pragma('foreign_keys = ON');
+      console.log('✅ QCBookLog 外键约束已启用');
+
+      // 检查是否需要创建表结构（检查 qc_bookdata 表是否存在）
+      console.log('🔍 检查 QCBookLog 数据库表结构...');
+      const tables = this.qcBooklogDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='qc_bookdata'").get();
+      console.log(`  查询结果: ${JSON.stringify(tables)}`);
+      
+      if (!tables) {
+        console.log('📝 QCBookLog 数据库表结构不存在，自动创建...');
+        this.createQcBooklogTables();
+        console.log('✅ QCBookLog 数据库表结构创建完成');
+      } else {
+        console.log('✅ QCBookLog 数据库表结构已存在，检查并修复表结构...');
+        this.fixQcBooklogTables();
+      }
+
+      // 确保 qc_users 表有所有必需的列
+      this.ensureQcUsersColumns();
+
+      console.log('✅ QCBookLog 数据库连接成功:', QC_BOOKLOG_DB_PATH);
+      console.log('✅ QCBookLog 数据库可访问:', this.isQcBooklogAvailable());
+    } catch (error) {
+      console.error('❌ QCBookLog 数据库连接失败:', error.message);
+      console.error('❌ 错误堆栈:', error.stack);
+      this.qcBooklogDb = null;
+    }
+  }
+
+  /**
+   * 修复 QCBookLog 数据库表结构
+   */
+  fixQcBooklogTables() {
+    if (!this.qcBooklogDb) {
+      console.error('❌ 数据库未连接，无法修复表结构');
+      return;
+    }
+
+    try {
+      console.log('🔧 检查并修复 qc_reading_records 表...');
+      const recordsColumns = this.qcBooklogDb.prepare('PRAGMA table_info(qc_reading_records)').all();
+      const recordsColumnNames = recordsColumns.map(c => c.name);
+      
+      const recordsFieldsToAdd = [
+        { name: 'user_id', sql: 'ALTER TABLE qc_reading_records ADD COLUMN user_id INTEGER DEFAULT 0' },
+        { name: 'reader_id', sql: 'ALTER TABLE qc_reading_records ADD COLUMN reader_id INTEGER DEFAULT 0' },
+        { name: 'start_time', sql: 'ALTER TABLE qc_reading_records ADD COLUMN start_time DATETIME' },
+        { name: 'end_time', sql: 'ALTER TABLE qc_reading_records ADD COLUMN end_time DATETIME' },
+        { name: 'start_page', sql: 'ALTER TABLE qc_reading_records ADD COLUMN start_page INTEGER DEFAULT 0' },
+        { name: 'end_page', sql: 'ALTER TABLE qc_reading_records ADD COLUMN end_page INTEGER DEFAULT 0' },
+        { name: 'pages_read', sql: 'ALTER TABLE qc_reading_records ADD COLUMN pages_read INTEGER DEFAULT 0' },
+        { name: 'notes', sql: 'ALTER TABLE qc_reading_records ADD COLUMN notes TEXT' },
+        { name: 'created_at', sql: 'ALTER TABLE qc_reading_records ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP' }
+      ];
+      
+      for (const field of recordsFieldsToAdd) {
+        if (!recordsColumnNames.includes(field.name)) {
+          try {
+            this.qcBooklogDb.exec(field.sql);
+            console.log(`  ✅ 添加字段: ${field.name}`);
+          } catch (e) {
+            if (!e.message.includes('duplicate column')) {
+              console.warn(`  ⚠️ 添加字段 ${field.name} 失败:`, e.message);
+            }
+          }
+        }
+      }
+
+      console.log('🔧 检查并修复 qc_daily_reading_stats 表...');
+      const statsColumns = this.qcBooklogDb.prepare('PRAGMA table_info(qc_daily_reading_stats)').all();
+      const statsColumnNames = statsColumns.map(c => c.name);
+      
+      const statsFieldsToAdd = [
+        { name: 'user_id', sql: 'ALTER TABLE qc_daily_reading_stats ADD COLUMN user_id INTEGER DEFAULT 0' },
+        { name: 'reader_id', sql: 'ALTER TABLE qc_daily_reading_stats ADD COLUMN reader_id INTEGER DEFAULT 0' },
+        { name: 'stat_date', sql: 'ALTER TABLE qc_daily_reading_stats ADD COLUMN stat_date DATE' },
+        { name: 'date', sql: 'ALTER TABLE qc_daily_reading_stats ADD COLUMN date DATE' },
+        { name: 'total_reading_time', sql: 'ALTER TABLE qc_daily_reading_stats ADD COLUMN total_reading_time INTEGER DEFAULT 0' },
+        { name: 'total_time', sql: 'ALTER TABLE qc_daily_reading_stats ADD COLUMN total_time INTEGER DEFAULT 0' },
+        { name: 'total_pages_read', sql: 'ALTER TABLE qc_daily_reading_stats ADD COLUMN total_pages_read INTEGER DEFAULT 0' },
+        { name: 'total_pages', sql: 'ALTER TABLE qc_daily_reading_stats ADD COLUMN total_pages INTEGER DEFAULT 0' },
+        { name: 'books_read_count', sql: 'ALTER TABLE qc_daily_reading_stats ADD COLUMN books_read_count INTEGER DEFAULT 0' },
+        { name: 'total_books', sql: 'ALTER TABLE qc_daily_reading_stats ADD COLUMN total_books INTEGER DEFAULT 0' }
+      ];
+      
+      for (const field of statsFieldsToAdd) {
+        if (!statsColumnNames.includes(field.name)) {
+          try {
+            this.qcBooklogDb.exec(field.sql);
+            console.log(`  ✅ 添加字段: ${field.name}`);
+          } catch (e) {
+            if (!e.message.includes('duplicate column')) {
+              console.warn(`  ⚠️ 添加字段 ${field.name} 失败:`, e.message);
+            }
+          }
+        }
+      }
+
+      console.log('🔧 检查并修复 qc_reading_goals 表...');
+      const goalsColumns = this.qcBooklogDb.prepare('PRAGMA table_info(qc_reading_goals)').all();
+      const goalsColumnNames = goalsColumns.map(c => c.name);
+      
+      const goalsFieldsToAdd = [
+        { name: 'user_id', sql: 'ALTER TABLE qc_reading_goals ADD COLUMN user_id INTEGER DEFAULT 0' },
+        { name: 'reader_id', sql: 'ALTER TABLE qc_reading_goals ADD COLUMN reader_id INTEGER DEFAULT 0' },
+        { name: 'year', sql: 'ALTER TABLE qc_reading_goals ADD COLUMN year INTEGER' },
+        { name: 'goal_type', sql: "ALTER TABLE qc_reading_goals ADD COLUMN goal_type VARCHAR(20) DEFAULT 'yearly'" },
+        { name: 'target', sql: 'ALTER TABLE qc_reading_goals ADD COLUMN target INTEGER DEFAULT 0' },
+        { name: 'target_value', sql: 'ALTER TABLE qc_reading_goals ADD COLUMN target_value INTEGER DEFAULT 0' },
+        { name: 'completed', sql: 'ALTER TABLE qc_reading_goals ADD COLUMN completed INTEGER DEFAULT 0' },
+        { name: 'current_value', sql: 'ALTER TABLE qc_reading_goals ADD COLUMN current_value INTEGER DEFAULT 0' },
+        { name: 'start_date', sql: 'ALTER TABLE qc_reading_goals ADD COLUMN start_date DATE' },
+        { name: 'end_date', sql: 'ALTER TABLE qc_reading_goals ADD COLUMN end_date DATE' },
+        { name: 'status', sql: "ALTER TABLE qc_reading_goals ADD COLUMN status VARCHAR(20) DEFAULT 'active'" }
+      ];
+      
+      for (const field of goalsFieldsToAdd) {
+        if (!goalsColumnNames.includes(field.name)) {
+          try {
+            this.qcBooklogDb.exec(field.sql);
+            console.log(`  ✅ 添加字段: ${field.name}`);
+          } catch (e) {
+            if (!e.message.includes('duplicate column')) {
+              console.warn(`  ⚠️ 添加字段 ${field.name} 失败:`, e.message);
+            }
+          }
+        }
+      }
+
+      console.log('✅ QCBookLog 数据库表结构修复完成');
+    } catch (error) {
+      console.error('❌ 修复 QCBookLog 表结构失败:', error.message);
+    }
+  }
+
+  /**
+   * 创建 QCBookLog 数据库表结构
+   */
+  createQcBooklogTables() {
+    if (!this.qcBooklogDb) {
+      console.error('❌ 数据库未连接，无法创建表结构');
+      return;
+    }
+
+    try {
+      console.log('📝 创建书籍映射表 (qc_book_mapping)...');
+      this.qcBooklogDb.exec(`
+        CREATE TABLE IF NOT EXISTS qc_book_mapping (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          calibre_book_id INTEGER NOT NULL UNIQUE,
+          talebook_book_id INTEGER NOT NULL UNIQUE,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(calibre_book_id, talebook_book_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_mapping_calibre ON qc_book_mapping(calibre_book_id);
+        CREATE INDEX IF NOT EXISTS idx_mapping_talebook ON qc_book_mapping(talebook_book_id);
+      `);
+      console.log('  ✅ qc_book_mapping 表创建成功');
+
+      console.log('📝 创建用户表 (qc_users)...');
+      this.qcBooklogDb.exec(`
+        CREATE TABLE IF NOT EXISTS qc_users (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          username TEXT NOT NULL UNIQUE,
+          display_name VARCHAR(100),
+          name TEXT,
+          email TEXT,
+          avatar_url VARCHAR(255),
+          avatar TEXT,
+          admin INTEGER DEFAULT 0,
+          active INTEGER DEFAULT 1,
+          note TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_users_username ON qc_users(username);
+        CREATE INDEX IF NOT EXISTS idx_users_email ON qc_users(email);
+      `);
+      console.log('  ✅ qc_users 表创建成功');
+
+      console.log('📝 创建分组表 (qc_groups)...');
+      this.qcBooklogDb.exec(`
+        CREATE TABLE IF NOT EXISTS qc_groups (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          description TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_groups_name ON qc_groups(name);
+      `);
+      console.log('  ✅ qc_groups 表创建成功');
+
+      console.log('📝 创建标签表 (qc_tags)...');
+      this.qcBooklogDb.exec(`
+        CREATE TABLE IF NOT EXISTS qc_tags (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_tags_name ON qc_tags(name);
+      `);
+      console.log('  ✅ qc_tags 表创建成功');
+
+      console.log('📝 创建书籍扩展数据表 (qc_bookdata)...');
+      this.qcBooklogDb.exec(`
+        CREATE TABLE IF NOT EXISTS qc_bookdata (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          book_id INTEGER NOT NULL UNIQUE,
+          page_count INTEGER DEFAULT 0,
+          standard_price REAL DEFAULT 0,
+          purchase_price REAL DEFAULT 0,
+          purchase_date DATE DEFAULT NULL,
+          binding1 INTEGER DEFAULT 0,
+          binding2 INTEGER DEFAULT 0,
+          paper1 INTEGER DEFAULT 0,
+          edge1 INTEGER DEFAULT 0,
+          edge2 INTEGER DEFAULT 0,
+          note TEXT DEFAULT '',
+          total_reading_time INTEGER DEFAULT 0,
+          read_pages INTEGER DEFAULT 0,
+          reading_count INTEGER DEFAULT 0,
+          last_read_date DATE DEFAULT NULL,
+          last_read_duration INTEGER DEFAULT 0,
+          book_type INTEGER DEFAULT 1,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_bookdata_book_id ON qc_bookdata(book_id);
+      `);
+      console.log('  ✅ qc_bookdata 表创建成功 (含 book_type 字段)');
+
+      console.log('📝 创建书摘表 (qc_bookmarks)...');
+      this.qcBooklogDb.exec(`
+        CREATE TABLE IF NOT EXISTS qc_bookmarks (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          book_id INTEGER NOT NULL,
+          book_title TEXT,
+          book_author TEXT,
+          content TEXT NOT NULL,
+          note TEXT,
+          page INTEGER,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (book_id) REFERENCES qc_bookdata(book_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_bookmarks_book_id ON qc_bookmarks(book_id);
+        CREATE INDEX IF NOT EXISTS idx_bookmarks_created_at ON qc_bookmarks(created_at);
+      `);
+      console.log('  ✅ qc_bookmarks 表创建成功');
+
+      console.log('📝 创建书摘标签关联表 (qc_bookmark_tags)...');
+      this.qcBooklogDb.exec(`
+        CREATE TABLE IF NOT EXISTS qc_bookmark_tags (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          bookmark_id INTEGER NOT NULL,
+          tag_id INTEGER NOT NULL,
+          tag_name TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (bookmark_id) REFERENCES qc_bookmarks(id) ON DELETE CASCADE,
+          FOREIGN KEY (tag_id) REFERENCES qc_tags(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_bookmark_tags_bookmark_id ON qc_bookmark_tags(bookmark_id);
+        CREATE INDEX IF NOT EXISTS idx_bookmark_tags_tag_id ON qc_bookmark_tags(tag_id);
+      `);
+      console.log('  ✅ qc_bookmark_tags 表创建成功');
+
+      console.log('📝 创建书籍分组关联表 (qc_book_groups)...');
+      this.qcBooklogDb.exec(`
+        CREATE TABLE IF NOT EXISTS qc_book_groups (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          book_id INTEGER NOT NULL,
+          group_id INTEGER NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (book_id) REFERENCES qc_bookdata(book_id) ON DELETE CASCADE,
+          FOREIGN KEY (group_id) REFERENCES qc_groups(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_book_groups_book_id ON qc_book_groups(book_id);
+        CREATE INDEX IF NOT EXISTS idx_book_groups_group_id ON qc_book_groups(group_id);
+      `);
+      console.log('  ✅ qc_book_groups 表创建成功');
+
+      console.log('📝 创建书籍标签关联表 (qc_book_tags)...');
+      this.qcBooklogDb.exec(`
+        CREATE TABLE IF NOT EXISTS qc_book_tags (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          book_id INTEGER NOT NULL,
+          tag_name TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (book_id) REFERENCES qc_bookdata(book_id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_book_tags_book_id ON qc_book_tags(book_id);
+        CREATE INDEX IF NOT EXISTS idx_book_tags_tag_name ON qc_book_tags(tag_name);
+      `);
+      console.log('  ✅ qc_book_tags 表创建成功');
+
+      console.log('📝 创建阅读记录表 (qc_reading_records)...');
+      const existingRecordsTable = this.qcBooklogDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='qc_reading_records'").get();
+      let recordsColumns = existingRecordsTable ? this.qcBooklogDb.prepare('PRAGMA table_info(qc_reading_records)').all() : [];
+      let recordsColumnNames = recordsColumns.map(c => c.name);
+      
+      if (!existingRecordsTable) {
+        this.qcBooklogDb.exec(`
+          CREATE TABLE qc_reading_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            book_id INTEGER NOT NULL,
+            user_id INTEGER DEFAULT 0,
+            reader_id INTEGER NOT NULL DEFAULT 0,
+            start_time DATETIME,
+            end_time DATETIME,
+            duration INTEGER DEFAULT 0,
+            start_page INTEGER DEFAULT 0,
+            end_page INTEGER DEFAULT 0,
+            pages_read INTEGER DEFAULT 0,
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (book_id) REFERENCES qc_bookdata(book_id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES qc_users(id) ON DELETE CASCADE
+          )
+        `);
+        console.log('  ✅ qc_reading_records 表创建成功');
+      } else {
+        console.log('  ✅ qc_reading_records 表已存在，检查并添加缺失字段...');
+        const recordsFieldsToAdd = [
+          { name: 'user_id', sql: 'ALTER TABLE qc_reading_records ADD COLUMN user_id INTEGER DEFAULT 0' },
+          { name: 'reader_id', sql: 'ALTER TABLE qc_reading_records ADD COLUMN reader_id INTEGER DEFAULT 0' },
+          { name: 'start_time', sql: 'ALTER TABLE qc_reading_records ADD COLUMN start_time DATETIME' },
+          { name: 'end_time', sql: 'ALTER TABLE qc_reading_records ADD COLUMN end_time DATETIME' },
+          { name: 'start_page', sql: 'ALTER TABLE qc_reading_records ADD COLUMN start_page INTEGER DEFAULT 0' },
+          { name: 'end_page', sql: 'ALTER TABLE qc_reading_records ADD COLUMN end_page INTEGER DEFAULT 0' },
+          { name: 'pages_read', sql: 'ALTER TABLE qc_reading_records ADD COLUMN pages_read INTEGER DEFAULT 0' },
+          { name: 'notes', sql: 'ALTER TABLE qc_reading_records ADD COLUMN notes TEXT' },
+          { name: 'created_at', sql: 'ALTER TABLE qc_reading_records ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP' }
+        ];
+        
+        for (const field of recordsFieldsToAdd) {
+          if (!recordsColumnNames.includes(field.name)) {
+            try {
+              this.qcBooklogDb.exec(field.sql);
+              console.log(`    ✅ 添加字段: ${field.name}`);
+            } catch (e) {
+              if (!e.message.includes('duplicate column')) {
+                console.warn(`    ⚠️ 添加字段 ${field.name} 失败:`, e.message);
+              }
+            }
+          }
+        }
+        
+        recordsColumns = this.qcBooklogDb.prepare('PRAGMA table_info(qc_reading_records)').all();
+        recordsColumnNames = recordsColumns.map(c => c.name);
+      }
+      
+      try {
+        this.qcBooklogDb.exec(`CREATE INDEX IF NOT EXISTS idx_reading_book_reader ON qc_reading_records(book_id, reader_id)`);
+        this.qcBooklogDb.exec(`CREATE INDEX IF NOT EXISTS idx_reading_book_user ON qc_reading_records(book_id, user_id)`);
+        if (recordsColumnNames.includes('start_time')) {
+          this.qcBooklogDb.exec(`CREATE INDEX IF NOT EXISTS idx_reading_date ON qc_reading_records(start_time)`);
+        }
+        if (recordsColumnNames.includes('reader_id') && recordsColumnNames.includes('start_time')) {
+          this.qcBooklogDb.exec(`CREATE INDEX IF NOT EXISTS idx_reading_reader_date ON qc_reading_records(reader_id, start_time)`);
+        }
+      } catch (e) {
+        console.warn('  ⚠️ 创建索引失败:', e.message);
+      }
+
+      console.log('📝 创建每日阅读统计表 (qc_daily_reading_stats)...');
+      const existingStatsTable = this.qcBooklogDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='qc_daily_reading_stats'").get();
+      const statsColumns = existingStatsTable ? this.qcBooklogDb.prepare('PRAGMA table_info(qc_daily_reading_stats)').all() : [];
+      const statsColumnNames = statsColumns.map(c => c.name);
+      
+      if (!existingStatsTable) {
+        this.qcBooklogDb.exec(`
+          CREATE TABLE qc_daily_reading_stats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            reader_id INTEGER NOT NULL DEFAULT 0,
+            stat_date DATE NOT NULL,
+            date DATE,
+            total_reading_time INTEGER DEFAULT 0,
+            total_time INTEGER DEFAULT 0,
+            total_pages_read INTEGER DEFAULT 0,
+            total_pages INTEGER DEFAULT 0,
+            books_read_count INTEGER DEFAULT 0,
+            total_books INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, stat_date),
+            FOREIGN KEY (user_id) REFERENCES qc_users(id) ON DELETE CASCADE
+          )
+        `);
+        console.log('  ✅ qc_daily_reading_stats 表创建成功');
+      } else {
+        console.log('  ✅ qc_daily_reading_stats 表已存在，检查并添加缺失字段...');
+        const statsFieldsToAdd = [
+          { name: 'reader_id', sql: 'ALTER TABLE qc_daily_reading_stats ADD COLUMN reader_id INTEGER DEFAULT 0' },
+          { name: 'date', sql: 'ALTER TABLE qc_daily_reading_stats ADD COLUMN date DATE' },
+          { name: 'total_time', sql: 'ALTER TABLE qc_daily_reading_stats ADD COLUMN total_time INTEGER DEFAULT 0' },
+          { name: 'total_pages', sql: 'ALTER TABLE qc_daily_reading_stats ADD COLUMN total_pages INTEGER DEFAULT 0' },
+          { name: 'total_books', sql: 'ALTER TABLE qc_daily_reading_stats ADD COLUMN total_books INTEGER DEFAULT 0' },
+          { name: 'updated_at', sql: 'ALTER TABLE qc_daily_reading_stats ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP' }
+        ];
+        
+        for (const field of statsFieldsToAdd) {
+          if (!statsColumnNames.includes(field.name)) {
+            try {
+              this.qcBooklogDb.exec(field.sql);
+              console.log(`    ✅ 添加字段: ${field.name}`);
+            } catch (e) {
+              if (!e.message.includes('duplicate column')) {
+                console.warn(`    ⚠️ 添加字段 ${field.name} 失败:`, e.message);
+              }
+            }
+          }
+        }
+      }
+      
+      try {
+        this.qcBooklogDb.exec(`CREATE INDEX IF NOT EXISTS idx_daily_stats_user_date ON qc_daily_reading_stats(user_id, stat_date)`);
+        if (statsColumnNames.includes('reader_id') || !existingStatsTable) {
+          this.qcBooklogDb.exec(`CREATE INDEX IF NOT EXISTS idx_daily_stats_reader_date ON qc_daily_reading_stats(reader_id, date)`);
+        }
+      } catch (e) {
+        console.warn('  ⚠️ 创建索引失败:', e.message);
+      }
+
+      console.log('📝 创建阅读目标表 (qc_reading_goals)...');
+      const existingGoalsTable = this.qcBooklogDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='qc_reading_goals'").get();
+      const goalsColumns = existingGoalsTable ? this.qcBooklogDb.prepare('PRAGMA table_info(qc_reading_goals)').all() : [];
+      const goalsColumnNames = goalsColumns.map(c => c.name);
+      
+      if (!existingGoalsTable) {
+        this.qcBooklogDb.exec(`
+          CREATE TABLE qc_reading_goals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            reader_id INTEGER NOT NULL DEFAULT 0,
+            year INTEGER NOT NULL,
+            goal_type VARCHAR(20) DEFAULT 'yearly',
+            target INTEGER NOT NULL,
+            target_value INTEGER DEFAULT 0,
+            completed INTEGER DEFAULT 0,
+            current_value INTEGER DEFAULT 0,
+            start_date DATE,
+            end_date DATE,
+            status VARCHAR(20) DEFAULT 'active',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, year),
+            FOREIGN KEY (user_id) REFERENCES qc_users(id) ON DELETE CASCADE
+          )
+        `);
+        console.log('  ✅ qc_reading_goals 表创建成功');
+      } else {
+        console.log('  ✅ qc_reading_goals 表已存在，检查并添加缺失字段...');
+        const goalsFieldsToAdd = [
+          { name: 'reader_id', sql: 'ALTER TABLE qc_reading_goals ADD COLUMN reader_id INTEGER DEFAULT 0' },
+          { name: 'year', sql: 'ALTER TABLE qc_reading_goals ADD COLUMN year INTEGER' },
+          { name: 'target', sql: 'ALTER TABLE qc_reading_goals ADD COLUMN target INTEGER DEFAULT 0' },
+          { name: 'completed', sql: 'ALTER TABLE qc_reading_goals ADD COLUMN completed INTEGER DEFAULT 0' },
+          { name: 'updated_at', sql: 'ALTER TABLE qc_reading_goals ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP' }
+        ];
+        
+        for (const field of goalsFieldsToAdd) {
+          if (!goalsColumnNames.includes(field.name)) {
+            try {
+              this.qcBooklogDb.exec(field.sql);
+              console.log(`    ✅ 添加字段: ${field.name}`);
+            } catch (e) {
+              if (!e.message.includes('duplicate column')) {
+                console.warn(`    ⚠️ 添加字段 ${field.name} 失败:`, e.message);
+              }
+            }
+          }
+        }
+      }
+      
+      try {
+        this.qcBooklogDb.exec(`CREATE INDEX IF NOT EXISTS idx_reading_goals_user_year ON qc_reading_goals(user_id, year)`);
+        if (goalsColumnNames.includes('reader_id') || !existingGoalsTable) {
+          this.qcBooklogDb.exec(`CREATE INDEX IF NOT EXISTS idx_reading_goals_reader_year ON qc_reading_goals(reader_id, year)`);
+        }
+      } catch (e) {
+        console.warn('  ⚠️ 创建索引失败:', e.message);
+      }
+
+      console.log('📝 创建评论表 (qc_comments)...');
+      this.qcBooklogDb.exec(`
+        CREATE TABLE IF NOT EXISTS qc_comments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          book_id INTEGER NOT NULL,
+          user_id INTEGER NOT NULL,
+          content TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (book_id) REFERENCES qc_bookdata(book_id) ON DELETE CASCADE,
+          FOREIGN KEY (user_id) REFERENCES qc_users(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_comments_book_id ON qc_comments(book_id);
+        CREATE INDEX IF NOT EXISTS idx_comments_user_id ON qc_comments(user_id);
+      `);
+      console.log('  ✅ qc_comments 表创建成功');
+
+      console.log('📝 创建愿望清单表 (qc_wishlist)...');
+      this.qcBooklogDb.exec(`
+        CREATE TABLE IF NOT EXISTS qc_wishlist (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          mapping_id INTEGER,
+          user_id INTEGER DEFAULT 0,
+          reader_id INTEGER DEFAULT 0,
+          title TEXT NOT NULL,
+          author TEXT,
+          isbn TEXT,
+          publisher TEXT,
+          price REAL,
+          priority INTEGER DEFAULT 0,
+          status TEXT DEFAULT 'pending',
+          notes TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(reader_id, isbn),
+          FOREIGN KEY (mapping_id) REFERENCES qc_book_mapping(id) ON DELETE SET NULL,
+          FOREIGN KEY (user_id) REFERENCES qc_users(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_wishlist_user_id ON qc_wishlist(user_id);
+        CREATE INDEX IF NOT EXISTS idx_wishlist_reader_id ON qc_wishlist(reader_id);
+        CREATE INDEX IF NOT EXISTS idx_wishlist_isbn ON qc_wishlist(isbn);
+      `);
+      console.log('  ✅ qc_wishlist 表创建成功');
+
+    } catch (error) {
+      console.error('❌ 创建 QCBookLog 表结构失败:', error.message);
+      throw error;
     }
   }
 
@@ -821,64 +1463,250 @@ class DatabaseService {
       }
 
       // 创建 qc_reading_records 表（如果不存在）- 阅读记录
-      db.prepare(`
-        CREATE TABLE IF NOT EXISTS qc_reading_records (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          book_id INTEGER NOT NULL,
-          reader_id INTEGER NOT NULL,
-          start_time DATETIME NOT NULL,
-          end_time DATETIME NOT NULL,
-          duration INTEGER NOT NULL,
-          start_page INTEGER NOT NULL DEFAULT 0,
-          end_page INTEGER NOT NULL DEFAULT 0,
-          pages_read INTEGER NOT NULL DEFAULT 0,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-      `).run();
+      const existingRecordsTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='qc_reading_records'").get();
+      const recordsColumns = existingRecordsTable ? db.prepare('PRAGMA table_info(qc_reading_records)').all() : [];
+      const recordsColumnNames = recordsColumns.map(c => c.name);
+      
+      if (!existingRecordsTable) {
+        db.prepare(`
+          CREATE TABLE qc_reading_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            book_id INTEGER NOT NULL,
+            user_id INTEGER DEFAULT 0,
+            reader_id INTEGER NOT NULL DEFAULT 0,
+            start_time DATETIME,
+            end_time DATETIME,
+            duration INTEGER DEFAULT 0,
+            start_page INTEGER DEFAULT 0,
+            end_page INTEGER DEFAULT 0,
+            pages_read INTEGER DEFAULT 0,
+            notes TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          )
+        `).run();
+        console.log('✅ qc_reading_records 表创建完成');
+      } else {
+        console.log('✅ qc_reading_records 表已存在，检查并添加缺失字段...');
+        const recordsFieldsToAdd = [
+          { name: 'user_id', sql: 'user_id INTEGER DEFAULT 0' },
+          { name: 'reader_id', sql: 'reader_id INTEGER DEFAULT 0' },
+          { name: 'start_time', sql: 'start_time DATETIME' },
+          { name: 'end_time', sql: 'end_time DATETIME' },
+          { name: 'start_page', sql: 'start_page INTEGER DEFAULT 0' },
+          { name: 'end_page', sql: 'end_page INTEGER DEFAULT 0' },
+          { name: 'pages_read', sql: 'pages_read INTEGER DEFAULT 0' },
+          { name: 'notes', sql: 'notes TEXT' },
+          { name: 'created_at', sql: 'created_at DATETIME DEFAULT CURRENT_TIMESTAMP' }
+        ];
+        
+        for (const field of recordsFieldsToAdd) {
+          if (!recordsColumnNames.includes(field.name)) {
+            try {
+              db.prepare(`ALTER TABLE qc_reading_records ADD COLUMN ${field.sql}`).run();
+              console.log(`  ✅ 添加字段: ${field.name}`);
+            } catch (e) {
+              if (!e.message.includes('duplicate column')) {
+                console.warn(`  ⚠️ 添加字段 ${field.name} 失败:`, e.message);
+              }
+            }
+          }
+        }
+      }
 
       db.prepare('CREATE INDEX IF NOT EXISTS idx_reading_book_reader ON qc_reading_records(book_id, reader_id)').run();
-      db.prepare('CREATE INDEX IF NOT EXISTS idx_reading_date ON qc_reading_records(start_time)').run();
-      db.prepare('CREATE INDEX IF NOT EXISTS idx_reading_reader_date ON qc_reading_records(reader_id, start_time)').run();
-      console.log('✅ qc_reading_records 表创建完成');
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_reading_book_user ON qc_reading_records(book_id, user_id)').run();
+      if (recordsColumnNames.includes('start_time') || !existingRecordsTable) {
+        db.prepare('CREATE INDEX IF NOT EXISTS idx_reading_date ON qc_reading_records(start_time)').run();
+        db.prepare('CREATE INDEX IF NOT EXISTS idx_reading_reader_date ON qc_reading_records(reader_id, start_time)').run();
+      }
 
       // 创建 qc_daily_reading_stats 表（如果不存在）- 每日阅读统计
-      db.prepare(`
-        CREATE TABLE IF NOT EXISTS qc_daily_reading_stats (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          reader_id INTEGER NOT NULL,
-          date DATE NOT NULL,
-          total_books INTEGER DEFAULT 0,
-          total_pages INTEGER DEFAULT 0,
-          total_time INTEGER DEFAULT 0,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(reader_id, date)
-        )
-      `).run();
+      const existingStatsTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='qc_daily_reading_stats'").get();
+      const statsColumns = existingStatsTable ? db.prepare('PRAGMA table_info(qc_daily_reading_stats)').all() : [];
+      const statsColumnNames = statsColumns.map(c => c.name);
+      
+      if (!existingStatsTable) {
+        db.prepare(`
+          CREATE TABLE qc_daily_reading_stats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            reader_id INTEGER NOT NULL DEFAULT 0,
+            stat_date DATE NOT NULL,
+            date DATE,
+            total_reading_time INTEGER DEFAULT 0,
+            total_time INTEGER DEFAULT 0,
+            total_pages_read INTEGER DEFAULT 0,
+            total_pages INTEGER DEFAULT 0,
+            books_read_count INTEGER DEFAULT 0,
+            total_books INTEGER DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, stat_date)
+          )
+        `).run();
+        console.log('✅ qc_daily_reading_stats 表创建完成');
+      } else {
+        console.log('✅ qc_daily_reading_stats 表已存在，检查并添加缺失字段...');
+        const statsFieldsToAdd = [
+          { name: 'user_id', sql: 'user_id INTEGER NOT NULL DEFAULT 0' },
+          { name: 'reader_id', sql: 'reader_id INTEGER DEFAULT 0' },
+          { name: 'stat_date', sql: 'stat_date DATE' },
+          { name: 'date', sql: 'date DATE' },
+          { name: 'total_reading_time', sql: 'total_reading_time INTEGER DEFAULT 0' },
+          { name: 'total_time', sql: 'total_time INTEGER DEFAULT 0' },
+          { name: 'total_pages_read', sql: 'total_pages_read INTEGER DEFAULT 0' },
+          { name: 'total_pages', sql: 'total_pages INTEGER DEFAULT 0' },
+          { name: 'books_read_count', sql: 'books_read_count INTEGER DEFAULT 0' },
+          { name: 'total_books', sql: 'total_books INTEGER DEFAULT 0' }
+        ];
+        
+        for (const field of statsFieldsToAdd) {
+          if (!statsColumnNames.includes(field.name)) {
+            try {
+              db.prepare(`ALTER TABLE qc_daily_reading_stats ADD COLUMN ${field.sql}`).run();
+              console.log(`  ✅ 添加字段: ${field.name}`);
+            } catch (e) {
+              if (!e.message.includes('duplicate column')) {
+                console.warn(`  ⚠️ 添加字段 ${field.name} 失败:`, e.message);
+              }
+            }
+          }
+        }
+      }
 
-      db.prepare('CREATE INDEX IF NOT EXISTS idx_daily_stats_reader_date ON qc_daily_reading_stats(reader_id, date)').run();
-      console.log('✅ qc_daily_reading_stats 表创建完成');
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_daily_stats_user_date ON qc_daily_reading_stats(user_id, stat_date)').run();
+      if (statsColumnNames.includes('reader_id') || !existingStatsTable) {
+        db.prepare('CREATE INDEX IF NOT EXISTS idx_daily_stats_reader_date ON qc_daily_reading_stats(reader_id, date)').run();
+      }
 
       // 创建 reading_goals 表（如果不存在）- 阅读目标
-      db.prepare(`
-        CREATE TABLE IF NOT EXISTS reading_goals (
-          id INTEGER PRIMARY KEY AUTOINCREMENT,
-          reader_id INTEGER NOT NULL DEFAULT 0,
-          year INTEGER NOT NULL,
-          target INTEGER NOT NULL,
-          completed INTEGER DEFAULT 0,
-          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-          UNIQUE(reader_id, year)
-        )
-      `).run();
-      console.log('✅ reading_goals 表创建完成');
+      const existingGoalsTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='reading_goals'").get();
+      const goalsColumns = existingGoalsTable ? db.prepare('PRAGMA table_info(reading_goals)').all() : [];
+      const goalsColumnNames = goalsColumns.map(c => c.name);
+      
+      if (!existingGoalsTable) {
+        db.prepare(`
+          CREATE TABLE reading_goals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            reader_id INTEGER NOT NULL DEFAULT 0,
+            year INTEGER NOT NULL,
+            goal_type VARCHAR(20) DEFAULT 'yearly',
+            target INTEGER NOT NULL,
+            target_value INTEGER DEFAULT 0,
+            completed INTEGER DEFAULT 0,
+            current_value INTEGER DEFAULT 0,
+            start_date DATE,
+            end_date DATE,
+            status VARCHAR(20) DEFAULT 'active',
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, year)
+          )
+        `).run();
+        console.log('✅ reading_goals 表创建完成');
+      } else {
+        console.log('✅ reading_goals 表已存在，检查并添加缺失字段...');
+        const goalsFieldsToAdd = [
+          { name: 'user_id', sql: 'user_id INTEGER NOT NULL DEFAULT 0' },
+          { name: 'reader_id', sql: 'reader_id INTEGER DEFAULT 0' },
+          { name: 'goal_type', sql: "goal_type VARCHAR(20) DEFAULT 'yearly'" },
+          { name: 'target', sql: 'target INTEGER DEFAULT 0' },
+          { name: 'target_value', sql: 'target_value INTEGER DEFAULT 0' },
+          { name: 'completed', sql: 'completed INTEGER DEFAULT 0' },
+          { name: 'current_value', sql: 'current_value INTEGER DEFAULT 0' },
+          { name: 'start_date', sql: 'start_date DATE' },
+          { name: 'end_date', sql: 'end_date DATE' },
+          { name: 'status', sql: "status VARCHAR(20) DEFAULT 'active'" }
+        ];
+        
+        for (const field of goalsFieldsToAdd) {
+          if (!goalsColumnNames.includes(field.name)) {
+            try {
+              db.prepare(`ALTER TABLE reading_goals ADD COLUMN ${field.sql}`).run();
+              console.log(`  ✅ 添加字段: ${field.name}`);
+            } catch (e) {
+              if (!e.message.includes('duplicate column')) {
+                console.warn(`  ⚠️ 添加字段 ${field.name} 失败:`, e.message);
+              }
+            }
+          }
+        }
+      }
+
+      this.ensureDevicesTable(db);
+      
+      this.ensureBookTypeField(db);
 
       console.log('✅ qcbooklog 专属表结构初始化完成');
       console.log('✅ qc_bookdata 表创建完成');
     } catch (error) {
       console.error('❌ 初始化 qcbooklog 专属表结构失败:', error.message);
       throw error;
+    }
+  }
+
+  ensureDevicesTable(db) {
+    console.log('📋 检查 devices 表...');
+    const existingDevicesTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='devices'").get();
+    
+    if (existingDevicesTable) {
+      console.log('✅ devices 表已存在');
+      return;
+    }
+    
+    console.log('📝 创建 devices 表...');
+    try {
+      db.prepare(`
+        CREATE TABLE devices (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          reader_id INTEGER NOT NULL DEFAULT 0,
+          device_name VARCHAR(200) NOT NULL,
+          device_type VARCHAR(50) DEFAULT 'unknown',
+          device_id VARCHAR(255),
+          last_access DATETIME,
+          user_agent TEXT,
+          ip_address VARCHAR(50),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (reader_id) REFERENCES readers(id) ON DELETE CASCADE
+        )
+      `).run();
+      
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_devices_reader_id ON devices(reader_id)').run();
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_devices_device_id ON devices(device_id)').run();
+      db.prepare('CREATE INDEX IF NOT EXISTS idx_devices_last_access ON devices(last_access)').run();
+      
+      console.log('✅ devices 表创建成功');
+    } catch (error) {
+      console.warn('⚠️ 创建 devices 表失败:', error.message);
+    }
+  }
+
+  ensureBookTypeField(db) {
+    console.log('📋 检查 qc_bookdata 表的 book_type 字段...');
+    
+    if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='qc_bookdata'").get()) {
+      console.log('⚠️ qc_bookdata 表不存在，跳过 book_type 字段检查');
+      return;
+    }
+    
+    const columns = db.prepare("PRAGMA table_info(qc_bookdata)").all();
+    const hasBookType = columns.some(col => col.name === 'book_type');
+    
+    if (hasBookType) {
+      console.log('✅ qc_bookdata.book_type 字段已存在');
+      return;
+    }
+    
+    console.log('📝 添加 book_type 字段到 qc_bookdata 表...');
+    try {
+      db.prepare('ALTER TABLE qc_bookdata ADD COLUMN book_type INTEGER NOT NULL DEFAULT 1').run();
+      console.log('✅ book_type 字段添加成功 (默认值: 1 = 实体书)');
+    } catch (error) {
+      if (!error.message.includes('duplicate column')) {
+        console.warn('⚠️ 添加 book_type 字段失败:', error.message);
+      }
     }
   }
 
@@ -920,9 +1748,17 @@ class DatabaseService {
   }
 
   /**
-   * 获取所有书籍（从 Calibre 数据库）
+   * 检查 QCBookLog 数据库是否可用
    */
-  getAllBooksFromCalibre() {
+  isQcBooklogAvailable() {
+    return this.qcBooklogDb !== null;
+  }
+
+  /**
+   * 获取所有书籍（从 Calibre 数据库）
+   * @param {number} readerId - 读者ID，默认为0
+   */
+  getAllBooksFromCalibre(readerId = 0) {
     try {
       console.log('🔄 === 开始从 Calibre 获取所有书籍 ===');
       console.log('🔄 数据库是否可用:', this.isCalibreAvailable());
@@ -975,8 +1811,10 @@ class DatabaseService {
         const books = this.calibreDb.prepare(query).all();
         console.log('✅ 查询到 Calibre 书籍数量:', books.length);
 
-        // 获取书籍类型信息
-        const booksWithType = this.enrichBooksWithType(books);
+        // 获取书籍类型信息，传递readerId以获取正确的阅读状态
+        console.log('🔍 调试：准备调用 enrichBooksWithType');
+        const booksWithType = this.enrichBooksWithType(books, readerId);
+        console.log('🔍 调试：enrichBooksWithType 返回结果，书籍数量:', booksWithType.length);
 
         return booksWithType;
       } catch (error) {
@@ -992,35 +1830,19 @@ class DatabaseService {
 
   /**
    * 从 Talebook 数据库获取书籍类型和分组信息
+   * @param {Array} books - 书籍列表
+   * @param {number} readerId - 读者ID，默认为0
    */
-  enrichBooksWithType(books) {
+  enrichBooksWithType(books, readerId = 0) {
+    console.log(`🔍 调试：enrichBooksWithType 被调用，书籍数量: ${books.length}`);
     if (!this.isTalebookAvailable()) {
       // 如果 Talebook 数据库不可用，返回原始书籍数据
-      return books.map(book => ({
-        ...book,
-        book_type: 1, // 默认实体书
-        groups: [],
-        bookmarks: [],
-        page_count: 0,
-        standard_price: 0,
-        purchase_price: 0,
-        purchase_date: book.timestamp || new Date().toISOString(),
-        binding1: 0,
-        binding2: 0,
-        paper1: 0,
-        edge1: 0,
-        edge2: 0,
-        note: ''
-      }));
-    }
-
-    try {
-      // 从 Talebook 数据库获取所有书籍的类型信息
-      const bookIds = books.map(book => book.id);
-      if (bookIds.length === 0) {
-        return books.map(book => ({
+      return books.map(book => {
+        // 生成封面URL（使用URL编码处理特殊字符）
+        const coverUrl = book.has_cover === 1 ? `/api/static/calibre/${encodeURIComponent(book.path)}/cover.jpg` : undefined;
+        return {
           ...book,
-          book_type: 1,
+          book_type: 1, // 默认实体书
           groups: [],
           bookmarks: [],
           page_count: 0,
@@ -1032,8 +1854,45 @@ class DatabaseService {
           paper1: 0,
           edge1: 0,
           edge2: 0,
-          note: ''
-        }));
+          note: '',
+          readStatus: '未读',
+          readCompleteDate: '',
+          // 添加封面URL
+          coverUrl: coverUrl,
+          localCoverData: coverUrl,
+          hasCover: book.has_cover === 1
+        };
+      });
+    }
+
+    try {
+      // 从 Talebook 数据库获取所有书籍的类型信息
+      const bookIds = books.map(book => book.id);
+      if (bookIds.length === 0) {
+        return books.map(book => {
+          // 生成封面URL（使用URL编码处理特殊字符）
+          const coverUrl = book.has_cover === 1 ? `/api/static/calibre/${encodeURIComponent(book.path)}/cover.jpg` : undefined;
+          return {
+            ...book,
+            book_type: 1,
+            groups: [],
+            bookmarks: [],
+            page_count: 0,
+            standard_price: 0,
+            purchase_price: 0,
+            purchase_date: book.timestamp || new Date().toISOString(),
+            binding1: 0,
+            binding2: 0,
+            paper1: 0,
+            edge1: 0,
+            edge2: 0,
+            note: '',
+            // 添加封面URL
+            coverUrl: coverUrl,
+            localCoverData: coverUrl,
+            hasCover: book.has_cover === 1
+          };
+        });
       }
 
       const placeholders = bookIds.map(() => '?').join(',');
@@ -1043,14 +1902,43 @@ class DatabaseService {
       const bookTypes = this.talebookDb.prepare(bookTypesQuery).all(...bookIds);
       const bookTypeMap = new Map(bookTypes.map(bt => [bt.id, bt.book_type]));
 
-      // 获取书籍分组信息
-      const bookGroupsQuery = `
-        SELECT bg.book_id, g.* FROM qc_book_groups bg
-        JOIN qc_groups g ON bg.group_id = g.id
-        WHERE bg.book_id IN (${placeholders})
-        ORDER BY g.name
-      `;
-      const bookGroups = this.talebookDb.prepare(bookGroupsQuery).all(...bookIds);
+      // 对于 Talebook 中没有找到的书籍，从 QCBookLog 获取
+      const missingBookIds = bookIds.filter(id => !bookTypeMap.has(id));
+      if (missingBookIds.length > 0 && this.qcBooklogDb) {
+        try {
+          const missingPlaceholders = missingBookIds.map(() => '?').join(',');
+          const qcBookTypesQuery = `
+            SELECT m.calibre_book_id as id, bd.book_type
+            FROM qc_bookdata bd
+            JOIN qc_book_mapping m ON bd.mapping_id = m.id
+            WHERE m.calibre_book_id IN (${missingPlaceholders}) AND m.library_uuid = ?
+          `;
+          const currentLibraryUuid = this.getCurrentLibraryUuid ? this.getCurrentLibraryUuid() : null;
+          const qcBookTypes = this.qcBooklogDb.prepare(qcBookTypesQuery).all(...missingBookIds, currentLibraryUuid);
+          qcBookTypes.forEach(bt => bookTypeMap.set(bt.id, bt.book_type));
+          console.log(`✅ 从 QCBookLog 数据库获取了 ${qcBookTypes.length} 本书籍的载体类型（补充模式）`);
+        } catch (error) {
+          console.warn('⚠️ 从 QCBookLog 获取书籍类型失败:', error.message);
+        }
+      }
+
+      // ========== 分组功能数据：优先使用 qcBooklogDb ==========
+      // 本软件的"分组"功能与 talebook 系统的"分组"功能存在本质差异
+      // 分组数据写入到 qcBooklogDb，因此查询也必须从 qcBooklogDb 获取
+      // 注意：qcBooklogDb 的 qc_book_groups 表使用 mapping_id，需要 JOIN qc_book_mapping 获取 calibre_book_id
+      const bookGroupsQuery = this.qcBooklogDb 
+        ? `SELECT m.calibre_book_id as book_id, g.id, g.name, g.description 
+           FROM qc_book_groups bg
+           JOIN qc_book_mapping m ON bg.mapping_id = m.id
+           JOIN qc_groups g ON bg.group_id = g.id
+           WHERE m.calibre_book_id IN (${placeholders})
+           ORDER BY g.name`
+        : `SELECT bg.book_id, g.id, g.name, g.description FROM qc_book_groups bg
+           JOIN qc_groups g ON bg.group_id = g.id
+           WHERE bg.book_id IN (${placeholders})
+           ORDER BY g.name`;
+      const groupsDb = this.qcBooklogDb || this.talebookDb;
+      const bookGroups = groupsDb.prepare(bookGroupsQuery).all(...bookIds);
       
       // 构建书籍到分组的映射
       const bookGroupsMap = new Map();
@@ -1063,6 +1951,7 @@ class DatabaseService {
       });
       
       // 获取书籍扩展数据（页数、价格、购买日期、装帧、阅读追踪等）
+      // 非分组功能数据，保持优先从 talebookDb 获取
       const bookDataQuery = `
         SELECT book_id, page_count, standard_price, purchase_price, purchase_date, binding1, binding2, paper1, edge1, edge2, note,
                total_reading_time, read_pages, reading_count, last_read_date, last_read_duration
@@ -1092,6 +1981,27 @@ class DatabaseService {
         });
       });
 
+      // 获取阅读状态
+      const readingStateQuery = `
+        SELECT book_id, read_state, read_date
+        FROM reading_state
+        WHERE book_id IN (${placeholders}) AND reader_id = ?
+      `;
+      const readingStates = this.talebookDb.prepare(readingStateQuery).all(...bookIds, readerId);
+      const readingStateMap = new Map();
+      readingStates.forEach(rs => {
+        const statusMap = {
+          0: '未读',
+          1: '在读',
+          2: '已读'
+        };
+        readingStateMap.set(rs.book_id, {
+          readStatus: statusMap[rs.read_state] || '未读',
+          readCompleteDate: rs.read_date || ''
+        });
+      });
+      console.log(`✅ 从 Talebook 数据库获取了 ${readingStates.length} 本书籍的阅读状态`);
+
       // 返回包含类型和分组信息的书籍数据
       return books.map(book => {
         const bookData = bookDataMap.get(book.id) || {};
@@ -1116,6 +2026,10 @@ class DatabaseService {
             tags = [];
           }
         }
+        
+        // 生成封面URL（使用URL编码处理特殊字符）
+        const coverUrl = book.has_cover === 1 ? `/api/static/calibre/${encodeURIComponent(book.path)}/cover.jpg` : undefined;
+        console.log(`🔍 调试：书籍 ${book.id} (${book.title}) 的封面URL:`, coverUrl);
         
         return {
           ...book,
@@ -1143,6 +2057,10 @@ class DatabaseService {
           publishYear: publishYear,
           // 解析tags为数组
           tags: tags,
+          // 添加封面URL
+          coverUrl: coverUrl,
+          localCoverData: coverUrl,
+          hasCover: book.has_cover === 1,
           // 添加前端所需字段，兼容前端使用
           pages: bookData.page_count || 0,
           standardPrice: bookData.standard_price || 0,
@@ -1150,7 +2068,10 @@ class DatabaseService {
           purchaseDate: bookData.purchase_date || book.timestamp || new Date().toISOString(),
           binding1: bookData.binding1 || 0,
           binding2: bookData.binding2 || 0,
-          note: bookData.note || ''
+          note: bookData.note || '',
+          // 阅读状态
+          readStatus: readingStateMap.get(book.id)?.readStatus || '未读',
+          readCompleteDate: readingStateMap.get(book.id)?.readCompleteDate || ''
         };
       });
     } catch (error) {
@@ -1199,7 +2120,10 @@ class DatabaseService {
           paper1: 0,
           edge1: 0,
           edge2: 0,
-          note: ''
+          note: '',
+          // 阅读状态
+          readStatus: '未读',
+          readCompleteDate: ''
         };
       });
     }
@@ -1300,6 +2224,29 @@ class DatabaseService {
         }
       }
       
+      // 从 Talebook 数据库获取阅读状态
+      let readStatus = '未读';
+      let readCompleteDate = '';
+      if (this.talebookDb) {
+        try {
+          const readingState = this.talebookDb.prepare(`
+            SELECT read_state, read_date FROM reading_state WHERE book_id = ? AND reader_id = 0
+          `).get(numericBookId);
+          
+          if (readingState) {
+            const statusMap = {
+              0: '未读',
+              1: '在读',
+              2: '已读'
+            };
+            readStatus = statusMap[readingState.read_state] || '未读';
+            readCompleteDate = readingState.read_date || '';
+          }
+        } catch (readingError) {
+          console.warn(`⚠️ 获取书籍 ${numericBookId} 的阅读状态失败:`, readingError.message);
+        }
+      }
+      
       return {
         ...bookWithType,
         coverUrl: coverUrl,
@@ -1316,8 +2263,8 @@ class DatabaseService {
         edge1: bookWithType.edge1 || 0,
         edge2: bookWithType.edge2 || 0,
         note: bookWithType.note || '',
-        readStatus: '未读',
-        readCompleteDate: ''
+        readStatus: readStatus,
+        readCompleteDate: readCompleteDate
       };
     } catch (error) {
       console.error('❌ 获取书籍失败:', error.message);
@@ -1382,6 +2329,7 @@ class DatabaseService {
     console.log('  - description:', book.description ? book.description.substring(0, 100) + '...' : '无');
     console.log('  - tags:', book.tags);
     console.log('  - publisher:', book.publisher);
+    console.log('  - book_type:', book.book_type, '类型:', typeof book.book_type);
 
     try {
       if (!this.calibreDb) {
@@ -1428,9 +2376,27 @@ class DatabaseService {
         }
 
         // 3. 添加书籍到books表
-        // 构建path字段：将作者中的 " / " 替换为 "&"，确保只有两级目录
-        const authorPath = (book.author || '未知作者').replace(/\s*\/\s*/g, ' & ');
-        const bookPath = book.path || `${authorPath}/${book.title || '未知书名'}`;
+        // 构建path字段：确保只有两级目录结构
+        let bookPath = book.path;
+        if (!bookPath) {
+          const cleanAuthor = (book.author || '未知作者').replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+          const cleanTitle = (book.title || '未知书名').replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+          bookPath = `${cleanAuthor}/${cleanTitle}`;
+        } else {
+          // 验证并确保路径只有两级目录
+          const pathParts = bookPath.split(/[\/\\]/);
+          if (pathParts.length > 2) {
+            const cleanAuthor = pathParts.slice(0, -1).join('').replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+            const cleanTitle = pathParts[pathParts.length - 1].replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+            bookPath = `${cleanAuthor}/${cleanTitle}`;
+          } else if (pathParts.length === 2) {
+            const cleanAuthor = pathParts[0].replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+            const cleanTitle = pathParts[1].replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+            bookPath = `${cleanAuthor}/${cleanTitle}`;
+          } else {
+            bookPath = bookPath.replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+          }
+        }
         
         const bookResult = this.calibreDb.prepare(`
           INSERT INTO books (title, author_sort, timestamp, pubdate, uuid, has_cover, path, last_modified)
@@ -1703,12 +2669,14 @@ class DatabaseService {
         const existingItem = this.talebookDb.prepare(`SELECT book_id FROM items WHERE book_id = ?`).get(result.bookId);
         if (!existingItem) {
           // 插入书籍到 Talebook 数据库的 items 表（只存储统计信息）
+          const bookTypeToInsert = book.book_type !== undefined && book.book_type !== null ? book.book_type : 1;
+          console.log('📝 [addBookToDB] 准备插入到 items 表，book_type:', bookTypeToInsert);
           this.talebookDb.prepare(`
-            INSERT INTO items (book_id, book_type, create_time)
-            VALUES (?, ?, ?)
+            INSERT INTO items (book_id, count_guest, count_visit, count_download, website, sole, book_type, book_count, create_time)
+            VALUES (?, 0, 0, 0, '', 0, ?, 1, ?)
           `).run(
             result.bookId,
-            book.book_type || 1,
+            bookTypeToInsert,
             new Date().toISOString()
           );
           console.log('✅ 书籍同步到 Talebook 数据库items表成功');
@@ -1719,85 +2687,100 @@ class DatabaseService {
             SET book_type = ?
             WHERE book_id = ?
           `).run(
-            book.book_type || existingItem.book_type || 1,
+            book.book_type !== undefined && book.book_type !== null ? book.book_type : (existingItem.book_type || 1),
             result.bookId
           );
           console.log('✅ 书籍类型更新到 Talebook 数据库items表成功');
         }
         
-        // 检查书籍是否已存在于qc_bookdata表
-        const existingBookData = this.talebookDb.prepare(`SELECT * FROM qc_bookdata WHERE book_id = ?`).get(result.bookId);
-        if (!existingBookData) {
-          // 处理前端发送的pages字段，兼容pageCount字段
-          // 提取数字页数
-          let pageCount = 0;
-          if (book.pageCount) {
-            pageCount = parseInt(book.pageCount) || 0;
-          } else if (book.pages) {
-            // 处理字符串格式的页数，如"114页"
-            pageCount = parseInt(String(book.pages).match(/\d+/)?.[0] || '0') || 0;
-          }
+        // 使用 qcBooklogDb 操作 qc_bookdata 表（该表在 qc_booklog.db 中）
+        const qcBookdataDb = this.qcBooklogDb || this.talebookDb;
+        if (qcBookdataDb) {
+          // 检查书籍是否已存在于qc_bookdata表
+          const existingBookData = qcBookdataDb.prepare(`SELECT * FROM qc_bookdata WHERE book_id = ?`).get(result.bookId);
+          if (!existingBookData) {
+            // 处理前端发送的pages字段，兼容pageCount字段
+            // 提取数字页数
+            let pageCount = 0;
+            if (book.pageCount) {
+              pageCount = parseInt(book.pageCount) || 0;
+            } else if (book.pages) {
+              // 处理字符串格式的页数，如"114页"
+              pageCount = parseInt(String(book.pages).match(/\d+/)?.[0] || '0') || 0;
+            }
 
-          // 插入书籍到qc_bookdata表，包含所有新增字段
-          this.talebookDb.prepare(`
-            INSERT INTO qc_bookdata (book_id, page_count, standard_price, purchase_price, purchase_date, binding1, binding2, paper1, edge1, edge2, note)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(
-            result.bookId,
-            pageCount,
-            book.standardPrice || 0,
-            book.purchasePrice || 0,
-            book.purchaseDate || new Date().toISOString(),
-            book.binding1 || 0,
-            book.binding2 || 0,
-            book.paper1 || 0,
-            book.edge1 || 0,
-            book.edge2 || 0,
-            book.note || ''
-          );
-          console.log('✅ 书籍同步到 Talebook 数据库qc_bookdata表成功');
+            // 插入书籍到qc_bookdata表，包含所有新增字段
+            const bookTypeToInsert = book.book_type !== undefined && book.book_type !== null ? book.book_type : 1;
+            console.log('📝 [addBookToDB] 准备插入到 qc_bookdata 表，book_type:', bookTypeToInsert);
+            qcBookdataDb.prepare(`
+              INSERT INTO qc_bookdata (book_id, book_type, page_count, standard_price, purchase_price, purchase_date, binding1, binding2, paper1, edge1, edge2, note)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+              result.bookId,
+              bookTypeToInsert,
+              pageCount,
+              book.standardPrice || 0,
+              book.purchasePrice || 0,
+              book.purchaseDate || new Date().toISOString(),
+              book.binding1 || 0,
+              book.binding2 || 0,
+              book.paper1 || 0,
+              book.edge1 || 0,
+              book.edge2 || 0,
+              book.note || ''
+            );
+            console.log('✅ 书籍同步到 QCBookLog 数据库qc_bookdata表成功');
+          } else {
+            // 处理前端发送的pages字段，兼容pageCount字段
+            // 提取数字页数
+            let pageCount = existingBookData.page_count || 0;
+            if (book.pageCount) {
+              pageCount = parseInt(book.pageCount) || existingBookData.page_count || 0;
+            } else if (book.pages) {
+              // 处理字符串格式的页数，如"114页"
+              pageCount = parseInt(String(book.pages).match(/\d+/)?.[0] || String(existingBookData.page_count)) || 0;
+            }
+
+            // 如果已存在，则更新数据
+            qcBookdataDb.prepare(`
+              UPDATE qc_bookdata
+              SET book_type = ?, page_count = ?, standard_price = ?, purchase_price = ?, purchase_date = ?, binding1 = ?, binding2 = ?, paper1 = ?, edge1 = ?, edge2 = ?, note = ?
+              WHERE book_id = ?
+            `).run(
+              book.book_type !== undefined && book.book_type !== null ? book.book_type : existingBookData.book_type || 1,
+              pageCount,
+              book.standardPrice || existingBookData.standard_price || 0,
+              book.purchasePrice || existingBookData.purchase_price || 0,
+              book.purchaseDate || existingBookData.purchase_date || new Date().toISOString(),
+              book.binding1 !== undefined ? book.binding1 : existingBookData.binding1 || 0,
+              book.binding2 !== undefined ? book.binding2 : existingBookData.binding2 || 0,
+              book.paper1 !== undefined ? book.paper1 : existingBookData.paper1 || 0,
+              book.edge1 !== undefined ? book.edge1 : existingBookData.edge1 || 0,
+              book.edge2 !== undefined ? book.edge2 : existingBookData.edge2 || 0,
+              book.note !== undefined ? book.note : (existingBookData.note || ''),
+              result.bookId
+            );
+            console.log('✅ 书籍更新到 QCBookLog 数据库qc_bookdata表成功');
+          }
         } else {
-          // 处理前端发送的pages字段，兼容pageCount字段
-          // 提取数字页数
-          let pageCount = existingBookData.page_count || 0;
-          if (book.pageCount) {
-            pageCount = parseInt(book.pageCount) || existingBookData.page_count || 0;
-          } else if (book.pages) {
-            // 处理字符串格式的页数，如"114页"
-            pageCount = parseInt(String(book.pages).match(/\d+/)?.[0] || String(existingBookData.page_count)) || 0;
-          }
-
-          // 如果已存在，则更新数据
-          this.talebookDb.prepare(`
-            UPDATE qc_bookdata
-            SET page_count = ?, standard_price = ?, purchase_price = ?, purchase_date = ?, binding1 = ?, binding2 = ?, paper1 = ?, edge1 = ?, edge2 = ?, note = ?
-            WHERE book_id = ?
-          `).run(
-            pageCount,
-            book.standardPrice || existingBookData.standard_price || 0,
-            book.purchasePrice || existingBookData.purchase_price || 0,
-            book.purchaseDate || existingBookData.purchase_date || new Date().toISOString(),
-            book.binding1 !== undefined ? book.binding1 : existingBookData.binding1 || 0,
-            book.binding2 !== undefined ? book.binding2 : existingBookData.binding2 || 0,
-            book.paper1 !== undefined ? book.paper1 : existingBookData.paper1 || 0,
-            book.edge1 !== undefined ? book.edge1 : existingBookData.edge1 || 0,
-            book.edge2 !== undefined ? book.edge2 : existingBookData.edge2 || 0,
-            book.note !== undefined ? book.note : (existingBookData.note || ''),
-            result.bookId
-          );
-          console.log('✅ 书籍更新到 Talebook 数据库qc_bookdata表成功');
+          console.warn('⚠️ 没有可用的数据库连接，跳过 qc_bookdata 表操作');
         }
           
           // 4. 处理分组关联
+          // 注意：分组数据必须写入到 qcBooklogDb，因为读取时优先从 qcBooklogDb 获取
           if (book.groups && Array.isArray(book.groups) && book.groups.length > 0) {
-            for (const group of book.groups) {
-              if (group.id) {
-                // 插入书籍与分组的关联
-                this.talebookDb.prepare(`
-                  INSERT OR IGNORE INTO qc_book_groups (book_id, group_id)
-                  VALUES (?, ?)
-                `).run(result.bookId, group.id);
+            const groupsDb = this.qcBooklogDb || this.talebookDb;
+            if (groupsDb) {
+              for (const group of book.groups) {
+                if (group.id) {
+                  // 插入书籍与分组的关联
+                  groupsDb.prepare(`
+                    INSERT OR IGNORE INTO qc_book_groups (book_id, group_id)
+                    VALUES (?, ?)
+                  `).run(result.bookId, group.id);
+                }
               }
+              console.log(`✅ 分组关联已写入到${this.qcBooklogDb ? 'QCBookLog' : 'Talebook'}数据库`);
             }
           }
         } catch (talebookError) {
@@ -1889,9 +2872,27 @@ class DatabaseService {
       // 开启事务
       console.log('🔄 开始Calibre数据库事务...');
       const transaction = this.calibreDb.transaction(() => {
-        // 构建path字段：将作者中的 " / " 替换为 "&"，确保只有两级目录
-        const authorPath = (mergedBook.author || '未知作者').replace(/\s*\/\s*/g, ' & ');
-        const bookPath = mergedBook.path || `${authorPath}/${mergedBook.title || '未知书名'}`;
+        // 构建path字段：确保只有两级目录结构
+        let bookPath = mergedBook.path;
+        if (!bookPath) {
+          const cleanAuthor = (mergedBook.author || '未知作者').replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+          const cleanTitle = (mergedBook.title || '未知书名').replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+          bookPath = `${cleanAuthor}/${cleanTitle}`;
+        } else {
+          // 验证并确保路径只有两级目录
+          const pathParts = bookPath.split(/[\/\\]/);
+          if (pathParts.length > 2) {
+            const cleanAuthor = pathParts.slice(0, -1).join('').replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+            const cleanTitle = pathParts[pathParts.length - 1].replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+            bookPath = `${cleanAuthor}/${cleanTitle}`;
+          } else if (pathParts.length === 2) {
+            const cleanAuthor = pathParts[0].replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+            const cleanTitle = pathParts[1].replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+            bookPath = `${cleanAuthor}/${cleanTitle}`;
+          } else {
+            bookPath = bookPath.replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+          }
+        }
         
         // 1. 更新书籍基本信息
         this.calibreDb.prepare(`
@@ -2052,8 +3053,8 @@ class DatabaseService {
           } else {
             // 如果不存在则创建记录
             this.talebookDb.prepare(`
-              INSERT INTO items (book_id, book_type, create_time)
-              VALUES (?, ?, ?)
+              INSERT INTO items (book_id, count_guest, count_visit, count_download, website, sole, book_type, create_time)
+              VALUES (?, 0, 0, 0, '', 0, ?, ?)
             `).run(
               bookId,
               bookType,
@@ -2063,80 +3064,94 @@ class DatabaseService {
           }
           
           // 更新分组关联
+          // 注意：分组数据必须写入到 qcBooklogDb，因为读取时优先从 qcBooklogDb 获取
+          // 这样确保数据写入和读取的一致性
           if (book.groups) {
-            // 删除旧的分组关联
-            this.talebookDb.prepare(`DELETE FROM qc_book_groups WHERE book_id = ?`).run(bookId);
+            const groupsDb = this.qcBooklogDb || this.talebookDb;
+            if (groupsDb) {
+              // 删除旧的分组关联
+              groupsDb.prepare(`DELETE FROM qc_book_groups WHERE book_id = ?`).run(bookId);
 
-            // 添加新的分组关联
-            if (Array.isArray(book.groups) && book.groups.length > 0) {
-              for (const group of book.groups) {
-                // 兼容字符串数组和对象数组
-                const groupId = typeof group === 'object' && group.id ? group.id : group;
-                if (groupId) {
-                  this.talebookDb.prepare(`
-                    INSERT OR IGNORE INTO qc_book_groups (book_id, group_id)
-                    VALUES (?, ?)
-                  `).run(bookId, groupId);
+              // 添加新的分组关联
+              if (Array.isArray(book.groups) && book.groups.length > 0) {
+                for (const group of book.groups) {
+                  // 兼容字符串数组和对象数组
+                  const groupId = typeof group === 'object' && group.id ? group.id : group;
+                  if (groupId) {
+                    groupsDb.prepare(`
+                      INSERT OR IGNORE INTO qc_book_groups (book_id, group_id)
+                      VALUES (?, ?)
+                    `).run(bookId, groupId);
+                  }
                 }
+                console.log(`✅ 分组关联已更新到${this.qcBooklogDb ? 'QCBookLog' : 'Talebook'}数据库，分组数: ${book.groups.length}`);
               }
+            } else {
+              console.warn('⚠️ 没有可用的数据库来存储分组关联');
             }
           }
           
           // 更新qc_bookdata表中的扩展字段
-          const existingBookData = this.talebookDb.prepare(`SELECT * FROM qc_bookdata WHERE book_id = ?`).get(bookId);
-          console.log('🔄 现有qc_bookdata记录:', existingBookData);
-          
-          // 处理前端发送的pages字段，兼容pageCount字段
-          // 提取数字页数
-          let pageCount = 0;
-          if (book.pageCount) {
-            pageCount = parseInt(book.pageCount) || 0;
-          } else if (book.pages) {
-            // 处理字符串格式的页数，如"114页"
-            pageCount = parseInt(String(book.pages).match(/\d+/)?.[0] || '0') || 0;
-          }
+          // 使用 qcBooklogDb 操作 qc_bookdata 表（该表在 qc_booklog.db 中）
+          const qcBookdataDb = this.qcBooklogDb || this.talebookDb;
+          if (qcBookdataDb) {
+            const existingBookData = qcBookdataDb.prepare(`SELECT * FROM qc_bookdata WHERE book_id = ?`).get(bookId);
+            console.log('🔄 现有qc_bookdata记录:', existingBookData);
+            
+            // 处理前端发送的pages字段，兼容pageCount字段
+            // 提取数字页数
+            let pageCount = 0;
+            if (book.pageCount) {
+              pageCount = parseInt(book.pageCount) || 0;
+            } else if (book.pages) {
+              // 处理字符串格式的页数，如"114页"
+              pageCount = parseInt(String(book.pages).match(/\d+/)?.[0] || '0') || 0;
+            }
 
-          if (existingBookData) {
-            console.log('🔄 更新现有qc_bookdata记录...');
-            // 更新现有记录
-            const updateResult = this.talebookDb.prepare(`
-              UPDATE qc_bookdata
-              SET page_count = ?, standard_price = ?, purchase_price = ?, purchase_date = ?, binding1 = ?, binding2 = ?, paper1 = ?, edge1 = ?, edge2 = ?, note = ?
-              WHERE book_id = ?
-            `).run(
-              pageCount,
-              book.standardPrice || existingBookData.standard_price || 0,
-              book.purchasePrice || existingBookData.purchase_price || 0,
-              book.purchaseDate || existingBookData.purchase_date || new Date().toISOString(),
-              book.binding1 !== undefined ? book.binding1 : existingBookData.binding1 || 0,
-              book.binding2 !== undefined ? book.binding2 : existingBookData.binding2 || 0,
-              book.paper1 !== undefined ? book.paper1 : existingBookData.paper1 || 0,
-              book.edge1 !== undefined ? book.edge1 : existingBookData.edge1 || 0,
-              book.edge2 !== undefined ? book.edge2 : existingBookData.edge2 || 0,
-              book.note !== undefined ? book.note : (existingBookData.note || ''),
-              bookId
-            );
-            console.log('🔄 qc_bookdata更新结果，影响行数:', updateResult.changes);
+            if (existingBookData) {
+              console.log('🔄 更新现有qc_bookdata记录...');
+              // 更新现有记录
+              const updateResult = qcBookdataDb.prepare(`
+                UPDATE qc_bookdata
+                SET page_count = ?, standard_price = ?, purchase_price = ?, purchase_date = ?, binding1 = ?, binding2 = ?, paper1 = ?, edge1 = ?, edge2 = ?, note = ?
+                WHERE book_id = ?
+              `).run(
+                pageCount,
+                book.standardPrice || existingBookData.standard_price || 0,
+                book.purchasePrice || existingBookData.purchase_price || 0,
+                book.purchaseDate || existingBookData.purchase_date || new Date().toISOString(),
+                book.binding1 !== undefined ? book.binding1 : existingBookData.binding1 || 0,
+                book.binding2 !== undefined ? book.binding2 : existingBookData.binding2 || 0,
+                book.paper1 !== undefined ? book.paper1 : existingBookData.paper1 || 0,
+                book.edge1 !== undefined ? book.edge1 : existingBookData.edge1 || 0,
+                book.edge2 !== undefined ? book.edge2 : existingBookData.edge2 || 0,
+                book.note !== undefined ? book.note : (existingBookData.note || ''),
+                bookId
+              );
+              console.log('🔄 qc_bookdata更新结果，影响行数:', updateResult.changes);
+            } else {
+              console.log('🔄 插入新qc_bookdata记录...');
+              // 插入新记录
+              const insertResult = qcBookdataDb.prepare(`
+                INSERT INTO qc_bookdata (book_id, page_count, standard_price, purchase_price, purchase_date, binding1, binding2, paper1, edge1, edge2, note)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `).run(
+                bookId,
+                pageCount,
+                book.standardPrice || 0,
+                book.purchasePrice || 0,
+                book.purchaseDate || new Date().toISOString(),
+                book.binding1 || 0,
+                book.binding2 || 0,
+                book.paper1 || 0,
+                book.edge1 || 0,
+                book.edge2 || 0,
+                book.note || ''
+              );
+              console.log('🔄 qc_bookdata插入结果，lastInsertRowid:', insertResult.lastInsertRowid);
+            }
           } else {
-            console.log('🔄 插入新qc_bookdata记录...');
-            // 插入新记录
-            const insertResult = this.talebookDb.prepare(`
-              INSERT INTO qc_bookdata (book_id, page_count, standard_price, purchase_price, purchase_date, binding1, binding2, paper1, edge1, edge2, note)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(
-              bookId,
-              pageCount,
-              book.standardPrice || 0,
-              book.purchasePrice || 0,
-              book.purchaseDate || new Date().toISOString(),
-              book.binding1 || 0,
-              book.binding2 || 0,
-              book.paper1 || 0,
-              book.edge1 || 0,
-              book.edge2 || 0,
-              book.note || ''
-            );
-            console.log('🔄 qc_bookdata插入结果，lastInsertRowid:', insertResult.lastInsertRowid);
+            console.warn('⚠️ 没有可用的数据库连接，跳过 qc_bookdata 表操作');
           }
           
           console.log('✅ 书籍更新同步到 Talebook 数据库成功');
@@ -2149,6 +3164,56 @@ class DatabaseService {
         console.warn('⚠️ Talebook数据库不可用，跳过同步');
       }
 
+      // 处理分组关联
+      console.log('🔄 处理分组关联...');
+      console.log('🔄 book.groups:', book.groups);
+      console.log('🔄 this.qcBooklogDb:', this.qcBooklogDb ? '存在' : '不存在');
+      if (book.groups !== undefined && Array.isArray(book.groups) && this.qcBooklogDb) {
+        try {
+          const qcDataService = require('./qcDataService.js').default;
+          
+          // 获取当前书籍的所有分组
+          const currentGroups = qcDataService.getBookGroups(bookId) || [];
+          const currentGroupIds = currentGroups.map(g => g.id);
+          const newGroupIds = book.groups.map(id => parseInt(id)).filter(id => !isNaN(id));
+          
+          console.log('🔄 当前分组:', currentGroupIds);
+          console.log('🔄 新分组:', newGroupIds);
+          
+          // 找出需要添加的分组
+          const groupsToAdd = newGroupIds.filter(id => !currentGroupIds.includes(id));
+          // 找出需要移除的分组
+          const groupsToRemove = currentGroupIds.filter(id => !newGroupIds.includes(id));
+          
+          console.log('🔄 需要添加的分组:', groupsToAdd);
+          console.log('🔄 需要移除的分组:', groupsToRemove);
+          
+          // 添加新的分组关联
+          for (const groupId of groupsToAdd) {
+            try {
+              qcDataService.addBookToGroup(bookId, groupId);
+              console.log(`✅ 添加书籍到分组: bookId=${bookId}, groupId=${groupId}`);
+            } catch (addError) {
+              console.error(`❌ 添加书籍到分组失败: ${addError.message}`);
+            }
+          }
+          
+          // 移除旧的分组关联
+          for (const groupId of groupsToRemove) {
+            try {
+              qcDataService.removeBookFromGroup(bookId, groupId);
+              console.log(`✅ 从分组移除书籍: bookId=${bookId}, groupId=${groupId}`);
+            } catch (removeError) {
+              console.error(`❌ 从分组移除书籍失败: ${removeError.message}`);
+            }
+          }
+          
+          console.log('✅ 分组关联处理完成');
+        } catch (groupError) {
+          console.error('❌ 处理分组关联失败:', groupError.message);
+        }
+      }
+
       // 强制同步WAL文件到主数据库，确保更新立即生效
       console.log('🔄 开始同步WAL文件...');
       if (this.calibreDb) {
@@ -2159,11 +3224,18 @@ class DatabaseService {
         this.talebookDb.pragma('wal_checkpoint(FULL)');
         console.log('✅ Talebook数据库WAL同步完成');
       }
+      if (this.qcBooklogDb) {
+        this.qcBooklogDb.pragma('wal_checkpoint(FULL)');
+        console.log('✅ QCBookLog数据库WAL同步完成');
+      }
 
       // 验证更新是否成功
       console.log('🔄 验证更新结果...');
-      const verifyResult = this.talebookDb.prepare(`SELECT * FROM qc_bookdata WHERE book_id = ?`).get(bookId);
-      console.log('🔄 验证结果 - qc_bookdata记录:', verifyResult);
+      const verifyDb = this.qcBooklogDb || this.talebookDb;
+      if (verifyDb) {
+        const verifyResult = verifyDb.prepare(`SELECT * FROM qc_bookdata WHERE book_id = ?`).get(bookId);
+        console.log('🔄 验证结果 - qc_bookdata记录:', verifyResult);
+      }
 
       // 重新获取完整的书籍信息（包含所有关联数据）
       console.log('🔄 重新获取完整书籍信息...');
@@ -2244,8 +3316,8 @@ class DatabaseService {
         console.log(`📝 书籍 ${bookId} 不在 items 表中，创建记录...`);
         // 创建items记录（items表只存储统计信息）
         this.talebookDb.prepare(`
-          INSERT INTO items (book_id, book_type, create_time)
-          VALUES (?, 1, ?)
+          INSERT INTO items (book_id, count_guest, count_visit, count_download, website, sole, book_type, create_time)
+          VALUES (?, 0, 0, 0, '', 0, 1, ?)
         `).run(bookId, new Date().toISOString());
         console.log(`✅ 已在 items 表中创建书籍 ${bookId} 的记录`);
       }
@@ -2369,16 +3441,18 @@ class DatabaseService {
    */
   updateBookReadingProgress(bookId, readPages) {
     try {
-      if (!this.isTalebookAvailable()) {
-        throw new Error('Talebook 数据库服务不可用');
+      // 使用 qcBooklogDb 操作 qc_bookdata 表（该表在 qc_booklog.db 中）
+      const qcBookdataDb = this.qcBooklogDb || this.talebookDb;
+      if (!qcBookdataDb) {
+        throw new Error('数据库服务不可用');
       }
 
       // 检查书籍是否在 qc_bookdata 表中存在
-      const existingData = this.talebookDb.prepare('SELECT book_id FROM qc_bookdata WHERE book_id = ?').get(bookId);
+      const existingData = qcBookdataDb.prepare('SELECT book_id FROM qc_bookdata WHERE book_id = ?').get(bookId);
 
       if (existingData) {
         // 更新现有记录
-        this.talebookDb.prepare(`
+        qcBookdataDb.prepare(`
           UPDATE qc_bookdata
           SET read_pages = ?
           WHERE book_id = ?
@@ -2386,7 +3460,7 @@ class DatabaseService {
         console.log(`✅ 更新阅读进度成功: 书籍ID=${bookId}, 已读页数=${readPages}`);
       } else {
         // 创建新记录
-        this.talebookDb.prepare(`
+        qcBookdataDb.prepare(`
           INSERT INTO qc_bookdata (book_id, read_pages)
           VALUES (?, ?)
         `).run(bookId, readPages);
@@ -2520,13 +3594,13 @@ class DatabaseService {
     try {
       if (!this.isTalebookAvailable()) {
         console.warn('⚠️ Talebook数据库不可用，返回默认读者');
-        // 返回默认读者（reader_id = 0）
         return [
           {
             id: 0,
             name: '默认读者',
             username: 'default',
-            active: true
+            active: true,
+            note: ''
           }
         ];
       }
@@ -2538,27 +3612,45 @@ class DatabaseService {
         ORDER BY id
       `).all();
 
+      // 从 qc_users 获取备注信息
+      const userNotes = new Map();
+      if (this.isQcBooklogAvailable()) {
+        try {
+          const notes = this.qcBooklogDb.prepare('SELECT id, note FROM qc_users').all();
+          notes.forEach(n => userNotes.set(n.id, n.note || ''));
+        } catch (e) {
+          console.warn('⚠️ 获取用户备注失败:', e.message);
+        }
+      }
+
+      // 为每个读者添加备注
+      const readersWithNotes = readers.map(r => ({
+        ...r,
+        note: userNotes.get(r.id) || ''
+      }));
+
       // 确保始终包含默认读者（reader_id = 0）
-      if (!readers.some(r => r.id === 0)) {
-        readers.unshift({
+      if (!readersWithNotes.some(r => r.id === 0)) {
+        readersWithNotes.unshift({
           id: 0,
           name: '默认读者',
           username: 'default',
-          active: true
+          active: true,
+          note: userNotes.get(0) || ''
         });
       }
 
-      console.log(`✅ 获取读者列表成功，共${readers.length}个读者`);
-      return readers;
+      console.log(`✅ 获取读者列表成功，共${readersWithNotes.length}个读者`);
+      return readersWithNotes;
     } catch (error) {
       console.error('❌ 获取读者列表失败:', error.message);
-      // 返回默认读者作为后备
       return [
         {
           id: 0,
           name: '默认读者',
           username: 'default',
-          active: true
+          active: true,
+          note: ''
         }
       ];
     }
@@ -2572,11 +3664,21 @@ class DatabaseService {
   getReaderById(readerId) {
     try {
       if (readerId === 0) {
+        let note = '';
+        if (this.isQcBooklogAvailable()) {
+          try {
+            const user = this.qcBooklogDb.prepare('SELECT note FROM qc_users WHERE id = 0').get();
+            note = user?.note || '';
+          } catch (e) {
+            console.warn('⚠️ 获取默认读者备注失败:', e.message);
+          }
+        }
         return {
           id: 0,
           name: '默认读者',
           username: 'default',
-          active: true
+          active: true,
+          note
         };
       }
 
@@ -2594,9 +3696,56 @@ class DatabaseService {
         throw new Error('读者不存在或未激活');
       }
 
-      return reader;
+      // 从 qc_users 获取备注信息
+      let note = '';
+      if (this.isQcBooklogAvailable()) {
+        try {
+          const user = this.qcBooklogDb.prepare('SELECT note FROM qc_users WHERE id = ?').get(readerId);
+          note = user?.note || '';
+        } catch (e) {
+          console.warn('⚠️ 获取读者备注失败:', e.message);
+        }
+      }
+
+      return { ...reader, note };
     } catch (error) {
       console.error('❌ 获取读者信息失败:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 更新读者备注
+   * @param {number} readerId - 读者ID
+   * @param {string} note - 备注内容
+   * @returns {Object} 更新结果
+   */
+  updateReaderNote(readerId, note) {
+    try {
+      if (!this.isQcBooklogAvailable()) {
+        throw new Error('QCBookLog 数据库服务不可用');
+      }
+
+      // 确保 qc_users 表中有该读者记录
+      const existingUser = this.qcBooklogDb.prepare('SELECT id FROM qc_users WHERE id = ?').get(readerId);
+      
+      if (existingUser) {
+        // 更新现有记录
+        this.qcBooklogDb.prepare(`
+          UPDATE qc_users SET note = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
+        `).run(note, readerId);
+      } else {
+        // 插入新记录
+        const readerName = readerId === 0 ? '默认读者' : `读者${readerId}`;
+        this.qcBooklogDb.prepare(`
+          INSERT INTO qc_users (id, username, name, note) VALUES (?, ?, ?, ?)
+        `).run(readerId, `reader_${readerId}`, readerName, note);
+      }
+
+      console.log(`✅ 更新读者 ${readerId} 备注成功`);
+      return { success: true, readerId, note };
+    } catch (error) {
+      console.error('❌ 更新读者备注失败:', error.message);
       throw error;
     }
   }

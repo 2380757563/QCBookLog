@@ -59,6 +59,22 @@
               </option>
             </select>
           </div>
+          <div class="list-item" @click="goToReadingSettings">
+            <div class="item-icon">📖</div>
+            <div class="item-info">
+              <span class="item-title">阅读设置</span>
+              <span class="item-desc">阅读状态显示、热力图设置</span>
+            </div>
+            <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+          </div>
+          <div class="list-item" @click="goToBookmarkSettings">
+            <div class="item-icon">🔖</div>
+            <div class="item-info">
+              <span class="item-title">书签设置</span>
+              <span class="item-desc">书签卡片背景、显示样式</span>
+            </div>
+            <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+          </div>
           <div class="list-item">
             <div class="item-icon">🎨</div>
             <div class="item-info">
@@ -162,6 +178,28 @@
         <p>Made with ❤️ for readers</p>
       </div>
     </div>
+
+    <!-- 备注编辑弹窗 -->
+    <div v-if="showNoteModal" class="modal-overlay" @click.self="closeNoteEditor">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>编辑读者备注</h3>
+          <button class="modal-close" @click="closeNoteEditor">×</button>
+        </div>
+        <div class="modal-body">
+          <textarea
+            v-model="noteText"
+            placeholder="请输入备注内容..."
+            rows="5"
+            class="note-textarea"
+          ></textarea>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-cancel" @click="closeNoteEditor">取消</button>
+          <button class="btn-save" @click="saveNote">保存</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -185,6 +223,39 @@ const settings = reactive({
   reminder: false
 });
 
+// 备注编辑相关
+const showNoteModal = ref(false);
+const noteText = ref('');
+
+// 当前读者备注
+const currentReaderNote = computed(() => {
+  const reader = readerStore.readers.find(r => r.id === readerStore.currentReaderId);
+  return reader?.note || '';
+});
+
+// 显示备注编辑器
+const showNoteEditor = () => {
+  noteText.value = currentReaderNote.value;
+  showNoteModal.value = true;
+};
+
+// 关闭备注编辑器
+const closeNoteEditor = () => {
+  showNoteModal.value = false;
+  noteText.value = '';
+};
+
+// 保存备注
+const saveNote = async () => {
+  try {
+    await readerStore.updateReaderNote(readerStore.currentReaderId, noteText.value);
+    showNoteModal.value = false;
+  } catch (error) {
+    console.error('保存备注失败:', error);
+    alert('保存备注失败，请重试');
+  }
+};
+
 // 统计数据
 const stats = computed(() => ({
   totalBooks: bookStore.allBooks.length,
@@ -204,6 +275,14 @@ const goToBooks = (type: string) => {
 
 const goToBookmarks = () => {
   router.push('/bookmark');
+};
+
+const goToReadingSettings = () => {
+  router.push('/reading-settings');
+};
+
+const goToBookmarkSettings = () => {
+  router.push('/bookmark-settings');
 };
 
 // 加载书籍列表
@@ -492,5 +571,98 @@ input:checked + .slider:before {
 
 .version-info p {
   margin: 4px 0;
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background-color: var(--bg-card);
+  border-radius: var(--radius-lg);
+  width: 90%;
+  max-width: 400px;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: var(--text-hint);
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.modal-body {
+  padding: 16px;
+}
+
+.note-textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  resize: vertical;
+  min-height: 100px;
+  font-family: inherit;
+}
+
+.note-textarea:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px;
+  border-top: 1px solid var(--border-light);
+}
+
+.btn-cancel,
+.btn-save {
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  cursor: pointer;
+  border: none;
+}
+
+.btn-cancel {
+  background-color: #f5f5f5;
+  color: var(--text-secondary);
+}
+
+.btn-save {
+  background-color: var(--primary-color);
+  color: #fff;
 }
 </style>

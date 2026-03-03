@@ -29,7 +29,22 @@ const getBookDir = () => {
       console.log('📂 当前数据库路径:', dbPath);
 
       // 从数据库路径提取书库目录（去掉 metadata.db）
-      const bookDir = path.dirname(dbPath);
+      let bookDir = path.dirname(dbPath);
+      
+      // 转换为绝对路径
+      if (!path.isAbsolute(bookDir)) {
+        // 获取项目根目录（.env文件所在目录）
+        const currentDir = process.cwd();
+        let projectRoot;
+        if (path.basename(currentDir) === 'server') {
+          projectRoot = path.dirname(currentDir);
+        } else {
+          projectRoot = currentDir;
+        }
+        // 使用 path.join 而不是 path.resolve，避免 .. 导致的路径错误
+        bookDir = path.join(projectRoot, bookDir);
+      }
+      
       console.log('📂 解析到的书库目录:', bookDir);
 
       return bookDir;
@@ -127,16 +142,36 @@ const saveBookToCalibre = async (book) => {
     updateBookDir();
 
     // 使用数据库中的path字段构建书籍路径（确保只有两级目录）
-    const bookPath = path.join(BOOK_DIR, book.path || `${book.author || '未知作者'}/${book.title || '未知书名'}`);
+    let bookPath = book.path;
+    if (!bookPath) {
+      const cleanAuthor = (book.author || '未知作者').replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+      const cleanTitle = (book.title || '未知书名').replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+      bookPath = `${cleanAuthor}/${cleanTitle}`;
+    } else {
+      // 验证并确保路径只有两级目录
+      const pathParts = bookPath.split(/[\/\\]/);
+      if (pathParts.length > 2) {
+        const cleanAuthor = pathParts.slice(0, -1).join('').replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+        const cleanTitle = pathParts[pathParts.length - 1].replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+        bookPath = `${cleanAuthor}/${cleanTitle}`;
+      } else if (pathParts.length === 2) {
+        const cleanAuthor = pathParts[0].replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+        const cleanTitle = pathParts[1].replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+        bookPath = `${cleanAuthor}/${cleanTitle}`;
+      } else {
+        bookPath = bookPath.replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+      }
+    }
+    const fullBookPath = path.join(BOOK_DIR, bookPath);
 
-    await fs.mkdir(bookPath, { recursive: true });
-    console.log(`✅ 创建书籍目录成功：${bookPath}`);
+    await fs.mkdir(fullBookPath, { recursive: true });
+    console.log(`✅ 创建书籍目录成功：${fullBookPath}`);
 
     // 2. 检查是否有封面（封面已经在上传时直接保存到Calibre路径了）
     const hasCover = book.hasCover || false;
 
     // 3. 检查封面文件是否存在（封面已直接保存在Calibre路径）
-    const coverPath = path.join(bookPath, 'cover.jpg');
+    const coverPath = path.join(fullBookPath, 'cover.jpg');
     let coverExists = false;
     try {
       await fs.access(coverPath);
@@ -298,9 +333,9 @@ const parseCalibreBook = async (bookPath) => {
       description: calibreJson.comments || '',
       coverFilename: hasCover ? 'cover.jpg' : undefined,
       // 优先级：1. 本地封面 2. calibre.json中的原始coverUrl 3. undefined
-      coverUrl: hasCover ? `/api/static/calibre/${relativePath}/cover.jpg` : calibreJson.coverUrl,
+      coverUrl: hasCover ? `/api/static/calibre/${encodeURIComponent(relativePath)}/cover.jpg` : calibreJson.coverUrl,
       // 兼容前端localCoverData字段
-      localCoverData: hasCover ? `/api/static/calibre/${relativePath}/cover.jpg` : calibreJson.coverUrl,
+      localCoverData: hasCover ? `/api/static/calibre/${encodeURIComponent(relativePath)}/cover.jpg` : calibreJson.coverUrl,
       tags: calibreJson.tags || [],
       groups: calibreJson.groups || [],
       readStatus: calibreJson.read_status === 0 || calibreJson.read_status === '0' || calibreJson.read_status === '未读' ? '未读' : calibreJson.read_status === 1 || calibreJson.read_status === '1' || calibreJson.read_status === '在读' ? '在读' : '已读',
@@ -359,11 +394,16 @@ const getAllBooksFromCalibre = async (useCache = true, readerId = 0) => {
     try {
       const dbService = databaseService && databaseService.default ? databaseService.default : databaseService;
       if (dbService && dbService.isCalibreAvailable && dbService.isCalibreAvailable()) {
-        books = dbService.getAllBooksFromCalibre();
+        books = await dbService.getAllBooksFromCalibre(readerId);
         console.log(`✅ 从数据库获取书籍: ${books.length}本`);
         
-        // 为数据库返回的书籍生成正确的封面URL
+        // 为数据库返回的书籍生成正确的封面URL（如果还没有的话）
         books = await Promise.all(books.map(async (book) => {
+          // 如果已经有coverUrl字段，直接使用
+          if (book.coverUrl) {
+            return book;
+          }
+          
           // 构建书籍的本地路径
           const bookPath = path.join(BOOK_DIR, book.path);
           // 检查封面文件是否存在
@@ -382,7 +422,7 @@ const getAllBooksFromCalibre = async (useCache = true, readerId = 0) => {
           }
           
           // 生成封面URL
-          const coverUrl = hasCover ? `/api/static/calibre/${book.path}/cover.jpg` : undefined;
+          const coverUrl = hasCover ? `/api/static/calibre/${encodeURIComponent(book.path)}/cover.jpg` : undefined;
           
           return {
             ...book,
@@ -590,11 +630,11 @@ const processAuthorDirectory = async (authorDir) => {
             }
             
             // 生成封面URL
-            const coverUrl = hasCover ? `/api/static/calibre/${book.path}/cover.jpg` : undefined;
+            const coverUrl = hasCover ? `/api/static/calibre/${encodeURIComponent(book.path)}/cover.jpg` : undefined;
             
-            // 从Talebook数据库获取扩展数据
+            // 从 QCBookLog 数据库获取扩展数据
             let extendedData = {};
-            if (dbService && dbService.isTalebookAvailable && dbService.isTalebookAvailable()) {
+            if (dbService && dbService.isQcBooklogAvailable && dbService.isQcBooklogAvailable()) {
               try {
                 const qcBookdata = dbService.getQcBookdataByBookId(bookId);
                 if (qcBookdata) {
@@ -651,6 +691,29 @@ const processAuthorDirectory = async (authorDir) => {
               localCoverData: coverUrl
             };
             console.log(`✅ 已为数据库书籍生成封面URL: ${coverUrl}`);
+
+            // 从 Talebook 数据库获取阅读状态
+            if (dbService && dbService.isTalebookAvailable && dbService.isTalebookAvailable()) {
+              try {
+                const readingState = dbService.getReadingState(bookId, 0); // 默认使用 readerId=0
+
+                // 将 read_state 数字转换为中文状态
+                const statusMap = {
+                  0: '未读',
+                  1: '在读',
+                  2: '已读'
+                };
+
+                book.readStatus = statusMap[readingState.read_state] || '未读';
+                if (readingState.read_date) {
+                  book.readCompleteDate = readingState.read_date;
+                }
+                console.log(`✅ 已从 Talebook 数据库获取书籍 ${bookId} 的阅读状态: ${book.readStatus}`);
+              } catch (readingError) {
+                console.warn(`⚠️ 获取书籍 ${bookId} 的阅读状态失败:`, readingError.message);
+                // 如果获取失败，保持原有的 readStatus
+              }
+            }
           }
         } else {
           throw new Error('数据库服务不可用');

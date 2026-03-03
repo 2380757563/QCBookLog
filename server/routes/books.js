@@ -119,6 +119,7 @@ router.post('/', async (req, res) => {
     readCompleteDate: req.body.readCompleteDate || '',
     standardPrice: req.body.standardPrice || 0,
     note: req.body.note || '',
+    book_type: req.body.book_type !== undefined ? req.body.book_type : undefined,
     path: `${req.body.author || '未知作者'}/${req.body.title || '未知书名'}`,
     hasCover: false
   };
@@ -212,6 +213,26 @@ router.post('/', async (req, res) => {
     
     await updateVersionInfo();
     console.log('✅ 书籍创建完成');
+
+    // 记录活动日志
+    try {
+      activityService.logActivity({
+        type: 'book_added',
+        userId: 0,
+        readerId: 0,
+        bookId: newBook.id,
+        bookTitle: newBook.title,
+        bookAuthor: newBook.author,
+        bookCover: newBook.hasCover ? `/api/book/${newBook.id}/cover` : null,
+        metadata: {
+          isbn: newBook.isbn,
+          publisher: newBook.publisher,
+          pages: newBook.pages
+        }
+      });
+    } catch (logError) {
+      console.warn('⚠️ 记录活动日志失败:', logError.message);
+    }
 
     res.status(201).json(verifiedBook);
   } catch (error) {
@@ -320,6 +341,24 @@ router.put('/:id', async (req, res) => {
     await updateVersionInfo();
     console.log('✅ 版本信息已更新');
 
+    // 记录活动日志
+    try {
+      activityService.logActivity({
+        type: 'book_updated',
+        userId: 0,
+        readerId: 0,
+        bookId: updatedBook.id,
+        bookTitle: updatedBook.title,
+        bookAuthor: updatedBook.author,
+        bookCover: updatedBook.hasCover ? `/api/book/${updatedBook.id}/cover` : null,
+        metadata: {
+          updatedFields: Object.keys(req.body)
+        }
+      });
+    } catch (logError) {
+      console.warn('⚠️ 记录活动日志失败:', logError.message);
+    }
+
     console.log('📖 ============ 更新请求处理完成 ============');
     console.log('📖 返回数据:', {
       id: updatedBook.id,
@@ -375,13 +414,11 @@ router.delete('/:id', async (req, res) => {
     console.log(`✅ 找到了书籍: ${book.title}, ID: ${book.id}`);
     
     // 4. 从数据库中删除书籍（如果数据库可用）
+    // 4.1 从 Calibre 数据库删除
     if (databaseService && databaseService.isCalibreAvailable && databaseService.isCalibreAvailable()) {
-      console.log(`📝 从数据库中删除书籍，ID: ${bookId}`);
-      // 直接从Calibre数据库中删除书籍
+      console.log(`📝 从Calibre数据库中删除书籍，ID: ${bookId}`);
       try {
-        // 调用数据库服务的删除方法
         if (databaseService.calibreDb) {
-          // 删除相关表记录
           databaseService.calibreDb.prepare(`DELETE FROM books_authors_link WHERE book = ?`).run(bookId);
           databaseService.calibreDb.prepare(`DELETE FROM books_tags_link WHERE book = ?`).run(bookId);
           databaseService.calibreDb.prepare(`DELETE FROM books_publishers_link WHERE book = ?`).run(bookId);
@@ -390,7 +427,6 @@ router.delete('/:id', async (req, res) => {
           databaseService.calibreDb.prepare(`DELETE FROM identifiers WHERE book = ?`).run(bookId);
           databaseService.calibreDb.prepare(`DELETE FROM comments WHERE book = ?`).run(bookId);
           databaseService.calibreDb.prepare(`DELETE FROM data WHERE book = ?`).run(bookId);
-          // 最后删除books表记录
           const result = databaseService.calibreDb.prepare(`DELETE FROM books WHERE id = ?`).run(bookId);
           if (result.changes > 0) {
             console.log(`✅ 成功从Calibre数据库删除书籍记录，影响行数: ${result.changes}`);
@@ -398,54 +434,89 @@ router.delete('/:id', async (req, res) => {
             console.warn(`⚠️ Calibre数据库中未找到书籍记录`);
           }
         }
+      } catch (dbError) {
+        console.error(`❌ Calibre数据库删除失败:`, dbError.message);
+      }
+    }
+    
+    // 4.2 从 Talebook 数据库删除（独立于 Calibre，确保始终执行）
+    if (databaseService && databaseService.talebookDb) {
+      console.log(`📝 从Talebook数据库中删除书籍，ID: ${bookId}`);
+      try {
+        const deleteResult = databaseService.talebookDb.prepare(`DELETE FROM items WHERE book_id = ?`).run(bookId);
+        if (deleteResult.changes > 0) {
+          console.log(`✅ 成功从Talebook数据库items表删除记录，影响行数: ${deleteResult.changes}`);
+        } else {
+          console.log(`⏭️ Talebook数据库items表中未找到对应记录`);
+        }
         
-        // 同时从Talebook数据库中删除对应记录
-        if (databaseService && databaseService.isTalebookAvailable && databaseService.isTalebookAvailable()) {
-          try {
-            // 从items表中删除（使用book_id字段作为主键）
-            const deleteResult = databaseService.talebookDb.prepare(`DELETE FROM items WHERE book_id = ?`).run(bookId);
-            if (deleteResult.changes > 0) {
-              console.log(`✅ 成功从Talebook数据库items表删除记录，影响行数: ${deleteResult.changes}`);
-            } else {
-              console.log(`⏭️ Talebook数据库items表中未找到对应记录`);
-            }
-            
-            // 同时删除qc_book_groups表中的关联记录
-            const deleteGroupsResult = databaseService.talebookDb.prepare(`DELETE FROM qc_book_groups WHERE book_id = ?`).run(bookId);
-            if (deleteGroupsResult.changes > 0) {
-              console.log(`✅ 成功从Talebook数据库qc_book_groups表删除关联记录，影响行数: ${deleteGroupsResult.changes}`);
-            }
-            
-            // 同时删除reading_state表中的关联记录
-            const deleteReadingStateResult = databaseService.talebookDb.prepare(`DELETE FROM reading_state WHERE book_id = ?`).run(bookId);
-            if (deleteReadingStateResult.changes > 0) {
-              console.log(`✅ 成功从Talebook数据库reading_state表删除关联记录，影响行数: ${deleteReadingStateResult.changes}`);
-            }
-            
-            // 同时删除qc_bookdata表中的关联记录
-            const deleteBookdataResult = databaseService.talebookDb.prepare(`DELETE FROM qc_bookdata WHERE book_id = ?`).run(bookId);
-            if (deleteBookdataResult.changes > 0) {
-              console.log(`✅ 成功从Talebook数据库qc_bookdata表删除关联记录，影响行数: ${deleteBookdataResult.changes}`);
-            }
-            
-            // 同时删除qc_bookmarks表中的关联记录
-            const deleteBookmarksResult = databaseService.talebookDb.prepare(`DELETE FROM qc_bookmarks WHERE book_id = ?`).run(bookId);
-            if (deleteBookmarksResult.changes > 0) {
-              console.log(`✅ 成功从Talebook数据库qc_bookmarks表删除关联记录，影响行数: ${deleteBookmarksResult.changes}`);
-            }
-            
-            // 同时删除qc_reading_records表中的关联记录
-            const deleteReadingRecordsResult = databaseService.talebookDb.prepare(`DELETE FROM qc_reading_records WHERE book_id = ?`).run(bookId);
-            if (deleteReadingRecordsResult.changes > 0) {
-              console.log(`✅ 成功从Talebook数据库qc_reading_records表删除关联记录，影响行数: ${deleteReadingRecordsResult.changes}`);
-            }
-          } catch (talebookError) {
-            console.error(`⚠️ 从Talebook数据库删除关联记录失败:`, talebookError.message);
+        // 注意：分组数据存储在 qcBooklogDb 中，通过 mapping_id 关联
+        // 删除书籍映射时会级联删除分组关联（ON DELETE CASCADE）
+        // 这里只需要删除 talebookDb 中的旧数据（兼容旧版本）
+        if (databaseService.talebookDb) {
+          const deleteGroupsResult = databaseService.talebookDb.prepare(`DELETE FROM qc_book_groups WHERE book_id = ?`).run(bookId);
+          if (deleteGroupsResult.changes > 0) {
+            console.log(`✅ 成功从Talebook数据库qc_book_groups表删除关联记录，影响行数: ${deleteGroupsResult.changes}`);
           }
         }
-      } catch (dbError) {
-        console.error(`❌ 数据库删除失败:`, dbError.message);
+        
+        const deleteReadingStateResult = databaseService.talebookDb.prepare(`DELETE FROM reading_state WHERE book_id = ?`).run(bookId);
+        if (deleteReadingStateResult.changes > 0) {
+          console.log(`✅ 成功从Talebook数据库reading_state表删除关联记录，影响行数: ${deleteReadingStateResult.changes}`);
+        }
+        
+        const deleteBookdataResult = databaseService.talebookDb.prepare(`DELETE FROM qc_bookdata WHERE book_id = ?`).run(bookId);
+        if (deleteBookdataResult.changes > 0) {
+          console.log(`✅ 成功从Talebook数据库qc_bookdata表删除关联记录，影响行数: ${deleteBookdataResult.changes}`);
+        }
+        
+        const deleteBookmarksResult = databaseService.talebookDb.prepare(`DELETE FROM qc_bookmarks WHERE book_id = ?`).run(bookId);
+        if (deleteBookmarksResult.changes > 0) {
+          console.log(`✅ 成功从Talebook数据库qc_bookmarks表删除关联记录，影响行数: ${deleteBookmarksResult.changes}`);
+        }
+        
+        const deleteReadingRecordsResult = databaseService.talebookDb.prepare(`DELETE FROM qc_reading_records WHERE book_id = ?`).run(bookId);
+        if (deleteReadingRecordsResult.changes > 0) {
+          console.log(`✅ 成功从Talebook数据库qc_reading_records表删除关联记录，影响行数: ${deleteReadingRecordsResult.changes}`);
+        }
+        
+        const deleteGoalsResult = databaseService.talebookDb.prepare(`DELETE FROM reading_goals WHERE book_id = ?`).run(bookId);
+        if (deleteGoalsResult.changes > 0) {
+          console.log(`✅ 成功从Talebook数据库reading_goals表删除关联记录，影响行数: ${deleteGoalsResult.changes}`);
+        }
+        
+        const deleteActivitiesResult = databaseService.talebookDb.prepare(`DELETE FROM activities WHERE book_id = ?`).run(bookId);
+        if (deleteActivitiesResult.changes > 0) {
+          console.log(`✅ 成功从Talebook数据库activities表删除关联记录，影响行数: ${deleteActivitiesResult.changes}`);
+        }
+        
+        databaseService.talebookDb.pragma('wal_checkpoint(FULL)');
+        console.log(`✅ Talebook数据库WAL已同步`);
+      } catch (talebookError) {
+        console.error(`⚠️ 从Talebook数据库删除关联记录失败:`, talebookError.message);
       }
+    } else {
+      console.warn(`⚠️ Talebook数据库不可用，跳过删除操作`);
+    }
+    
+    // 4.3 从 QCBookLog 数据库删除阅读状态（防止定时同步重新创建 items 记录）
+    if (databaseService && databaseService.qcBooklogDb) {
+      console.log(`📝 从QCBookLog数据库中删除书籍阅读状态，ID: ${bookId}`);
+      try {
+        const deleteReadingStateResult = databaseService.qcBooklogDb.prepare(`DELETE FROM qc_reading_state WHERE book_id = ?`).run(bookId);
+        if (deleteReadingStateResult.changes > 0) {
+          console.log(`✅ 成功从QCBookLog数据库qc_reading_state表删除记录，影响行数: ${deleteReadingStateResult.changes}`);
+        } else {
+          console.log(`⏭️ QCBookLog数据库qc_reading_state表中未找到对应记录`);
+        }
+        
+        databaseService.qcBooklogDb.pragma('wal_checkpoint(FULL)');
+        console.log(`✅ QCBookLog数据库WAL已同步`);
+      } catch (qcBooklogError) {
+        console.error(`⚠️ 从QCBookLog数据库删除阅读状态失败:`, qcBooklogError.message);
+      }
+    } else {
+      console.warn(`⚠️ QCBookLog数据库不可用，跳过删除操作`);
     }
     
     // 5. 从文件系统中删除书籍
@@ -473,71 +544,16 @@ router.delete('/:id', async (req, res) => {
     await updateVersionInfo();
     console.log(`✅ 版本信息已更新`);
     
-    // 9. 同步到Talebook数据库
-    try {
-      await syncService.syncCalibreToTalebook();
-      console.log('✅ 书籍删除已同步到Talebook数据库');
-    } catch (syncError) {
-      console.warn('⚠️ 同步到Talebook数据库失败:', syncError.message);
-    }
+    // 9. 同步到Talebook数据库（删除操作不需要同步，因为已经直接删除了）
+    // 注意：删除书籍后不需要调用 syncCalibreToTalebook，因为：
+    // 1. 书籍已从 Calibre 删除
+    // 2. 书籍已从 Talebook items 表删除
+    // 3. 同步服务会检测到 Calibre 中不存在的书籍并删除 Talebook 中的记录
+    // 但由于我们已经直接删除了，所以不需要再次同步
+    console.log('✅ 书籍删除完成，跳过同步服务（已直接删除）');
     
     console.log(`✅ 删除书籍成功: ${bookId}`);
     
-    // 级联删除该书籍的相关数据
-    console.log(`📝 开始级联删除书籍 ${bookId} 的相关数据`);
-    
-    try {
-      // 删除该书籍的阅读记录
-      if (databaseService && databaseService.talebookDb) {
-        const deleteReadingRecordsResult = databaseService.talebookDb.prepare(
-          `DELETE FROM qc_reading_records WHERE book_id = ?`
-        ).run(bookId);
-        
-        if (deleteReadingRecordsResult.changes > 0) {
-          console.log(`✅ 成功删除 ${deleteReadingRecordsResult.changes} 条阅读记录`);
-        }
-      }
-      
-      // 删除该书籍的书摘
-      if (databaseService && databaseService.talebookDb) {
-        const deleteBookmarksResult = databaseService.talebookDb.prepare(
-          `DELETE FROM qc_bookmarks WHERE book_id = ?`
-        ).run(bookId);
-        
-        if (deleteBookmarksResult.changes > 0) {
-          console.log(`✅ 成功删除 ${deleteBookmarksResult.changes} 条书摘`);
-        }
-      }
-      
-      // 删除该书籍的阅读目标
-      if (databaseService && databaseService.talebookDb) {
-        const deleteGoalsResult = databaseService.talebookDb.prepare(
-          `DELETE FROM reading_goals WHERE book_id = ?`
-        ).run(bookId);
-        
-        if (deleteGoalsResult.changes > 0) {
-          console.log(`✅ 成功删除 ${deleteGoalsResult.changes} 条阅读目标`);
-        }
-      }
-
-      // 删除该书籍的活动记录
-      const db = databaseService.talebookDb;
-      if (db) {
-        const deleteActivitiesResult = db.prepare(
-          `DELETE FROM activities WHERE book_id = ?`
-        ).run(bookId);
-        
-        if (deleteActivitiesResult.changes > 0) {
-          console.log(`✅ 成功删除 ${deleteActivitiesResult.changes} 条活动记录`);
-        }
-      }
-      
-      console.log(`✅ 级联删除完成`);
-    } catch (cascadeError) {
-      console.error('⚠️ 级联删除失败:', cascadeError);
-      // 不影响主流程，只记录错误
-    }
-
     // 返回被删除的书籍信息，方便前端使用
     res.json({ 
       message: 'Book deleted successfully',
@@ -771,7 +787,7 @@ router.post('/import', async (req, res) => {
       .filter(book => !existingIds.has(book.id))
       .map(book => ({
         ...book,
-        id: book.id, // 使用导入数据中的ID，不再生成UUID
+        id: book.id,
         createTime: book.createTime || new Date().toISOString(),
         updateTime: book.updateTime || new Date().toISOString()
       }));
@@ -780,7 +796,6 @@ router.post('/import', async (req, res) => {
       return res.json({ message: '没有新书籍需要导入', total: existingBooks.length });
     }
 
-    // 并发导入新书籍（限制并发数为10）
     const BATCH_SIZE = 10;
     let successCount = 0;
     let failCount = 0;
@@ -788,7 +803,15 @@ router.post('/import', async (req, res) => {
     for (let i = 0; i < booksToImport.length; i += BATCH_SIZE) {
       const batch = booksToImport.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
-        batch.map(book => calibreService.saveBookToCalibre(book))
+        batch.map(async (book) => {
+          if (databaseService && databaseService.isCalibreAvailable && databaseService.isCalibreAvailable()) {
+            const dbBook = databaseService.addBookToDB(book);
+            book.id = dbBook.id;
+            console.log(`✅ [批量导入] 书籍 "${book.title}" 已保存到数据库, ID: ${book.id}`);
+          }
+          await calibreService.saveBookToCalibre(book);
+          return true;
+        })
       );
 
       results.forEach(result => {
@@ -796,6 +819,7 @@ router.post('/import', async (req, res) => {
           successCount++;
         } else {
           failCount++;
+          console.error('❌ [批量导入] 导入失败:', result.reason?.message || result.reason);
         }
       });
     }
@@ -874,7 +898,37 @@ router.put('/:id/reading-state', async (req, res) => {
       return res.status(400).json({ error: 'read_state is required' });
     }
 
+    // 获取书籍信息用于活动日志
+    let bookInfo = null;
+    try {
+      bookInfo = await calibreService.getBookFromCalibreById(bookId);
+    } catch (e) {
+      console.warn('⚠️ 获取书籍信息失败:', e.message);
+    }
+
     const updatedState = databaseService.updateReadingState(bookId, readingState, readerId);
+
+    // 记录活动日志
+    try {
+      const stateMap = { 0: '未读', 1: '在读', 2: '已读' };
+      activityService.logActivity({
+        type: 'reading_state_changed',
+        userId: readerId,
+        readerId: readerId,
+        bookId: bookId,
+        bookTitle: bookInfo?.title || null,
+        bookAuthor: bookInfo?.author || null,
+        bookCover: bookInfo?.hasCover ? `/api/book/${bookId}/cover` : null,
+        metadata: {
+          read_state: readingState.read_state,
+          read_state_label: stateMap[readingState.read_state] || '未知',
+          favorite: readingState.favorite,
+          wants: readingState.wants
+        }
+      });
+    } catch (logError) {
+      console.warn('⚠️ 记录活动日志失败:', logError.message);
+    }
 
     // 清除缓存，确保下次获取时能看到最新的阅读状态
     calibreService.clearBookCache();

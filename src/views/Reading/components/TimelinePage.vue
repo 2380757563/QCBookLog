@@ -62,23 +62,32 @@
         <div v-if="isToday(selectedTimelineDate)" class="timeline-section">
           <div class="timeline-section-header">
             <span class="section-title">今日操作</span>
-            <span class="section-count">{{ getTodayActivitiesCount() }} 条</span>
+            <span class="section-count">{{ todayActivities.length }} 条</span>
           </div>
           <div
-            v-for="(record, index) in getTodayActivities()"
+            v-for="(record, index) in todayActivities"
             :key="record.id"
             class="timeline-item"
           >
+            <div class="timeline-time">
+              {{ formatActivityTime(record) }}
+            </div>
             <div class="timeline-marker">
               <div class="marker-dot" :class="getActivityMarkerClass(record.type)"></div>
-              <div v-if="index < getTodayActivities().length - 1 || getHistoricalActivities().length > 0" class="marker-line"></div>
+              <div v-if="index < todayActivities.length - 1 || historicalActivitiesGrouped.length > 0" class="marker-line"></div>
             </div>
             <div class="timeline-content">
               <div class="activity-type-badge" :class="getActivityTypeClass(record.type)">
                 {{ getActivityTypeLabel(record.type) }}
               </div>
               <div v-if="record.bookTitle" class="record-cover">
-                <img v-if="record.bookCover" :src="record.bookCover" :alt="record.bookTitle" />
+                <img 
+                  v-if="record.bookCover" 
+                  :src="record.bookCover" 
+                  :alt="record.bookTitle"
+                  loading="lazy"
+                  @error="handleCoverError($event, record)"
+                />
                 <div v-else class="cover-placeholder">{{ record.bookTitle ? record.bookTitle.charAt(0) : '' }}</div>
               </div>
               <div class="record-info">
@@ -87,46 +96,73 @@
                 <div v-if="record.startTime && record.endTime" class="record-time-range">{{ formatTimeRange(record.startTime, record.endTime) }}</div>
                 <div v-if="record.duration" class="record-duration">阅读时长：{{ formatDuration(record.duration) }}</div>
                 <div v-if="record.startPage !== undefined && record.endPage !== undefined" class="record-pages">
-                  阅读页数：第 {{ record.startPage }} 页 → 第 {{ record.endPage }} 页
-                  <span v-if="record.pagesRead" class="pages-read-count">（本次 {{ record.pagesRead }} 页）</span>
+                  <template v-if="record.type === 'bookmark_added'">
+                    书摘页数：第 {{ record.startPage || record.endPage }} 页
+                  </template>
+                  <template v-else>
+                    阅读页数：第 {{ record.startPage || 0 }} 页 → 第 {{ record.endPage || 0 }} 页
+                    <span v-if="record.pagesRead" class="pages-read-count">（本次 {{ record.pagesRead }} 页）</span>
+                  </template>
                 </div>
                 <div v-if="record.content" class="record-content">{{ record.content }}</div>
+                <div v-if="record.metadata && getMetadataInfo(record)" class="record-metadata">{{ getMetadataInfo(record) }}</div>
               </div>
             </div>
           </div>
         </div>
-        <div v-if="isToday(selectedTimelineDate) && getHistoricalActivities().length > 0" class="timeline-section">
-          <div class="timeline-section-header">
-            <span class="section-title">历史操作</span>
-            <span class="section-count">{{ getHistoricalActivities().length }} 条</span>
-          </div>
+        <div v-if="isToday(selectedTimelineDate) && historicalActivitiesGrouped.length > 0" class="timeline-section historical-section">
           <div
-            v-for="(record, index) in getHistoricalActivities()"
-            :key="record.id"
-            class="timeline-item"
+            v-for="group in historicalActivitiesGrouped"
+            :key="group.date"
+            class="date-group"
           >
-            <div class="timeline-marker">
-              <div class="marker-dot" :class="getActivityMarkerClass(record.type)"></div>
-              <div v-if="index < getHistoricalActivities().length - 1" class="marker-line"></div>
+            <div class="timeline-section-header">
+              <span class="section-title">{{ group.dateLabel }}</span>
+              <span class="section-count">{{ group.activities.length }} 条</span>
             </div>
-            <div class="timeline-content">
-              <div class="activity-type-badge" :class="getActivityTypeClass(record.type)">
-                {{ getActivityTypeLabel(record.type) }}
+            <div
+              v-for="(record, index) in group.activities"
+              :key="record.id"
+              class="timeline-item"
+            >
+              <div class="timeline-time">
+                {{ formatActivityTime(record) }}
               </div>
-              <div v-if="record.bookTitle" class="record-cover">
-                <img v-if="record.bookCover" :src="record.bookCover" :alt="record.bookTitle" />
-                <div v-else class="cover-placeholder">{{ record.bookTitle ? record.bookTitle.charAt(0) : '' }}</div>
+              <div class="timeline-marker">
+                <div class="marker-dot" :class="getActivityMarkerClass(record.type)"></div>
+                <div v-if="index < group.activities.length - 1" class="marker-line"></div>
               </div>
-              <div class="record-info">
-                <div v-if="record.bookTitle" class="record-title">{{ record.bookTitle }}</div>
-                <div v-if="record.bookAuthor" class="record-author">{{ record.bookAuthor }} · {{ record.bookPublisher }}</div>
-                <div v-if="record.startTime && record.endTime" class="record-time-range">{{ formatTimeRange(record.startTime, record.endTime) }}</div>
-                <div v-if="record.duration" class="record-duration">阅读时长：{{ formatDuration(record.duration) }}</div>
-                <div v-if="record.startPage !== undefined && record.endPage !== undefined" class="record-pages">
-                  阅读页数：第 {{ record.startPage }} 页 → 第 {{ record.endPage }} 页
-                  <span v-if="record.pagesRead" class="pages-read-count">（本次 {{ record.pagesRead }} 页）</span>
+              <div class="timeline-content">
+                <div class="activity-type-badge" :class="getActivityTypeClass(record.type)">
+                  {{ getActivityTypeLabel(record.type) }}
                 </div>
-                <div v-if="record.content" class="record-content">{{ record.content }}</div>
+                <div v-if="record.bookTitle" class="record-cover">
+                  <img 
+                    v-if="record.bookCover" 
+                    :src="record.bookCover" 
+                    :alt="record.bookTitle"
+                    loading="lazy"
+                    @error="handleCoverError($event, record)"
+                  />
+                  <div v-else class="cover-placeholder">{{ record.bookTitle ? record.bookTitle.charAt(0) : '' }}</div>
+                </div>
+                <div class="record-info">
+                  <div v-if="record.bookTitle" class="record-title">{{ record.bookTitle }}</div>
+                  <div v-if="record.bookAuthor" class="record-author">{{ record.bookAuthor }} · {{ record.bookPublisher }}</div>
+                  <div v-if="record.startTime && record.endTime" class="record-time-range">{{ formatTimeRange(record.startTime, record.endTime) }}</div>
+                  <div v-if="record.duration" class="record-duration">阅读时长：{{ formatDuration(record.duration) }}</div>
+                  <div v-if="record.startPage !== undefined && record.endPage !== undefined" class="record-pages">
+                    <template v-if="record.type === 'bookmark_added'">
+                      书摘页数：第 {{ record.startPage || record.endPage }} 页
+                    </template>
+                    <template v-else>
+                      阅读页数：第 {{ record.startPage || 0 }} 页 → 第 {{ record.endPage || 0 }} 页
+                      <span v-if="record.pagesRead" class="pages-read-count">（本次 {{ record.pagesRead }} 页）</span>
+                    </template>
+                  </div>
+                  <div v-if="record.content" class="record-content">{{ record.content }}</div>
+                  <div v-if="record.metadata && getMetadataInfo(record)" class="record-metadata">{{ getMetadataInfo(record) }}</div>
+                </div>
               </div>
             </div>
           </div>
@@ -137,6 +173,9 @@
             :key="record.id"
             class="timeline-item"
           >
+            <div class="timeline-time">
+              {{ formatActivityTime(record) }}
+            </div>
             <div class="timeline-marker">
               <div class="marker-dot" :class="getActivityMarkerClass(record.type)"></div>
               <div v-if="index < timelineDateDetails.length - 1" class="marker-line"></div>
@@ -146,7 +185,13 @@
                 {{ getActivityTypeLabel(record.type) }}
               </div>
               <div v-if="record.bookTitle" class="record-cover">
-                <img v-if="record.bookCover" :src="record.bookCover" :alt="record.bookTitle" />
+                <img 
+                  v-if="record.bookCover" 
+                  :src="record.bookCover" 
+                  :alt="record.bookTitle"
+                  loading="lazy"
+                  @error="handleCoverError($event, record)"
+                />
                 <div v-else class="cover-placeholder">{{ record.bookTitle ? record.bookTitle.charAt(0) : '' }}</div>
               </div>
               <div class="record-info">
@@ -155,10 +200,16 @@
                 <div v-if="record.startTime && record.endTime" class="record-time-range">{{ formatTimeRange(record.startTime, record.endTime) }}</div>
                 <div v-if="record.duration" class="record-duration">阅读时长：{{ formatDuration(record.duration) }}</div>
                 <div v-if="record.startPage !== undefined && record.endPage !== undefined" class="record-pages">
-                  阅读页数：第 {{ record.startPage }} 页 → 第 {{ record.endPage }} 页
-                  <span v-if="record.pagesRead" class="pages-read-count">（本次 {{ record.pagesRead }} 页）</span>
+                  <template v-if="record.type === 'bookmark_added'">
+                    书摘页数：第 {{ record.startPage || record.endPage }} 页
+                  </template>
+                  <template v-else>
+                    阅读页数：第 {{ record.startPage || 0 }} 页 → 第 {{ record.endPage || 0 }} 页
+                    <span v-if="record.pagesRead" class="pages-read-count">（本次 {{ record.pagesRead }} 页）</span>
+                  </template>
                 </div>
                 <div v-if="record.content" class="record-content">{{ record.content }}</div>
+                <div v-if="record.metadata && getMetadataInfo(record)" class="record-metadata">{{ getMetadataInfo(record) }}</div>
               </div>
             </div>
           </div>
@@ -189,6 +240,101 @@ const showCalendarPicker = ref(false);
 const timelineCalendarDays = ref<any[]>([]);
 const loadingCalendarDays = ref(false);
 const eventBus = useEventBus();
+
+const todayDateStr = computed(() => {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+});
+
+const getActivityDate = (activity: any): string => {
+  if (!activity.createdAt) return '';
+  const dateStr = activity.createdAt.toString();
+  
+  if (dateStr.includes('T')) {
+    return dateStr.split('T')[0];
+  }
+  if (dateStr.includes(' ')) {
+    return dateStr.split(' ')[0];
+  }
+  return dateStr.substring(0, 10);
+};
+
+const normalizeDate = (dateStr: string): string => {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    return `${parts[0]}-${String(parts[1]).padStart(2, '0')}-${String(parts[2]).padStart(2, '0')}`;
+  }
+  return dateStr;
+};
+
+const todayActivities = computed(() => {
+  if (!timelineDateDetails.value || timelineDateDetails.value.length === 0) return [];
+  const today = todayDateStr.value;
+  return timelineDateDetails.value.filter(a => {
+    const activityDate = normalizeDate(getActivityDate(a));
+    return activityDate === today;
+  });
+});
+
+const historicalActivities = computed(() => {
+  if (!timelineDateDetails.value || timelineDateDetails.value.length === 0) return [];
+  const today = todayDateStr.value;
+  return timelineDateDetails.value.filter(a => {
+    const activityDate = normalizeDate(getActivityDate(a));
+    return activityDate !== today;
+  });
+});
+
+const historicalActivitiesGrouped = computed(() => {
+  const historical = historicalActivities.value;
+  if (historical.length === 0) return [];
+  
+  const grouped = new Map<string, any[]>();
+  const today = todayDateStr.value;
+  
+  historical.forEach(activity => {
+    const date = normalizeDate(getActivityDate(activity));
+    if (date && date !== today) {
+      if (!grouped.has(date)) {
+        grouped.set(date, []);
+      }
+      grouped.get(date)!.push(activity);
+    }
+  });
+  
+  const result: { date: string; dateLabel: string; activities: any[] }[] = [];
+  const todayDate = new Date();
+  todayDate.setHours(0, 0, 0, 0);
+  
+  grouped.forEach((activities, date) => {
+    const dateObj = new Date(date + 'T00:00:00');
+    const diffTime = todayDate.getTime() - dateObj.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    let dateLabel = '';
+    if (diffDays === 1) {
+      dateLabel = '昨天';
+    } else if (diffDays === 2) {
+      dateLabel = '前天';
+    } else if (diffDays > 2 && diffDays < 7) {
+      dateLabel = `${diffDays}天前`;
+    } else if (diffDays >= 7) {
+      const month = dateObj.getMonth() + 1;
+      const day = dateObj.getDate();
+      dateLabel = `${month}月${day}日`;
+    } else {
+      dateLabel = '今天';
+    }
+    
+    result.push({ date, dateLabel, activities });
+  });
+  
+  return result.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+});
 
 const changeTimelineMonth = (delta: number) => {
   let newMonth = timelineMonth.value + delta;
@@ -453,9 +599,23 @@ const formatDuration = (minutes: number): string => {
   return `${mins}分钟`;
 };
 
+const handleCoverError = (event: Event, record: any) => {
+  const target = event.target as HTMLImageElement;
+  if (target) {
+    target.style.display = 'none';
+    const placeholder = document.createElement('div');
+    placeholder.className = 'cover-placeholder';
+    placeholder.textContent = record.bookTitle ? record.bookTitle.charAt(0) : '';
+    target.parentNode?.appendChild(placeholder);
+  }
+};
+
 const getActivityTypeLabel = (type: string): string => {
   const labels: Record<string, string> = {
+    'book_added': '添加书籍',
+    'book_updated': '更新书籍',
     'bookmark_added': '添加书摘',
+    'bookmark_deleted': '删除书摘',
     'reading_state_changed': '阅读状态变更',
     'reading_record': '阅读记录',
     'reading_goal_set': '设置阅读目标'
@@ -465,7 +625,10 @@ const getActivityTypeLabel = (type: string): string => {
 
 const getActivityTypeClass = (type: string): string => {
   const classes: Record<string, string> = {
+    'book_added': 'activity-type--add',
+    'book_updated': 'activity-type--update',
     'bookmark_added': 'activity-type--add',
+    'bookmark_deleted': 'activity-type--delete',
     'reading_state_changed': 'activity-type--status',
     'reading_record': 'activity-type--reading',
     'reading_goal_set': 'activity-type--goal'
@@ -475,7 +638,10 @@ const getActivityTypeClass = (type: string): string => {
 
 const getActivityMarkerClass = (type: string): string => {
   const classes: Record<string, string> = {
+    'book_added': 'marker-dot--add',
+    'book_updated': 'marker-dot--update',
     'bookmark_added': 'marker-dot--add',
+    'bookmark_deleted': 'marker-dot--delete',
     'reading_state_changed': 'marker-dot--status',
     'reading_record': 'marker-dot--reading',
     'reading_goal_set': 'marker-dot--goal'
@@ -490,28 +656,66 @@ const isToday = (date: any): boolean => {
   return date.fullDate === todayDate;
 };
 
-const getTodayActivities = (): any[] => {
-  if (!timelineDateDetails.value || timelineDateDetails.value.length === 0) return [];
-  const today = new Date();
-  const todayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  return timelineDateDetails.value.filter(a => {
-    const activityDate = a.createdAt.split(' ')[0];
-    return activityDate === todayDate;
-  });
+const formatActivityTime = (record: any): string => {
+  if (record.startTime && record.endTime) {
+    return formatTimeRange(record.startTime, record.endTime);
+  }
+  if (record.createdAt) {
+    const date = new Date(record.createdAt);
+    return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  }
+  return '';
 };
 
-const getHistoricalActivities = (): any[] => {
-  if (!timelineDateDetails.value || timelineDateDetails.value.length === 0) return [];
-  const today = new Date();
-  const todayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  return timelineDateDetails.value.filter(a => {
-    const activityDate = a.createdAt.split(' ')[0];
-    return activityDate !== todayDate;
-  });
-};
-
-const getTodayActivitiesCount = (): number => {
-  return getTodayActivities().length;
+const getMetadataInfo = (record: any): string => {
+  if (!record.metadata) return '';
+  
+  try {
+    const metadata = typeof record.metadata === 'string' ? JSON.parse(record.metadata) : record.metadata;
+    
+    if (record.type === 'reading_state_changed') {
+      if (metadata.read_state_label) {
+        return `更改为「${metadata.read_state_label}」`;
+      }
+      const stateMap: Record<number, string> = {
+        0: '未读',
+        1: '在读',
+        2: '已读'
+      };
+      const state = metadata.read_state;
+      if (state !== undefined) {
+        return `更改为「${stateMap[state] || '未知状态'}」`;
+      }
+    }
+    
+    if (record.type === 'book_added') {
+      const parts = [];
+      if (metadata.isbn) parts.push(`ISBN: ${metadata.isbn}`);
+      if (metadata.publisher) parts.push(`出版社: ${metadata.publisher}`);
+      if (metadata.pages) parts.push(`${metadata.pages}页`);
+      return parts.join(' · ');
+    }
+    
+    if (record.type === 'book_updated') {
+      if (metadata.updatedFields && metadata.updatedFields.length > 0) {
+        const fieldLabels: Record<string, string> = {
+          title: '书名',
+          author: '作者',
+          publisher: '出版社',
+          pages: '页数',
+          isbn: 'ISBN',
+          readStatus: '阅读状态',
+          tags: '标签'
+        };
+        const fields = metadata.updatedFields.map((f: string) => fieldLabels[f] || f);
+        return `更新了: ${fields.join('、')}`;
+      }
+    }
+    
+    return '';
+  } catch {
+    return '';
+  }
 };
 </script>
 
@@ -823,7 +1027,16 @@ const getTodayActivitiesCount = (): number => {
 
   .timeline-item {
     display: flex;
-    gap: 16px;
+    gap: 12px;
+  }
+
+  .timeline-time {
+    width: 70px;
+    flex-shrink: 0;
+    font-size: 12px;
+    color: var(--text-hint);
+    text-align: right;
+    padding-top: 2px;
   }
 
   .timeline-marker {
@@ -1026,6 +1239,25 @@ const getTodayActivitiesCount = (): number => {
     font-size: 13px;
     color: var(--text-secondary);
     margin-top: 4px;
+  }
+
+  .record-metadata {
+    font-size: 12px;
+    color: var(--primary-color);
+    margin-top: 4px;
+    font-weight: 500;
+  }
+
+  .historical-section {
+    margin-top: 8px;
+  }
+
+  .date-group {
+    margin-bottom: 20px;
+    
+    &:last-child {
+      margin-bottom: 0;
+    }
   }
 
   .empty-state {

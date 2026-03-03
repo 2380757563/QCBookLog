@@ -185,28 +185,22 @@
             <label class="filter-label">书籍载体</label>
             <div class="filter-options">
               <button
-                :class="['filter-option-btn', { 'filter-option-btn--active': filterConditions.binding1 === null }]"
-                @click="filterConditions.binding1 = null; saveFilterConditions();"
+                :class="['filter-option-btn', { 'filter-option-btn--active': filterConditions.book_type === null }]"
+                @click="filterConditions.book_type = null; saveFilterConditions();"
               >
                 全部
               </button>
               <button
-                :class="['filter-option-btn', { 'filter-option-btn--active': filterConditions.binding1 === 0 }]"
-                @click="filterConditions.binding1 = 0; saveFilterConditions();"
+                :class="['filter-option-btn', { 'filter-option-btn--active': filterConditions.book_type === 1 }]"
+                @click="filterConditions.book_type = 1; saveFilterConditions();"
+              >
+                实体书
+              </button>
+              <button
+                :class="['filter-option-btn', { 'filter-option-btn--active': filterConditions.book_type === 0 }]"
+                @click="filterConditions.book_type = 0; saveFilterConditions();"
               >
                 电子书
-              </button>
-              <button
-                :class="['filter-option-btn', { 'filter-option-btn--active': filterConditions.binding1 === 1 }]"
-                @click="filterConditions.binding1 = 1; saveFilterConditions();"
-              >
-                纸质书
-              </button>
-              <button
-                :class="['filter-option-btn', { 'filter-option-btn--active': filterConditions.binding1 === 2 }]"
-                @click="filterConditions.binding1 = 2; saveFilterConditions();"
-              >
-                有声书
               </button>
             </div>
           </div>
@@ -301,7 +295,7 @@
 
         <div class="filter-footer">
           <button class="btn btn-default" @click="clearFilterConditions">
-            清除所有筛选
+            重置筛选
           </button>
           <button class="btn btn-primary" @click="showAdvancedFilter = false">
             应用
@@ -400,34 +394,9 @@
             <path fill="currentColor" d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
           </svg>
         </button>
-        <button class="organize-tool-btn" @click="addToWishlistBatch" title="添加到书单">
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path fill="currentColor" d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2zm0 15l-5-2.18L7 18V5h10v13z"/>
-          </svg>
-        </button>
-        <button class="organize-tool-btn" @click="addTags" title="添加标签">
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path fill="currentColor" d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2s-1.05.22-1.41.59L2.59 10.59c-.78.77-.78 2.04 0 2.83L8 18.83c.39.39.9.59 1.41.59.51 0 1.02-.2 1.41-.59l7-7c.78-.78.78-2.05 0-2.83l-6.41-6.42zM6.41 10L12 4.41 15.59 8 10 13.59 6.41 10zM15 17l-5-5 1.41-1.41 5 5L15 17z"/>
-          </svg>
-        </button>
         <button class="organize-tool-btn" @click="changeStatus" title="修改状态">
           <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path fill="currentColor" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-          </svg>
-        </button>
-        <button class="organize-tool-btn" @click="setSource" title="设置来源">
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
-          </svg>
-        </button>
-        <button class="organize-tool-btn" @click="exportBookDraft" title="导出书稿">
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path fill="currentColor" d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
-          </svg>
-        </button>
-        <button class="organize-tool-btn" @click="exportBooks" title="导出书籍">
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path fill="currentColor" d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
           </svg>
         </button>
         <button class="organize-tool-btn organize-btn-delete" @click="deleteSelected" title="删除">
@@ -723,8 +692,9 @@ const showAdvancedFilter = ref(false);
 const filterConditions = ref({
   tags: [] as string[],
   readStatus: '' as '未读' | '在读' | '已读' | '',
-  binding1: null as number | null, // 书籍载体类型: 0=电子书, 1=平装, 2=精装, 3=线装
-  binding2: null as number | null, // 装帧类型
+  book_type: null as number | null, // 书籍载体类型: 0=电子书, 1=实体书
+  binding1: null as number | null, // 装帧类型: 0=电子书, 1=平装, 2=精装, 3=特殊装帧
+  binding2: null as number | null, // 装帧细分类型
   paper1: null as number | null, // 纸张类型
   edge1: null as number | null, // 刷边位置
   edge2: null as number | null, // 刷边工艺
@@ -845,11 +815,16 @@ const filteredBooks = computed(() => {
   }
 
   // 书籍载体类型筛选
+  if (filterConditions.value.book_type !== null) {
+    books = books.filter(b => b.book_type === filterConditions.value.book_type);
+  }
+
+  // 装帧类型筛选
   if (filterConditions.value.binding1 !== null) {
     books = books.filter(b => b.binding1 === filterConditions.value.binding1);
   }
 
-  // 装帧类型筛选
+  // 装帧细分类型筛选
   if (filterConditions.value.binding2 !== null) {
     books = books.filter(b => b.binding2 === filterConditions.value.binding2);
   }
@@ -968,8 +943,12 @@ const clearFilterConditions = () => {
   filterConditions.value = {
     tags: [],
     readStatus: '',
+    book_type: null,
     binding1: null,
     binding2: null,
+    paper1: null,
+    edge1: null,
+    edge2: null,
     publisher: '',
     author: ''
   };
@@ -980,8 +959,12 @@ const hasActiveFilters = computed(() => {
   return (
     filterConditions.value.tags.length > 0 ||
     filterConditions.value.readStatus !== '' ||
+    filterConditions.value.book_type !== null ||
     filterConditions.value.binding1 !== null ||
     filterConditions.value.binding2 !== null ||
+    filterConditions.value.paper1 !== null ||
+    filterConditions.value.edge1 !== null ||
+    filterConditions.value.edge2 !== null ||
     filterConditions.value.publisher.trim() !== '' ||
     filterConditions.value.author.trim() !== ''
   );
@@ -1001,8 +984,12 @@ const loadFilterConditions = () => {
       filterConditions.value = {
         tags: conditions.tags || [],
         readStatus: conditions.readStatus || '',
+        book_type: conditions.book_type !== undefined ? conditions.book_type : null,
         binding1: conditions.binding1 || null,
         binding2: conditions.binding2 || null,
+        paper1: conditions.paper1 || null,
+        edge1: conditions.edge1 || null,
+        edge2: conditions.edge2 || null,
         publisher: conditions.publisher || '',
         author: conditions.author || ''
       };
@@ -1599,16 +1586,6 @@ const moveToEnd = async () => {
   }
 };
 
-const addToWishlistBatch = () => {
-  // TODO: 实现批量添加到书单功能
-
-};
-
-const addTags = () => {
-  // TODO: 实现添加标签功能
-
-};
-
 const changeStatus = () => {
   if (selectedBookIds.value.length === 0) {
     alert('请先选择书籍');
@@ -1684,21 +1661,6 @@ const confirmChangeStatus = async () => {
     console.error('修改状态失败:', error);
     alert('修改状态失败，请重试');
   }
-};
-
-const setSource = () => {
-  // TODO: 实现设置来源功能
-
-};
-
-const exportBookDraft = () => {
-  // TODO: 实现导出书稿功能
-
-};
-
-const exportBooks = () => {
-  // TODO: 实现导出书籍功能
-
 };
 
 const deleteSelected = async () => {

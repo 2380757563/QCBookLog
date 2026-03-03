@@ -841,6 +841,24 @@ const fetchCurrentConfig = async () => {
       calibreData,
       talebookData
     });
+    
+    console.log('📋 Calibre 详细信息:', {
+      calibreDbPath: calibreData.calibreDbPath,
+      exists: calibreData.exists,
+      valid: calibreData.valid,
+      error: calibreData.error,
+      needsReconfig: calibreData.needsReconfig,
+      stats: calibreData.stats
+    });
+    
+    console.log('📋 Talebook 详细信息:', {
+      talebookDbPath: talebookData.talebookDbPath,
+      exists: talebookData.exists,
+      valid: talebookData.valid,
+      error: talebookData.error,
+      needsReconfig: talebookData.needsReconfig,
+      stats: talebookData.stats
+    });
 
     // 检查API是否返回成功
     if (!calibreData.success) {

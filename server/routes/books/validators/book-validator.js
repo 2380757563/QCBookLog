@@ -132,9 +132,26 @@ function sanitizeBookData(data) {
     note: data.note || ''
   };
   
-  // 生成路径（如果没有提供）
+  // 生成路径（如果没有提供）- 确保只有两级目录结构
   if (!data.path) {
-    sanitized.path = `${sanitized.author}/${sanitized.title}`;
+    const cleanAuthor = sanitized.author.replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+    const cleanTitle = sanitized.title.replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+    sanitized.path = `${cleanAuthor}/${cleanTitle}`;
+  } else {
+    // 如果提供了路径，验证并确保只有两级目录
+    const pathParts = data.path.split(/[\/\\]/);
+    if (pathParts.length > 2) {
+      // 如果路径超过两级，将所有部分合并为两级
+      const cleanAuthor = pathParts.slice(0, -1).join('').replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+      const cleanTitle = pathParts[pathParts.length - 1].replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+      sanitized.path = `${cleanAuthor}/${cleanTitle}`;
+    } else if (pathParts.length === 2) {
+      const cleanAuthor = pathParts[0].replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+      const cleanTitle = pathParts[1].replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+      sanitized.path = `${cleanAuthor}/${cleanTitle}`;
+    } else {
+      sanitized.path = sanitized.path.replace(/[\/\\]/g, '').replace(/\s+/g, ' ').trim();
+    }
   }
   
   return sanitized;

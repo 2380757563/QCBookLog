@@ -34,8 +34,21 @@
 
     <!-- 搜索结果 -->
     <div class="content">
+      <!-- 加载状态 -->
+      <div v-if="loading" class="loading-state">
+        <span class="loading-icon">⏳</span>
+        <p>正在加载数据...</p>
+      </div>
+      
+      <!-- 错误提示 -->
+      <div v-else-if="error" class="error-state">
+        <span class="error-icon">❌</span>
+        <p>{{ error }}</p>
+        <button class="retry-btn" @click="retryLoad">重试</button>
+      </div>
+      
       <!-- 书籍结果 -->
-      <div v-if="activeTab === 'books'" class="results">
+      <div v-else-if="activeTab === 'books'" class="results">
         <div v-if="bookResults.length > 0" class="result-list">
           <div 
             v-for="book in bookResults" 
@@ -109,6 +122,8 @@ const bookmarkStore = useBookmarkStore();
 
 const searchQuery = ref('');
 const activeTab = ref('books');
+const loading = ref(false);
+const error = ref<string | null>(null);
 
 // 搜索结果
 const bookResults = computed(() => {
@@ -167,15 +182,50 @@ const goToBookmarkDetail = (id: string | number) => {
   router.push(`/bookmark/detail/${id}`);
 };
 
+const retryLoad = async () => {
+  loading.value = true;
+  error.value = null;
+  try {
+    console.log('🔍 重新加载数据...');
+    const [books, bookmarks] = await Promise.all([
+      bookService.getAllBooks(),
+      bookmarkService.getAllBookmarks()
+    ]);
+    bookStore.setBooks(books);
+    bookmarkStore.setBookmarks(bookmarks);
+    console.log('✅ 数据重新加载成功');
+  } catch (err) {
+    console.error('❌ 重新加载失败:', err);
+    error.value = err instanceof Error ? err.message : '加载数据失败，请稍后重试';
+  } finally {
+    loading.value = false;
+  }
+};
+
 // 加载数据
 onMounted(async () => {
+  loading.value = true;
+  error.value = null;
   try {
-    const books = await bookService.getAllBooks();
+    console.log('🔍 搜索页面开始加载数据...');
+    
+    // 并行加载书籍和书摘数据
+    const [books, bookmarks] = await Promise.all([
+      bookService.getAllBooks(),
+      bookmarkService.getAllBookmarks()
+    ]);
+    
+    console.log(`🔍 加载完成: ${books.length} 本书, ${bookmarks.length} 条书摘`);
+    
     bookStore.setBooks(books);
-    const bookmarks = await bookmarkService.getAllBookmarks();
     bookmarkStore.setBookmarks(bookmarks);
-  } catch (error) {
-    console.error('加载数据失败:', error);
+    
+    console.log('✅ 搜索页面数据加载成功');
+  } catch (err) {
+    console.error('❌ 加载数据失败:', err);
+    error.value = err instanceof Error ? err.message : '加载数据失败，请稍后重试';
+  } finally {
+    loading.value = false;
   }
 });
 </script>
@@ -430,5 +480,42 @@ onMounted(async () => {
 .tip-item:hover {
   background-color: rgba(255, 107, 53, 0.1);
   color: var(--primary-color);
+}
+
+.loading-state,
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  color: var(--text-hint);
+}
+
+.loading-icon,
+.error-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+}
+
+.error-state p {
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.retry-btn {
+  padding: 8px 24px;
+  background-color: var(--primary-color);
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.retry-btn:hover {
+  opacity: 0.9;
 }
 </style>

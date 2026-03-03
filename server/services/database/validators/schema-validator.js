@@ -25,14 +25,25 @@ class SchemaValidator {
 
     // Talebook 数据库必需的表
     this.talebookRequiredTables = [
-      'items',
-      'users',
-      'reading_state',
+      'items'
+    ];
+
+    // QCBookLog 数据库必需的表
+    this.qcBooklogRequiredTables = [
+      'qc_users',
+      'qc_groups',
+      'qc_tags',
+      'qc_book_mapping',
       'qc_bookdata',
       'qc_bookmarks',
       'qc_bookmark_tags',
-      'qc_groups',
-      'qc_book_groups'
+      'qc_book_groups',
+      'qc_book_tags',
+      'qc_reading_records',
+      'qc_reading_state',
+      'qc_daily_reading_stats',
+      'qc_reading_goals',
+      'qc_comments'
     ];
 
     // 各表必需的字段
@@ -42,8 +53,7 @@ class SchemaValidator {
       publishers: ['id', 'name'],
       tags: ['id', 'name'],
       items: ['book_id', 'book_type', 'count_visit', 'count_download'],
-      users: ['id', 'username', 'admin'],
-      reading_state: ['book_id', 'reader_id', 'favorite', 'wants', 'read_state'],
+      qc_users: ['id', 'username'],
       qc_bookdata: ['book_id'],
       qc_bookmarks: ['id', 'book_id', 'content']
     };
@@ -123,10 +133,6 @@ class SchemaValidator {
         }
       }
 
-      // 检查外键约束
-      const foreignKeyErrors = this.checkForeignKeys(db);
-      errors.push(...foreignKeyErrors);
-
       return {
         isValid: errors.length === 0,
         errors: errors
@@ -135,6 +141,49 @@ class SchemaValidator {
       return {
         isValid: false,
         errors: [`验证 Talebook 数据库结构失败: ${error.message}`]
+      };
+    }
+  }
+
+  /**
+   * 验证 QCBookLog 数据库结构
+   */
+  validateQcBooklogSchema(db) {
+    if (!db) {
+      return {
+        isValid: false,
+        errors: ['数据库连接不可用']
+      };
+    }
+
+    const errors = [];
+
+    try {
+      // 检查必需的表
+      for (const tableName of this.qcBooklogRequiredTables) {
+        if (!this.tableExists(db, tableName)) {
+          errors.push(`QCBookLog 数据库缺少必需的表: ${tableName}`);
+        }
+      }
+
+      // 检查必需的字段
+      for (const [tableName, columns] of Object.entries(this.requiredColumns)) {
+        if (this.qcBooklogRequiredTables.includes(tableName)) {
+          const missingColumns = this.checkRequiredColumns(db, tableName, columns);
+          if (missingColumns.length > 0) {
+            errors.push(`表 ${tableName} 缺少必需的字段: ${missingColumns.join(', ')}`);
+          }
+        }
+      }
+
+      return {
+        isValid: errors.length === 0,
+        errors: errors
+      };
+    } catch (error) {
+      return {
+        isValid: false,
+        errors: [`验证 QCBookLog 数据库结构失败: ${error.message}`]
       };
     }
   }
@@ -167,42 +216,6 @@ class SchemaValidator {
       console.error(`检查表 ${tableName} 的列失败:`, error);
       return requiredColumns;
     }
-  }
-
-  /**
-   * 检查外键约束
-   */
-  checkForeignKeys(db) {
-    const errors = [];
-
-    try {
-      // 检查 items 表的主键
-      const itemsColumns = db.prepare('PRAGMA table_info(items)').all();
-      const hasBookIdPK = itemsColumns.some(col => col.name === 'book_id' && col.pk > 0);
-      
-      if (!hasBookIdPK) {
-        errors.push('items 表缺少 book_id 主键');
-      }
-
-      // 检查 reading_state 表的外键
-      const readingStateFK = db.prepare('PRAGMA foreign_key_list(reading_state)').all();
-      if (readingStateFK.length > 0) {
-        errors.push('reading_state 表不应有外键约束');
-      }
-
-      // 检查 qc_book_groups 表的外键
-      const bookGroupsFK = db.prepare('PRAGMA foreign_key_list(qc_book_groups)').all();
-      const hasIncorrectFK = bookGroupsFK.some(fk => fk.table === 'items' && fk.from === 'id');
-      
-      if (hasIncorrectFK) {
-        errors.push('qc_book_groups 表的外键约束不正确');
-      }
-
-    } catch (error) {
-      console.error('检查外键约束失败:', error);
-    }
-
-    return errors;
   }
 
   /**

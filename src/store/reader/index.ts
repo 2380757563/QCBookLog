@@ -10,6 +10,7 @@ export interface Reader {
   avatar?: string;
   admin?: boolean;
   active: boolean;
+  note?: string;
 }
 
 export const useReaderStore = defineStore('reader', () => {
@@ -29,7 +30,8 @@ export const useReaderStore = defineStore('reader', () => {
       id: 0,
       username: 'default',
       name: '默认读者',
-      active: true
+      active: true,
+      note: ''
     };
   });
 
@@ -86,7 +88,8 @@ export const useReaderStore = defineStore('reader', () => {
         id: 0,
         username: 'default',
         name: '默认读者',
-        active: true
+        active: true,
+        note: ''
       }];
       loaded.value = true;
     }
@@ -99,6 +102,26 @@ export const useReaderStore = defineStore('reader', () => {
 
     currentReaderId.value = readerId;
     saveCurrentReaderId();
+  };
+
+  /**
+   * 更新读者备注
+   */
+  const updateReaderNote = async (readerId: number, note: string) => {
+    try {
+      await axios.put(`/api/readers/${readerId}/note`, { note });
+      
+      // 更新本地读者列表中的备注
+      const reader = readers.value.find(r => r.id === readerId);
+      if (reader) {
+        reader.note = note;
+      }
+      
+      return { success: true };
+    } catch (error) {
+      console.error('❌ 更新读者备注失败:', error);
+      throw error;
+    }
   };
 
   /**
@@ -123,6 +146,7 @@ export const useReaderStore = defineStore('reader', () => {
     // Actions
     loadReaders,
     setCurrentReader,
+    updateReaderNote,
     init
   };
 });
