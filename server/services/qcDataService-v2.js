@@ -10,8 +10,8 @@ import databaseService from './database/index.js';
  */
 const GroupsRepository = {
   create(groupData) {
-    const db = databaseService.talebookDb;
-    if (!db) throw new Error('Talebook 数据库不可用');
+    const db = databaseService.isQcBooklogAvailable() ? databaseService.getQcBooklogDb() : null;
+    if (!db) throw new Error('QCBookLog 数据库不可用');
 
     const query = `
       INSERT INTO qc_groups (name, description, created_at, updated_at)
@@ -31,7 +31,7 @@ const GroupsRepository = {
   },
 
   findAll() {
-    const db = databaseService.talebookDb;
+    const db = databaseService.isQcBooklogAvailable() ? databaseService.getQcBooklogDb() : null;
     if (!db) return [];
 
     const query = 'SELECT * FROM qc_groups ORDER BY name';
@@ -39,7 +39,7 @@ const GroupsRepository = {
   },
 
   findById(groupId) {
-    const db = databaseService.talebookDb;
+    const db = databaseService.isQcBooklogAvailable() ? databaseService.getQcBooklogDb() : null;
     if (!db) return null;
 
     const query = 'SELECT * FROM qc_groups WHERE id = ?';
@@ -47,7 +47,7 @@ const GroupsRepository = {
   },
 
   update(groupId, groupData) {
-    const db = databaseService.talebookDb;
+    const db = databaseService.isQcBooklogAvailable() ? databaseService.getQcBooklogDb() : null;
     if (!db) return null;
 
     const query = `
@@ -71,7 +71,7 @@ const GroupsRepository = {
   },
 
   delete(groupId) {
-    const db = databaseService.talebookDb;
+    const db = databaseService.isQcBooklogAvailable() ? databaseService.getQcBooklogDb() : null;
     if (!db) return false;
 
     try {
@@ -87,15 +87,22 @@ const GroupsRepository = {
   },
 
   addBook(bookId, groupId) {
-    const db = databaseService.talebookDb;
+    const db = databaseService.isQcBooklogAvailable() ? databaseService.getQcBooklogDb() : null;
     if (!db) return false;
 
     try {
+      // 获取 mapping_id
+      const mapping = db.prepare('SELECT id FROM qc_book_mapping WHERE calibre_book_id = ?').get(bookId);
+      if (!mapping) {
+        console.error(`❌ 未找到书籍映射: calibre_book_id=${bookId}`);
+        return false;
+      }
+      
       const query = `
-        INSERT OR IGNORE INTO qc_book_groups (book_id, group_id)
+        INSERT OR IGNORE INTO qc_book_groups (mapping_id, group_id)
         VALUES (?, ?)
       `;
-      const result = db.prepare(query).run(bookId, groupId);
+      const result = db.prepare(query).run(mapping.id, groupId);
       return result.changes > 0;
     } catch (error) {
       console.error(`❌ 添加书籍ID ${bookId} 到分组ID ${groupId} 失败:`, error.message);
@@ -104,15 +111,22 @@ const GroupsRepository = {
   },
 
   removeBook(bookId, groupId) {
-    const db = databaseService.talebookDb;
+    const db = databaseService.isQcBooklogAvailable() ? databaseService.getQcBooklogDb() : null;
     if (!db) return false;
 
     try {
+      // 获取 mapping_id
+      const mapping = db.prepare('SELECT id FROM qc_book_mapping WHERE calibre_book_id = ?').get(bookId);
+      if (!mapping) {
+        console.error(`❌ 未找到书籍映射: calibre_book_id=${bookId}`);
+        return false;
+      }
+      
       const query = `
         DELETE FROM qc_book_groups 
-        WHERE book_id = ? AND group_id = ?
+        WHERE mapping_id = ? AND group_id = ?
       `;
-      const result = db.prepare(query).run(bookId, groupId);
+      const result = db.prepare(query).run(mapping.id, groupId);
       return result.changes > 0;
     } catch (error) {
       console.error(`❌ 从分组ID ${groupId} 移除书籍ID ${bookId} 失败:`, error.message);
@@ -126,35 +140,35 @@ const GroupsRepository = {
  */
 const BookmarksRepository = {
   findAll(options = {}) {
-    return databaseService.repositories.talebook.qcBookmarks.findAll(options);
+    return databaseService.repositories.qcbooklog.qcBookmarks.findAll(options);
   },
 
   findById(id) {
-    return databaseService.repositories.talebook.qcBookmarks.findById(id);
+    return databaseService.repositories.qcbooklog.qcBookmarks.findById(id);
   },
 
   findByBookId(bookId) {
-    return databaseService.repositories.talebook.qcBookmarks.findByBookId(bookId);
+    return databaseService.repositories.qcbooklog.qcBookmarks.findByBookId(bookId);
   },
 
   create(data) {
-    return databaseService.repositories.talebook.qcBookmarks.create(data);
+    return databaseService.repositories.qcbooklog.qcBookmarks.create(data);
   },
 
   update(id, data) {
-    return databaseService.repositories.talebook.qcBookmarks.update(id, data);
+    return databaseService.repositories.qcbooklog.qcBookmarks.update(id, data);
   },
 
   delete(id) {
-    return databaseService.repositories.talebook.qcBookmarks.delete(id);
+    return databaseService.repositories.qcbooklog.qcBookmarks.delete(id);
   },
 
   search(keyword) {
-    return databaseService.repositories.talebook.qcBookmarks.search(keyword);
+    return databaseService.repositories.qcbooklog.qcBookmarks.search(keyword);
   },
 
   getAllTags() {
-    return databaseService.repositories.talebook.qcBookmarks.getAllTags();
+    return databaseService.repositories.qcbooklog.qcBookmarks.getAllTags();
   }
 };
 
@@ -196,23 +210,23 @@ const ReadingStateRepository = {
  */
 const BookDataRepository = {
   findByBookId(bookId) {
-    return databaseService.repositories.talebook.qcBookdata.findByBookId(bookId);
+    return databaseService.repositories.qcbooklog.qcBookdata.findByBookId(bookId);
   },
 
   upsert(bookId, data) {
-    return databaseService.repositories.talebook.qcBookdata.upsert(bookId, data);
+    return databaseService.repositories.qcbooklog.qcBookdata.upsert(bookId, data);
   },
 
   updateReadingProgress(bookId, readPages, duration = 0) {
-    return databaseService.repositories.talebook.qcBookdata.updateReadingProgress(bookId, readPages, duration);
+    return databaseService.repositories.qcbooklog.qcBookdata.updateReadingProgress(bookId, readPages, duration);
   },
 
   getReadingStats() {
-    return databaseService.repositories.talebook.qcBookdata.getReadingStats();
+    return databaseService.repositories.qcbooklog.qcBookdata.getReadingStats();
   },
 
   getRecentlyRead(limit = 10) {
-    return databaseService.repositories.talebook.qcBookdata.getRecentlyRead(limit);
+    return databaseService.repositories.qcbooklog.qcBookdata.getRecentlyRead(limit);
   }
 };
 

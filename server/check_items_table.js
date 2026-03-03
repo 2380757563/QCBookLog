@@ -1,32 +1,40 @@
-import sqlite3 from 'sqlite3';
+import Database from 'better-sqlite3';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// 打开数据库连接
-const db = new sqlite3.Database('../data/calibre-webserver.db', (err) => {
-  if (err) {
-    console.error('Error opening database:', err.message);
-    return;
-  }
-  console.log('Connected to the SQLite database.');
-});
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-// 查询items表的结构
-db.all(`PRAGMA table_info(items)`, [], (err, rows) => {
-  if (err) {
-    console.error('Error querying table structure:', err.message);
-    return;
-  }
+// 数据库路径
+const talebookDbPath = path.join(__dirname, 'data/talebook/calibre-webserver.db');
+
+console.log('🔍 检查 Talebook 数据库...\n');
+
+try {
+  const talebookDb = new Database(talebookDbPath, { readonly: true });
   
-  console.log('=== items表结构 ===');
-  rows.forEach(row => {
-    console.log(`${row.cid}: ${row.name} (${row.type}) ${row.pk ? 'PRIMARY KEY' : ''} ${row.notnull ? 'NOT NULL' : ''} DEFAULT ${row.dflt_value}`);
+  // 检查 items 表结构
+  console.log('📋 items 表结构:');
+  const itemsSchema = talebookDb.prepare("PRAGMA table_info(items)").all();
+  itemsSchema.forEach(col => {
+    console.log(`  - ${col.name}: ${col.type} ${col.notnull ? 'NOT NULL' : ''} ${col.dflt_value ? `DEFAULT ${col.dflt_value}` : ''}`);
   });
   
-  // 关闭数据库连接
-  db.close((err) => {
-    if (err) {
-      console.error('Error closing database:', err.message);
-      return;
-    }
-    console.log('Database connection closed.');
-  });
-});
+  // 检查 items 表数据
+  const itemsCount = talebookDb.prepare('SELECT COUNT(*) as count FROM items').get();
+  console.log(`\n📊 items 表中有 ${itemsCount.count} 条记录`);
+  
+  if (itemsCount.count > 0) {
+    const items = talebookDb.prepare('SELECT * FROM items LIMIT 5').all();
+    console.log('📋 items 表示例数据:');
+    items.forEach(item => {
+      console.log(`  - book_id: ${item.book_id}, book_type: ${item.book_type}`);
+    });
+  }
+  
+  talebookDb.close();
+} catch (error) {
+  console.log('❌ 错误:', error.message);
+}
+
+console.log('\n✅ 检查完成');

@@ -14,6 +14,7 @@ import fsSync from 'fs';
 import calibreService from './services/calibreService.js';
 import activityService from './services/activityService.js';
 import databaseService from './services/database/index.js';
+import syncScheduler from './services/syncScheduler.js';
 
 // 配置日志
 const logger = winston.createLogger({
@@ -228,6 +229,7 @@ import readingHeatmapRoutes from './routes/readingHeatmap.js';
 import readingTrackingRoutes from './routes/readingTracking.js';
 import wishlistRoutes from './routes/wishlist.js';
 import activitiesRoutes from './routes/activities.js';
+import readingStateSyncRoutes from './routes/readingStateSync.js';
 import dbrService from './services/dbrService.js';
 
 // 注册路由
@@ -248,12 +250,18 @@ app.use('/api/reading-heatmap', readingHeatmapRoutes);
 app.use('/api/reading', readingTrackingRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/activities', activitiesRoutes);
+app.use('/api/reading-state-sync', readingStateSyncRoutes);
 
 // 探数图书API代理（解决CORS问题）
 app.get('/api/tanshu/isbn/:isbn', async (req, res) => {
   try {
     const { isbn } = req.params;
-    const apiKey = 'bc621345d6f1908f5fff0c062708ed1d';
+    const apiKey = process.env.TANSHU_API_KEY || '';
+
+    if (!apiKey) {
+      console.error('❌ 探数图书API密钥未配置');
+      return res.status(500).json({ error: '探数图书API密钥未配置，请设置TANSHU_API_KEY环境变量' });
+    }
 
     console.log(`🔍 探数图书API请求，ISBN: ${isbn}`);
 
@@ -284,7 +292,12 @@ app.get('/api/tanshu/isbn/:isbn', async (req, res) => {
 app.get('/api/douban/v2/book/isbn/:isbn', async (req, res) => {
   try {
     const { isbn } = req.params;
-    const apiKey = '0ac44ae016490db2204ce0a042db2916';
+    const apiKey = process.env.DOUBAN_API_KEY || '';
+
+    if (!apiKey) {
+      console.error('❌ 豆瓣图书API密钥未配置');
+      return res.status(500).json({ error: '豆瓣图书API密钥未配置，请设置DOUBAN_API_KEY环境变量' });
+    }
 
     console.log(`🔍 豆瓣图书API请求，ISBN: ${isbn}`);
 
@@ -336,7 +349,12 @@ app.get('/api/douban/v2/book/isbn/:isbn', async (req, res) => {
 app.get('/api/isbn-work/isbn/:isbn', async (req, res) => {
   try {
     const { isbn } = req.params;
-    const apiKey = 'ae1718d4587744b0b79f940fbef69e77';
+    const apiKey = process.env.ISBN_WORK_API_KEY || '';
+
+    if (!apiKey) {
+      console.error('❌ 公共图书API密钥未配置');
+      return res.status(500).json({ error: '公共图书API密钥未配置，请设置ISBN_WORK_API_KEY环境变量' });
+    }
 
     console.log(`🔍 公共图书API请求，ISBN: ${isbn}`);
 
@@ -397,23 +415,44 @@ app.use((err, req, res, next) => {
 });
 
 // 启动服务器
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   logger.info(`Server is running on port ${PORT}`);
-  console.log(`Server is running on http://localhost:${PORT}`);
+  console.log(`Server is running on http://0.0.0.0:${PORT}`);
 
   // 显示数据库服务状态
   console.log(`\n📊 数据库服务状态:`);
   console.log(`   - 初始化状态: ${databaseService._initialized ? '✅ 已初始化' : '❌ 未初始化'}`);
   console.log(`   - Calibre数据库: ${databaseService.connectionManager?.calibreDb ? '✅ 已连接' : '❌ 未连接'}`);
   console.log(`   - Talebook数据库: ${databaseService.connectionManager?.talebookDb ? '✅ 已连接' : '❌ 未连接'}`);
+  console.log(`   - QCBookLog数据库: ${databaseService.connectionManager?.qcBooklogDb ? '✅ 已连接' : '❌ 未连接'}`);
   console.log(`   - Calibre路径: ${databaseService.connectionManager?.config?.calibrePath || '未配置'}`);
   console.log(`   - Talebook路径: ${databaseService.connectionManager?.config?.talebookPath || '未配置'}`);
+  console.log(`   - QCBookLog路径: ${databaseService.connectionManager?.config?.qcBooklogPath || '未配置'}`);
+  
+  if (databaseService.connectionManager?.calibreError) {
+    console.log(`   ⚠️ Calibre连接错误: ${databaseService.connectionManager.calibreError}`);
+  }
+  if (databaseService.connectionManager?.talebookError) {
+    console.log(`   ⚠️ Talebook连接错误: ${databaseService.connectionManager.talebookError}`);
+  }
+  if (databaseService.connectionManager?.qcBooklogError) {
+    console.log(`   ⚠️ QCBookLog连接错误: ${databaseService.connectionManager.qcBooklogError}`);
+  }
 
   // 显示当前配置的数据库路径
   const currentDbPath = calibreService.getBookDir();
   console.log(`\n📚 当前 Calibre 书库目录: ${currentDbPath}`);
   console.log(`✅ 如果需要切换书库，请访问: http://localhost:${PORT}/config`);
   console.log('');
+
+  // 启动同步调度器
+  if (databaseService.connectionManager?.isQcBooklogAvailable()) {
+    console.log(`🔄 启动阅读状态同步调度器...`);
+    syncScheduler.start();
+    console.log(`✅ 阅读状态同步调度器已启动`);
+  } else {
+    console.log(`⚠️ QCBookLog 数据库不可用，跳过启动同步调度器`);
+  }
 });
 
 // 导出app和logger

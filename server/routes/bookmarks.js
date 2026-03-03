@@ -100,6 +100,24 @@ router.post('/', async (req, res) => {
 
     const newBookmark = qcDataService.createBookmark(bookmarkData);
 
+    // 记录活动日志
+    try {
+      activityService.logActivity({
+        type: 'bookmark_added',
+        userId: 0,
+        readerId: 0,
+        bookId: newBookmark.book_id,
+        bookTitle: newBookmark.book_title || newBookmark.bookTitle,
+        bookAuthor: newBookmark.book_author || newBookmark.bookAuthor,
+        content: newBookmark.text || newBookmark.content,
+        chapter: newBookmark.chapter,
+        startPage: newBookmark.pos || newBookmark.page_num,
+        endPage: newBookmark.pos || newBookmark.page_num
+      });
+    } catch (logError) {
+      console.warn('⚠️ 记录活动日志失败:', logError.message);
+    }
+
     // 转换返回结果的字段名，前端使用bookId、pageNum
     const responseBookmark = {
       ...newBookmark,
@@ -169,6 +187,25 @@ router.delete('/:id', async (req, res) => {
     const success = qcDataService.deleteBookmark(parseInt(req.params.id));
     if (!success) {
       return res.status(404).json({ error: '书摘不存在' });
+    }
+
+    // 记录活动日志
+    if (bookmark) {
+      try {
+        activityService.logActivity({
+          type: 'bookmark_deleted',
+          userId: 0,
+          readerId: 0,
+          bookId: bookmark.book_id || bookmark.bookId,
+          bookTitle: bookmark.book_title || bookmark.bookTitle,
+          bookAuthor: bookmark.book_author || bookmark.bookAuthor,
+          content: bookmark.text || bookmark.content,
+          chapter: bookmark.chapter,
+          startPage: bookmark.pos || bookmark.page_num || bookmark.pageNum
+        });
+      } catch (logError) {
+        console.warn('⚠️ 记录活动日志失败:', logError.message);
+      }
     }
 
     res.json({ message: 'Bookmark deleted successfully' });

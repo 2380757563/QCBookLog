@@ -39,6 +39,14 @@ const routes: Array<RouteRecordRaw> = [
     }
   },
   {
+    path: '/bookmark-settings',
+    name: 'BookmarkSettings',
+    component: () => import('@/views/BookmarkSettings/index.vue'),
+    meta: {
+      title: '书签设置'
+    }
+  },
+  {
     path: '/book',
     name: 'Book',
     component: () => import('@/views/Book/index.vue'),

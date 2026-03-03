@@ -1,16 +1,10 @@
-/**
- * 数据服务模块
- * 负责处理文件系统的数据读写操作
- */
-
 import fs from 'fs/promises';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import fsSync from 'fs';
+import configManager from './configManager.js';
 
-// 数据目录路径 - 使用相对于项目根目录的路径
 const getProjectRoot = () => {
-  // 如果当前工作目录是server目录，则向上一级到达项目根目录
   const currentDir = process.cwd();
   if (path.basename(currentDir) === 'server') {
     return path.dirname(currentDir);
@@ -20,50 +14,12 @@ const getProjectRoot = () => {
 
 export const DATA_DIR = path.join(getProjectRoot(), 'data');
 
-/**
- * 配置文件路径
- */
-const CONFIG_FILE = path.join(getProjectRoot(), 'data/metadata/config.json');
-
-/**
- * 读取配置文件
- * @returns {Promise<Object>} 配置对象
- */
 export const readConfig = async () => {
-  try {
-    const configData = await fs.readFile(CONFIG_FILE, 'utf8');
-    return JSON.parse(configData);
-  } catch (error) {
-    // 文件不存在或读取失败，返回默认配置
-    return {
-      calibrePath: null,
-      calibreDir: null,
-      talebookPath: null,
-      isDefault: false
-    };
-  }
+  return configManager.loadConfig();
 };
 
-/**
- * 同步读取配置文件（用于初始化阶段）
- * @returns {Object} 配置对象
- */
 export const readConfigSync = () => {
-  try {
-    if (fsSync.existsSync(CONFIG_FILE)) {
-      const configData = fsSync.readFileSync(CONFIG_FILE, 'utf8');
-      return JSON.parse(configData);
-    }
-  } catch (error) {
-    console.warn('⚠️ 同步读取配置文件失败:', error.message);
-  }
-  // 返回默认配置
-  return {
-    calibrePath: null,
-    calibreDir: null,
-    talebookPath: null,
-    isDefault: false
-  };
+  return configManager.loadConfigSync();
 };
 
 /**

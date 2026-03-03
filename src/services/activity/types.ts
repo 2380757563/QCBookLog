@@ -5,11 +5,12 @@
 
 export type ActivityType =
   | 'book_added' // 添加书籍
-  | 'book_deleted' // 删除书籍
   | 'book_updated' // 更新书籍
   | 'reading_status_changed' // 阅读状态变更
   | 'reading_started' // 开始阅读
   | 'reading_ended' // 结束阅读
+  | 'reading_record' // 阅读记录
+  | 'reading_goal_set' // 设置阅读目标
   | 'bookmark_added' // 添加书摘
   | 'bookmark_updated' // 更新书摘
   | 'bookmark_deleted' // 删除书摘
@@ -35,6 +36,7 @@ export interface ActivityRecord {
   endPage?: number;
   pagesRead?: number;
   content?: string;
+  chapter?: string;
   metadata?: Record<string, any>;
   createdAt: string;
 }

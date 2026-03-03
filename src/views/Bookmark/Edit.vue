@@ -50,7 +50,7 @@
         </div>
         <div class="form-item">
           <label class="form-label">页码</label>
-          <input v-model="form.pageNum" class="form-input" placeholder="书摘所在页码" />
+          <input v-model.number="form.pageNum" type="number" class="form-input" placeholder="书摘所在页码" />
         </div>
       </div>
 
@@ -170,7 +170,7 @@ const form = reactive({
   bookId: 0,
   content: '',
   note: '',
-  pageNum: undefined as number | undefined,
+  pageNum: null as number | null,
   tags: [] as string[], // 标签名称数组
   importSource: 'manual'
 });
@@ -270,6 +270,18 @@ const handleSave = async () => {
 
   saving.value = true;
   try {
+    console.log('📝 准备保存书摘，表单数据:', {
+      bookId: form.bookId,
+      content: form.content?.substring(0, 50),
+      pageNum: form.pageNum,
+      pageNumType: typeof form.pageNum,
+      tags: form.tags
+    });
+    
+    // 确保页码是数字类型
+    const pageNumValue = form.pageNum !== null && form.pageNum !== undefined ? Number(form.pageNum) : undefined;
+    console.log('📄 处理后的页码值:', pageNumValue, '类型:', typeof pageNumValue);
+    
     // 使用 camelCase 字段名，与后端保持一致
     const bookmarkData: any = {
       bookId: form.bookId,
@@ -277,11 +289,16 @@ const handleSave = async () => {
       bookAuthor: selectedBook.value?.author,
       content: form.content,
       note: form.note,
-      page: form.pageNum,
-      pageNum: form.pageNum,
+      page: pageNumValue,
+      pageNum: pageNumValue,
       tags: form.tags,
       importSource: form.importSource
     };
+    
+    console.log('📤 发送到后端的数据:', {
+      page: bookmarkData.page,
+      pageNum: bookmarkData.pageNum
+    });
 
     // 同时也发送 snake_case 字段，确保后端能正确识别
     bookmarkData.book_id = form.bookId;

@@ -559,18 +559,29 @@ const fetchBookByISBN = async () => {
           form.publisher = bookInfo.publisher || '';
           form.publishYear = bookInfo.publishYear;
           form.pages = bookInfo.pages;
-          // 根据API返回的装帧信息设置binding1
-          const bindingText = (bookInfo.binding || '').toLowerCase();
-
-          // 处理各种可能的装帧描述
-          if (bindingText.includes('平装') || bindingText.includes('paperback') || bindingText.includes('平裝')) {
-            form.binding1 = 1;
-          } else if (bindingText.includes('精装') || bindingText.includes('hardcover') || bindingText.includes('精裝')) {
-            form.binding1 = 2;
+          
+          // 根据API返回的装帧信息设置binding1和book_type
+          if (bookInfo.binding1 !== undefined && bookInfo.binding1 !== null) {
+            form.binding1 = bookInfo.binding1;
+            form.book_type = bookInfo.book_type !== undefined && bookInfo.book_type !== null ? bookInfo.book_type : (bookInfo.binding1 === 0 ? 0 : 1);
           } else {
-            form.binding1 = 3;
+            const bindingText = (bookInfo.binding || '').toLowerCase();
+            if (bindingText.includes('平装') || bindingText.includes('paperback') || bindingText.includes('平裝')) {
+              form.binding1 = 1;
+              form.book_type = 1;
+            } else if (bindingText.includes('精装') || bindingText.includes('hardcover') || bindingText.includes('精裝')) {
+              form.binding1 = 2;
+              form.book_type = 1;
+            } else if (bindingText.includes('电子') || bindingText.includes('ebook') || bindingText.includes('电子书')) {
+              form.binding1 = 0;
+              form.book_type = 0;
+            } else {
+              form.binding1 = 3;
+              form.book_type = 1;
+            }
           }
-          form.binding2 = 0; // 默认无细分
+          
+          form.binding2 = bookInfo.binding2 || 0; // 默认无细分
 
           form.coverUrl = bookInfo.coverUrl || '';
           // 设置书籍简介
@@ -694,13 +705,13 @@ const validateForm = (): { valid: boolean; errors: string[] } => {
   const errors: string[] = [];
 
   // 必填字段验证
-  if (!form.title.trim()) {
+  if (!form.title?.trim()) {
     errors.push('请填写书名');
   }
-  if (!form.author.trim()) {
+  if (!form.author?.trim()) {
     errors.push('请填写作者');
   }
-  if (!form.isbn.trim()) {
+  if (!form.isbn?.trim()) {
     errors.push('请填写ISBN');
   }
 
@@ -780,6 +791,7 @@ const validateForm = (): { valid: boolean; errors: string[] } => {
       const finalSaveData = {
         ...saveData,
         // 确保这些字段被正确传递
+        book_type: saveData.book_type,
         binding1: saveData.binding1,
         binding2: saveData.binding2,
         paper1: saveData.paper1,
@@ -926,6 +938,10 @@ onMounted(async () => {
         purchasePrice: book.purchasePrice ?? undefined,
         purchaseDate: book.purchaseDate ? new Date(book.purchaseDate).toISOString().split('T')[0] : '',
         readCompleteDate: book.readCompleteDate ? new Date(book.readCompleteDate).toISOString().split('T')[0] : '',
+        // 确保书籍类型和装帧字段正确设置
+        book_type: book.book_type !== undefined && book.book_type !== null ? book.book_type : 1,
+        binding1: book.binding1 !== undefined && book.binding1 !== null ? book.binding1 : 0,
+        binding2: book.binding2 !== undefined && book.binding2 !== null ? book.binding2 : 0,
       });
 
       // 保存原始阅读状态（用于比较是否变化）

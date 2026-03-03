@@ -67,9 +67,12 @@ async function createBook(req, res) {
       publisher: req.body.publisher || '',
       description: req.body.description || '',
       publishYear: req.body.publishYear || undefined,
-      pages: req.body.pages || undefined,
+      pages: req.body.pages !== undefined ? req.body.pages : undefined,
       binding1: req.body.binding1 !== undefined ? req.body.binding1 : 0,
       binding2: req.body.binding2 !== undefined ? req.body.binding2 : 0,
+      paper1: req.body.paper1 !== undefined ? req.body.paper1 : 0,
+      edge1: req.body.edge1 !== undefined ? req.body.edge1 : 0,
+      edge2: req.body.edge2 !== undefined ? req.body.edge2 : 0,
       rating: req.body.rating || undefined,
       series: req.body.series || '',
       language: req.body.language || 'zh',
@@ -77,11 +80,11 @@ async function createBook(req, res) {
       tags: req.body.tags || [],
       groups: req.body.groups || [],
       purchaseDate: req.body.purchaseDate || timestamp,
-      purchasePrice: req.body.purchasePrice || undefined,
+      purchasePrice: req.body.purchasePrice !== undefined ? req.body.purchasePrice : undefined,
       readCompleteDate: req.body.readCompleteDate || '',
-      standardPrice: req.body.standardPrice || 0,
+      standardPrice: req.body.standardPrice !== undefined ? req.body.standardPrice : 0,
       note: req.body.note || '',
-      path: `${req.body.author || '未知作者'}/${req.body.title || '未知书名'}`,
+      path: `${(req.body.author || '未知作者').replace(/[\/\\]/g, '').replace(/\s+/g, ' ')}/${(req.body.title || '未知书名').replace(/[\/\\]/g, '').replace(/\s+/g, ' ')}`,
       hasCover: false
     };
 

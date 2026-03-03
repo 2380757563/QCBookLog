@@ -34,13 +34,19 @@
           <span
             :class="['chip', { active: !selectedTag }]"
             @click="selectedTag = ''"
-          >全部</span>
+          >
+            全部
+            <span class="tag-count">{{ totalBookmarkCount }}</span>
+          </span>
           <span
             v-for="tag in allTags"
-            :key="tag"
-            :class="['chip', { active: selectedTag === tag }]"
-            @click="selectedTag = tag"
-          >{{ tag }}</span>
+            :key="tag.tag_id"
+            :class="['chip', { active: selectedTag === tag.tag_id }]"
+            @click="selectedTag = tag.tag_id"
+          >
+            {{ tag.tag_id }}
+            <span class="tag-count">{{ tag.count }}</span>
+          </span>
         </div>
 
         <div v-if="filteredBookmarks.length > 0" class="bookmarks-list">
@@ -84,7 +90,8 @@
 
       <!-- 回顾页面 -->
       <div v-show="activeTab === 'review'" class="tab-content review-tab">
-        <div v-if="allBookmarks.length > 0" class="review-card" @touchstart="handleTouchStart" @touchend="handleTouchEnd">
+        <div v-if="allBookmarks.length > 0" class="review-card" :style="reviewCardStyle" @touchstart="handleTouchStart" @touchend="handleTouchEnd">
+          <div class="review-card-overlay" :style="overlayStyle"></div>
           <transition :name="slideDirection" mode="out-in">
             <div :key="reviewIndex" class="review-content">
               <p class="review-text">{{ currentReviewBookmark?.content }}</p>
@@ -95,7 +102,10 @@
           </transition>
           <div class="review-meta">
             <span class="review-book">《{{ currentReviewBookmark?.bookTitle }}》</span>
-            <span class="review-page" v-if="currentReviewBookmark?.pageNum">第 {{ currentReviewBookmark.pageNum }} 页</span>
+            <div class="review-info">
+              <span class="review-time">{{ formatDateTime(currentReviewBookmark?.createTime) }}</span>
+              <span class="review-page" v-if="currentReviewBookmark?.pageNum">—— 引自第{{ currentReviewBookmark.pageNum }}页</span>
+            </div>
           </div>
           <div class="review-nav">
             <button class="nav-btn" @click="prevReview" :disabled="reviewIndex === 0">
@@ -159,7 +169,7 @@ const selectedTag = ref('');
 const showSearch = ref(false);
 
 // 标签数据
-const allTags = ref<string[]>([]); // 改为字符串数组
+const allTags = ref<{ tag_id: string; count: number }[]>([]);
 
 // 删除确认
 const showDeleteConfirm = ref(false);
@@ -190,20 +200,35 @@ const allBookmarks = computed(() => {
   return validBookmarks.map((b: any) => {
     // 优先使用书摘中存储的书籍信息，其次从书籍列表中查找
     let bookTitle = b.bookTitle;
-    if (!bookTitle) {
-      const book = bookStore.allBooks.find(book => book.id === b.bookId);
-      bookTitle = book?.title || '未知书籍';
+    const bookId = b.bookId;
+    const book = bookStore.allBooks.find(book => book.id === bookId);
+    
+    if (!bookTitle && book) {
+      bookTitle = book.title;
+    } else if (!bookTitle) {
+      bookTitle = '未知书籍';
     }
     
     // 确保标签是数组
     const tags = Array.isArray(b.tags) ? b.tags : [];
 
+    // 优先使用后端返回的 coverUrl，其次使用书籍列表中的封面
+    const coverUrl = b.coverUrl || book?.coverUrl || book?.localCoverData;
+
     return {
       ...b,
+      bookId: bookId,
       bookTitle: bookTitle,
-      tags: tags
+      tags: tags,
+      coverUrl: coverUrl,
+      localCoverData: coverUrl,
     };
   });
+});
+
+// 书摘总数
+const totalBookmarkCount = computed(() => {
+  return allBookmarks.value.length;
 });
 
 // 筛选后的书摘
@@ -216,6 +241,136 @@ const filteredBookmarks = computed(() => {
 const currentReviewBookmark = computed(() => {
   return allBookmarks.value[reviewIndex.value];
 });
+
+interface BookmarkSettings {
+  backgroundMode: 'color' | 'cover' | 'custom';
+  selectedColorIndex: number;
+  coverOpacity: number;
+  coverBlur: number;
+  customBackground: string;
+  customOpacity: number;
+  customBlur: number;
+}
+
+const bookmarkSettings = ref<BookmarkSettings>({
+  backgroundMode: 'color',
+  selectedColorIndex: 0,
+  coverOpacity: 0.3,
+  coverBlur: 8,
+  customBackground: '',
+  customOpacity: 0.5,
+  customBlur: 5
+});
+
+const gradients = [
+  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  'linear-gradient(135deg, #2193b0 0%, #6dd5ed 100%)',
+  'linear-gradient(135deg, #134e5e 0%, #71b280 100%)',
+  'linear-gradient(135deg, #ee9ca7 0%, #ffdde1 100%)',
+  'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)',
+  'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+  'linear-gradient(135deg, #0c0c0c 0%, #434343 100%)',
+  'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
+  'linear-gradient(135deg, #f2994a 0%, #f2c94c 100%)',
+  'linear-gradient(135deg, #4e54c8 0%, #8f94fb 100%)',
+  'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
+  'linear-gradient(135deg, #43cea2 0%, #185a9d 100%)',
+];
+
+const reviewCardStyle = computed(() => {
+  const settings = bookmarkSettings.value;
+  const currentBookmark = currentReviewBookmark.value;
+  const coverUrl = currentBookmark?.coverUrl || currentBookmark?.localCoverData;
+  
+  console.log('reviewCardStyle 计算:', {
+    背景模式: settings.backgroundMode,
+    颜色索引: settings.selectedColorIndex,
+    当前书摘: currentBookmark ? {
+      书籍: currentBookmark.bookTitle,
+      页码: currentBookmark.pageNum,
+      bookId: currentBookmark.bookId,
+      coverUrl: currentBookmark.coverUrl,
+      localCoverData: currentBookmark.localCoverData
+    } : null,
+    最终封面URL: coverUrl || '无封面'
+  });
+  
+  if (settings.backgroundMode === 'color') {
+    return {
+      background: gradients[settings.selectedColorIndex] || gradients[0]
+    };
+  } else if (settings.backgroundMode === 'cover') {
+    if (coverUrl) {
+      return {
+        backgroundImage: `url(${coverUrl})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        position: 'relative' as const,
+      };
+    }
+    return { background: gradients[0] };
+  } else if (settings.backgroundMode === 'custom' && settings.customBackground) {
+    return {
+      backgroundImage: `url(${settings.customBackground})`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+    };
+  }
+  
+  return { background: gradients[0] };
+});
+
+const overlayStyle = computed(() => {
+  const settings = bookmarkSettings.value;
+  
+  if (settings.backgroundMode === 'cover') {
+    return {
+      background: `rgba(0, 0, 0, ${settings.coverOpacity})`,
+      backdropFilter: `blur(${settings.coverBlur}px)`,
+    };
+  } else if (settings.backgroundMode === 'custom' && settings.customBackground) {
+    return {
+      background: `rgba(0, 0, 0, ${settings.customOpacity})`,
+      backdropFilter: `blur(${settings.customBlur}px)`,
+    };
+  }
+  
+  return { background: 'transparent' };
+});
+
+const loadBookmarkSettings = () => {
+  const saved = localStorage.getItem('bookmarkSettings');
+  console.log('加载书签设置:', saved);
+  if (saved) {
+    try {
+      const settings = JSON.parse(saved);
+      bookmarkSettings.value = {
+        backgroundMode: settings.backgroundMode || 'color',
+        selectedColorIndex: settings.selectedColorIndex || 0,
+        coverOpacity: settings.coverOpacity ?? 0.3,
+        coverBlur: settings.coverBlur ?? 8,
+        customBackground: settings.customBackground || '',
+        customOpacity: settings.customOpacity ?? 0.5,
+        customBlur: settings.customBlur ?? 5
+      };
+      console.log('书签设置已加载:', {
+        加载状态: '成功',
+        背景模式: bookmarkSettings.value.backgroundMode,
+        颜色索引: bookmarkSettings.value.selectedColorIndex,
+        封面透明度: bookmarkSettings.value.coverOpacity,
+        封面模糊: bookmarkSettings.value.coverBlur
+      });
+    } catch (error) {
+      console.error('加载书签设置失败:', error);
+    }
+  } else {
+    console.log('书签设置已加载:', {
+      加载状态: '使用默认值',
+      背景模式: bookmarkSettings.value.backgroundMode,
+      颜色索引: bookmarkSettings.value.selectedColorIndex
+    });
+  }
+};
 
 // 格式化日期
 const formatDate = (dateStr: string): string => {
@@ -236,6 +391,28 @@ const formatDate = (dateStr: string): string => {
   const day = date.getDate();
   
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+};
+
+const formatDateTime = (dateStr: string | undefined): string => {
+  if (!dateStr) {
+    return '';
+  }
+  
+  const date = new Date(dateStr);
+  
+  // 检查日期是否有效
+  if (isNaN(date.getTime())) {
+    return '';
+  }
+  
+  const year = date.getFullYear();
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const seconds = date.getSeconds();
+  
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')} ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 };
 
 // 导航
@@ -321,11 +498,19 @@ const handleTouchEnd = (e: TouchEvent) => {
 
 // 加载数据
 onMounted(async () => {
+  console.log('=== 书摘回顾页面 onMounted ===');
+  loadBookmarkSettings();
+  
   try {
-    // 加载书摘（优先级最高）
     const bookmarks = await bookmarkService.getAllBookmarks();
-
-
+    console.log('加载的书摘数量:', bookmarks.length);
+    if (bookmarks.length > 0) {
+      console.log('书摘示例:', bookmarks.slice(0, 2).map(b => ({
+        书籍: b.bookTitle,
+        内容: b.content?.substring(0, 50) + '...',
+        页码: b.pageNum
+      })));
+    }
     bookmarkStore.setBookmarks(bookmarks);
 
     // 加载书摘标签（从书摘标签 API）
@@ -341,7 +526,13 @@ onMounted(async () => {
       const books = await bookService.getAllBooks();
       if (books && books.length > 0) {
         bookStore.setBooks(books);
-
+        console.log('加载的书籍数量:', books.length);
+        console.log('书籍示例:', books.slice(0, 2).map(b => ({
+          id: b.id,
+          title: b.title,
+          coverUrl: b.coverUrl ? '有封面' : '无封面',
+          localCoverData: b.localCoverData ? '有本地封面' : '无本地封面'
+        })));
       }
     } catch (error) {
       console.warn('⚠️ 加载书籍列表失败，书摘将使用存储的书籍信息:', (error as any).message);
@@ -510,11 +701,27 @@ onMounted(async () => {
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.3s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .chip.active {
   background-color: rgba(255, 107, 53, 0.1);
   color: var(--primary-color);
+}
+
+.tag-count {
+  background-color: rgba(0, 0, 0, 0.15);
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-size: 11px;
+  min-width: 18px;
+  text-align: center;
+}
+
+.chip.active .tag-count {
+  background-color: rgba(255, 107, 53, 0.2);
 }
 
 /* 书摘列表 */
@@ -670,8 +877,25 @@ onMounted(async () => {
   padding: 32px;
   color: #fff;
   box-shadow: var(--shadow-lg);
-  touch-action: pan-y; /* 允许垂直滚动，禁用水平滚动 */
-  user-select: none; /* 防止文本选中 */
+  touch-action: pan-y;
+  user-select: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.review-card-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.review-card > *:not(.review-card-overlay) {
+  position: relative;
+  z-index: 1;
 }
 
 .review-content {
@@ -704,10 +928,9 @@ onMounted(async () => {
 
 .review-meta {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  font-size: 20px;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 16px;
   opacity: 0.9;
   padding: 20px 24px;
   border-top: 1px solid rgba(255, 255, 255, 0.3);
@@ -715,18 +938,30 @@ onMounted(async () => {
 }
 
 .review-book {
-  flex: 1;
   text-align: left;
   font-weight: 500;
+  font-size: 18px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.review-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  opacity: 0.85;
+}
+
+.review-time {
+  color: rgba(255, 255, 255, 0.8);
+}
+
 .review-page {
-  flex-shrink: 0;
-  text-align: right;
-  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.75);
+  font-style: italic;
+  margin-left: auto;
 }
 
 .review-nav {

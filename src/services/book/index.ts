@@ -35,15 +35,28 @@ class BookServiceImpl implements BookService {
       groups: Array.isArray(book.groups) ? book.groups.map(group => String(group)) : [],
       // 确保数字字段是数字类型
       publishYear: typeof book.publishYear === 'number' ? book.publishYear : undefined,
-      pages: book.pages ? parseInt(book.pages) : undefined,
+      pages: book.pages !== undefined && book.pages !== null ? parseInt(String(book.pages)) : undefined,
       purchasePrice: typeof book.purchasePrice === 'number' ? book.purchasePrice : undefined,
-      standardPrice: typeof book.standardPrice === 'number' ? book.standardPrice : undefined,
+      standardPrice: book.standardPrice !== undefined && book.standardPrice !== null ? parseFloat(String(book.standardPrice)) : undefined,
       rating: typeof book.rating === 'number' ? book.rating : undefined,
       // 确保书籍类型和装帧是数字类型
       book_type: typeof book.book_type === 'number' ? book.book_type : 1,
       binding1: typeof book.binding1 === 'number' ? book.binding1 : 0,
       binding2: typeof book.binding2 === 'number' ? book.binding2 : 0
     };
+
+    console.log('📊 [bookService.addBook] 原始数据:', {
+      pages: book.pages,
+      standardPrice: book.standardPrice,
+      binding1: book.binding1,
+      purchaseDate: book.purchaseDate
+    });
+    console.log('📊 [bookService.addBook] 处理后数据:', {
+      pages: safeBookData.pages,
+      standardPrice: safeBookData.standardPrice,
+      binding1: safeBookData.binding1,
+      purchaseDate: safeBookData.purchaseDate
+    });
 
     // 提取并移除临时的 _coverBlob 字段
     const coverBlob = (safeBookData as any)._coverBlob;

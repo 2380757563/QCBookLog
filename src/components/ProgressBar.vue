@@ -1,17 +1,13 @@
 <template>
   <div class="progress-container" v-if="visible">
-    <!-- 批量进度标题 -->
     <div class="batch-title" v-if="showBatchProgress">
       <span>正在处理: {{ batchProgress.completed }}/{{ batchProgress.total }}</span>
-      <el-progress
-        :percentage="batchProgressPercentage"
-        :stroke-width="10"
-        :color="progressColor"
-        class="batch-progress-bar"
-      />
+      <div class="progress-bar-wrapper">
+        <div class="progress-bar" :style="{ width: batchProgressPercentage + '%', backgroundColor: progressColor }"></div>
+      </div>
+      <span class="progress-text">{{ batchProgressPercentage }}%</span>
     </div>
 
-    <!-- 单本书进度列表 -->
     <div class="book-progress-list" v-if="bookProgressList.length > 0">
       <div
         v-for="item in bookProgressList"
@@ -22,48 +18,45 @@
           <span class="book-title">{{ getBookTitle(item.bookId) }}</span>
           <span class="book-status">{{ item.status }}</span>
         </div>
-        <el-progress
-          :percentage="item.progress"
-          :stroke-width="8"
-          :color="item.progress === 100 && item.status.includes('失败') ? '#f56c6c' : progressColor"
-          :show-text="false"
-          class="book-progress-bar"
-        />
+        <div class="progress-bar-wrapper small">
+          <div 
+            class="progress-bar" 
+            :style="{ 
+              width: item.progress + '%', 
+              backgroundColor: item.progress === 100 && item.status.includes('失败') ? '#f56c6c' : progressColor 
+            }"
+          ></div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed } from 'vue';
 import { useProgressStore } from '@/store/progress';
 
-// Props
 const props = defineProps<{
   visible: boolean;
-  bookTitles?: Map<string, string>; // 可选的书籍标题映射
+  bookTitles?: Map<string, string>;
 }>();
 
-// Store
 const progressStore = useProgressStore();
 
-// 计算属性
 const batchProgress = computed(() => progressStore.batchProgress);
 const batchProgressPercentage = computed(() => progressStore.getBatchProgressPercentage);
 const showBatchProgress = computed(() => batchProgress.value.active && batchProgress.value.total > 0);
 
-// 获取进度条颜色
 const progressColor = computed(() => {
   if (batchProgressPercentage.value === 100) {
-    return '#67c23a'; // 完成
+    return '#67c23a';
   } else if (batchProgressPercentage.value > 50) {
-    return '#e6a23c'; // 进行中
+    return '#e6a23c';
   } else {
-    return '#409eff'; // 开始
+    return '#409eff';
   }
 });
 
-// 将Map转换为数组，便于渲染
 const bookProgressList = computed(() => {
   const list = [];
   for (const [bookId, progress] of progressStore.currentBookProgress.entries()) {
@@ -76,7 +69,6 @@ const bookProgressList = computed(() => {
   return list;
 });
 
-// 获取书籍标题
 const getBookTitle = (bookId: string): string => {
   if (props.bookTitles && props.bookTitles.has(bookId)) {
     return props.bookTitles.get(bookId) || bookId;
@@ -112,8 +104,29 @@ const getBookTitle = (bookId: string): string => {
   color: #303133;
 }
 
-.batch-progress-bar {
-  margin-bottom: 16px;
+.progress-bar-wrapper {
+  width: 100%;
+  height: 10px;
+  background-color: #ebeef5;
+  border-radius: 5px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progress-bar-wrapper.small {
+  height: 8px;
+}
+
+.progress-bar {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.progress-text {
+  font-size: 12px;
+  color: #606266;
+  text-align: right;
 }
 
 .book-progress-list {
@@ -149,9 +162,5 @@ const getBookTitle = (bookId: string): string => {
   color: #606266;
   white-space: nowrap;
   margin-left: 8px;
-}
-
-.book-progress-bar {
-  margin: 0;
 }
 </style>

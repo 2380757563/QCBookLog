@@ -6,7 +6,9 @@
         <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
       </button>
       <h1 class="title">ISBN扫描</h1>
-      <div class="header-spacer"></div>
+      <div class="header-right">
+        <span v-if="scannedIsbnList.length > 0" class="scan-count">{{ scannedIsbnList.length }}</span>
+      </div>
     </div>
 
     <!-- 扫描区域 -->
@@ -174,10 +176,51 @@
         <div class="result-content">
           <p class="isbn-text">ISBN: {{ scannedResult }}</p>
           <div class="result-actions">
-            <button class="btn-primary" @click="useScannedIsbn">使用此ISBN</button>
+            <button class="btn-primary" @click="addToListAndContinue">添加并继续</button>
             <button class="btn-outline" @click="resetScan">继续扫描</button>
+            <button class="btn-secondary" @click="useScannedIsbn">使用此ISBN</button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- 已扫描的ISBN列表 -->
+    <div v-if="scannedIsbnList.length > 0" class="scanned-list-section">
+      <div class="list-header">
+        <h3>已扫描列表 ({{ scannedIsbnList.length }})</h3>
+        <div class="list-actions">
+          <button class="action-btn small" @click="selectAllIsbn">全选</button>
+          <button class="action-btn small" @click="invertSelection">反选</button>
+          <button class="action-btn small danger" @click="deleteSelected" :disabled="selectedIsbns.length === 0">
+            删除({{ selectedIsbns.length }})
+          </button>
+        </div>
+      </div>
+      <div class="scanned-list">
+        <div 
+          v-for="(isbn, index) in scannedIsbnList" 
+          :key="isbn"
+          :class="['scanned-item', { 'selected': selectedIsbns.includes(isbn) }]"
+          @click="toggleIsbnSelection(isbn)"
+        >
+          <div class="item-checkbox">
+            <input 
+              type="checkbox" 
+              :checked="selectedIsbns.includes(isbn)"
+              @click.stop
+              @change="toggleIsbnSelection(isbn)"
+            />
+          </div>
+          <span class="item-index">{{ index + 1 }}</span>
+          <span class="item-isbn">{{ isbn }}</span>
+          <button class="item-remove" @click.stop="removeIsbn(isbn)">×</button>
+        </div>
+      </div>
+      <div class="list-footer">
+        <button class="clear-all-btn" @click="clearAllIsbns">清空列表</button>
+        <button class="batch-search-btn" @click="batchSearch">
+          批量搜索 ({{ selectedIsbns.length > 0 ? selectedIsbns.length : scannedIsbnList.length }})
+        </button>
       </div>
     </div>
 
@@ -195,12 +238,13 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { BrowserBarcodeReader } from '@zxing/library';
 import { isbnImageScannerService } from '@/services/common/isbnImageScanner';
 import { detectImageQuality, type ImageQualityMetrics } from '@/utils/imageEnhancer';
 
 const router = useRouter();
+const route = useRoute();
 
 // 视频元素引用
 const videoElement = ref<HTMLVideoElement | null>(null);
@@ -236,6 +280,11 @@ let currentDeviceId: string | null = null;
 let qualityCheckInterval: number | null = null;
 const permissionGranted = ref(false);
 const showSwitchingHint = ref(false);
+
+const scannedIsbnList = ref<string[]>([]);
+const selectedIsbns = ref<string[]>([]);
+
+const isFromBatch = ref(false);
 
 // 分辨率配置
 const resolutionConfig = {
@@ -549,18 +598,26 @@ const initCamera = async () => {
               const errName = err.name || '';
               const errMessage = err.message || '';
               const errString = String(err);
+              const errConstructor = err.constructor?.name || '';
               
               const isNotFoundError = [
                 'NotFoundException', 'NotFoundException2', 'NotFoundError',
-                'MultiFormatReaderException'
+                'MultiFormatReaderException', 'NoCodeDetectedException'
               ].some(errorType => 
                 errName.includes(errorType) || 
                 errMessage.includes(errorType) || 
-                errString.includes(errorType)
+                errString.includes(errorType) ||
+                errConstructor.includes(errorType)
               );
               
-              if (isNotFoundError) {
-                return; // 这是正常的,表示还没有扫描到条码
+              const isNormalScanning = 
+                errName === 'e' ||
+                errString.includes('No code') ||
+                errString.includes('not found') ||
+                errString.includes('NotFoundException');
+              
+              if (isNotFoundError || isNormalScanning) {
+                return;
               }
               
               let errorMsg = '扫描错误';
@@ -576,8 +633,13 @@ const initCamera = async () => {
                 errorMsg = '摄像头被占用,请关闭其他应用';
               } else if (errName === 'OverconstrainedError') {
                 errorMsg = '当前分辨率不支持,请尝试降低分辨率';
-              } else if (errName) {
+              } else if (errMessage) {
+                errorMsg = `扫描错误: ${errMessage}`;
+              } else if (errName && errName.length > 1) {
                 errorMsg = `扫描错误: ${errName}`;
+              } else {
+                console.log('ℹ️ 扫描中...未检测到条码');
+                return;
               }
               
               console.error('❌ 扫描错误:', errorMsg, err);
@@ -870,9 +932,9 @@ const onManualInput = () => {
 const useScannedIsbn = () => {
   if (scannedResult.value) {
 
-    const route = router.currentRoute.value;
+    const routeQuery = route.query;
     
-    const fromBatch = route.query.from === 'batch';
+    const fromBatch = routeQuery.from === 'batch';
     
     if (fromBatch) {
       router.push({
@@ -888,6 +950,69 @@ const useScannedIsbn = () => {
     
     scannedResult.value = '';
   }
+};
+
+const addToListAndContinue = () => {
+  if (scannedResult.value) {
+    if (!scannedIsbnList.value.includes(scannedResult.value)) {
+      scannedIsbnList.value.push(scannedResult.value);
+    }
+    resetScan();
+  }
+};
+
+const toggleIsbnSelection = (isbn: string) => {
+  const index = selectedIsbns.value.indexOf(isbn);
+  if (index > -1) {
+    selectedIsbns.value.splice(index, 1);
+  } else {
+    selectedIsbns.value.push(isbn);
+  }
+};
+
+const selectAllIsbn = () => {
+  selectedIsbns.value = [...scannedIsbnList.value];
+};
+
+const invertSelection = () => {
+  selectedIsbns.value = scannedIsbnList.value.filter(isbn => !selectedIsbns.value.includes(isbn));
+};
+
+const removeIsbn = (isbn: string) => {
+  const index = scannedIsbnList.value.indexOf(isbn);
+  if (index > -1) {
+    scannedIsbnList.value.splice(index, 1);
+  }
+  const selectedIndex = selectedIsbns.value.indexOf(isbn);
+  if (selectedIndex > -1) {
+    selectedIsbns.value.splice(selectedIndex, 1);
+  }
+};
+
+const deleteSelected = () => {
+  scannedIsbnList.value = scannedIsbnList.value.filter(isbn => !selectedIsbns.value.includes(isbn));
+  selectedIsbns.value = [];
+};
+
+const clearAllIsbns = () => {
+  if (confirm('确定要清空所有已扫描的ISBN吗？')) {
+    scannedIsbnList.value = [];
+    selectedIsbns.value = [];
+  }
+};
+
+const batchSearch = () => {
+  const isbnsToSearch = selectedIsbns.value.length > 0 ? selectedIsbns.value : scannedIsbnList.value;
+  
+  if (isbnsToSearch.length === 0) {
+    alert('请先扫描ISBN');
+    return;
+  }
+  
+  router.push({
+    name: 'BatchScanner',
+    query: { isbn: isbnsToSearch.join(',') }
+  });
 };
 
 // 重置扫描
@@ -1033,6 +1158,24 @@ onUnmounted(() => {
 
 .header-spacer {
   width: 2rem;
+}
+
+.header-right {
+  width: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scan-count {
+  background-color: #4CAF50;
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  min-width: 1.5rem;
+  text-align: center;
 }
 
 /* 扫描区域 */
@@ -1557,6 +1700,201 @@ onUnmounted(() => {
   box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.1);
   animation: slide-up 0.3s ease;
   z-index: 30;
+}
+
+/* 已扫描列表区域 */
+.scanned-list-section {
+  background-color: #fff;
+  border-top: 1px solid #e0e0e0;
+  margin-top: 1rem;
+  max-height: 40vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e0e0e0;
+  background-color: #f9f9f9;
+}
+
+.list-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #333;
+}
+
+.list-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.action-btn {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background-color: #fff;
+  color: #333;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.action-btn:hover:not(:disabled) {
+  background-color: #f5f5f5;
+  border-color: #4CAF50;
+}
+
+.action-btn.small {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.75rem;
+}
+
+.action-btn.danger {
+  color: #f44336;
+  border-color: #f44336;
+}
+
+.action-btn.danger:hover:not(:disabled) {
+  background-color: #ffebee;
+}
+
+.action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.scanned-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+.scanned-item {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  background-color: #f9f9f9;
+  border-radius: 6px;
+  margin-bottom: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.scanned-item:hover {
+  background-color: #f0f0f0;
+}
+
+.scanned-item.selected {
+  background-color: #e3f2fd;
+  border: 1px solid #2196F3;
+}
+
+.item-checkbox {
+  margin-right: 0.5rem;
+}
+
+.item-checkbox input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.item-index {
+  font-size: 0.8rem;
+  color: #999;
+  width: 1.5rem;
+  text-align: center;
+  margin-right: 0.5rem;
+}
+
+.item-isbn {
+  flex: 1;
+  font-family: monospace;
+  font-size: 0.9rem;
+  color: #333;
+}
+
+.item-remove {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background-color: transparent;
+  color: #999;
+  font-size: 1.2rem;
+  cursor: pointer;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.item-remove:hover {
+  background-color: #ffebee;
+  color: #f44336;
+}
+
+.list-footer {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid #e0e0e0;
+  background-color: #f9f9f9;
+}
+
+.clear-all-btn {
+  flex: 1;
+  padding: 0.6rem 1rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background-color: #fff;
+  color: #666;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.clear-all-btn:hover {
+  background-color: #ffebee;
+  border-color: #f44336;
+  color: #f44336;
+}
+
+.batch-search-btn {
+  flex: 2;
+  padding: 0.6rem 1rem;
+  border: none;
+  border-radius: 6px;
+  background-color: #4CAF50;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.batch-search-btn:hover {
+  background-color: #45a049;
+}
+
+.btn-secondary {
+  padding: 0.75rem 1.5rem;
+  border: 1px solid #2196F3;
+  border-radius: 8px;
+  background-color: #fff;
+  color: #2196F3;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-secondary:hover {
+  background-color: #e3f2fd;
 }
 
 @keyframes slide-up {

@@ -1,29 +1,29 @@
 import Database from 'better-sqlite3';
-import path from 'path';
 
-const talebookDbPath = path.join('d:\\下载\\docs-xmnote-master\\QC-booklog\\data\\talebook\\calibre-webserver.db');
-console.log('📂 Talebook数据库路径:', talebookDbPath);
+console.log('🔍 检查数据库表结构...\n');
 
-const db = new Database(talebookDbPath, { readonly: true });
+// 检查 Talebook 数据库
+console.log('📋 Talebook 数据库 (calibre-webserver.db):');
+try {
+  const talebookDb = new Database('D:\\下载\\docs-xmnote-master\\QC-booklog\\data\\talebook\\calibre-webserver.db');
+  const talebookTables = talebookDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'qc_%'").all();
+  console.log(`  找到 ${talebookTables.length} 个 qc_ 表:`);
+  talebookTables.forEach(t => console.log(`    - ${t.name}`));
+  talebookDb.close();
+} catch (error) {
+  console.error('  ❌ 检查失败:', error.message);
+}
 
-console.log('\n🔍 检查所有表');
-const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all();
-console.log('📊 所有表:');
-tables.forEach(t => {
-  console.log(`  - ${t.name}`);
-});
+// 检查 QCBookLog 数据库
+console.log('\n📋 QCBookLog 数据库 (qc_booklog.db):');
+try {
+  const qcBooklogDb = new Database('D:\\下载\\docs-xmnote-master\\QC-booklog\\data\\qc_booklog.db');
+  const qcBooklogTables = qcBooklogDb.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'qc_%'").all();
+  console.log(`  找到 ${qcBooklogTables.length} 个 qc_ 表:`);
+  qcBooklogTables.forEach(t => console.log(`    - ${t.name}`));
+  qcBooklogDb.close();
+} catch (error) {
+  console.error('  ❌ 检查失败:', error.message);
+}
 
-console.log('\n🔍 检查阅读相关表');
-const readingTables = ['qc_reading_records', 'qc_daily_reading_stats', 'reading_records', 'daily_reading_stats'];
-readingTables.forEach(tableName => {
-  const exists = tables.find(t => t.name === tableName);
-  if (exists) {
-    const count = db.prepare(`SELECT COUNT(*) as count FROM ${tableName}`).get();
-    console.log(`✅ ${tableName}: 存在，记录数: ${count.count}`);
-  } else {
-    console.log(`❌ ${tableName}: 不存在`);
-  }
-});
-
-db.close();
 console.log('\n✅ 检查完成');

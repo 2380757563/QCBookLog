@@ -322,6 +322,12 @@ class DBRService {
     const ratingStr = $('div.rating_self strong.rating_num').text().trim();
     const rating = { average: ratingStr ? parseFloat(ratingStr) : 0 };
 
+    console.log('📊 [DBR] 解析书籍详情:', {
+      title,
+      ratingStr,
+      ratingAverage: rating.average
+    });
+
     // 初始化作者和译者数组
     const authors = [];
     const translators = [];
@@ -358,12 +364,17 @@ class DBRService {
 
     // 获取书籍标签
     const tags = this._getTags($);
+    console.log('🏷️ [DBR] 提取的标签:', tags);
 
     // 解析其他信息
     const infoText = $('#info').text().trim();
     const infoMap = this._parseInfoText(infoText);
 
-    return {
+    // 提取丛书信息
+    const serials = this._getText(infoMap, '丛书');
+    console.log('📚 [DBR] 提取的丛书信息:', serials);
+
+    const result = {
       id: this._getBookId($),
       author: finalAuthors,
       author_intro: this._getAuthorIntro($),
@@ -382,13 +393,23 @@ class DBRService {
       pubdate: this._getText(infoMap, '出版年'),
       publisher: this._getText(infoMap, '出版社'),
       producer: this._getText(infoMap, '出品方'),
-      serials: this._getText(infoMap, '丛书'),
+      serials: serials,
       subtitle: this._getText(infoMap, '副标题'),
       summary: this._getSummary($),
       title,
       tags,
       origin: this._getText(infoMap, '原作名')
     };
+
+    console.log('✅ [DBR] 解析完成，关键字段:', {
+      title: result.title,
+      rating: result.rating,
+      serials: result.serials,
+      tags: result.tags,
+      tagsCount: result.tags?.length || 0
+    });
+
+    return result;
   }
 
   /**
@@ -538,10 +559,30 @@ class DBRService {
     const map = {};
     // 先替换掉多作者/之间的换行符，避免下面的正则匹配少作者
     const fixStr = s.replaceAll(this.reRemoveSplitSpace, '/');
-    // 再匹配:字符两边信息
-    for (const cap of fixStr.matchAll(this.reInfoPair)) {
-      map[cap[1].trim()] = cap[2].trim();
+    
+    // 改进的正则表达式：允许键名包含空格和中文冒号
+    // 匹配格式：键名: 值 或 键名：值（中文冒号）
+    const improvedRe = /([^:\n：]+?)[：:]\s*([^\n]+)/g;
+    
+    for (const cap of fixStr.matchAll(improvedRe)) {
+      const key = cap[1].trim();
+      const value = cap[2].trim();
+      // 存储原始键名（可能带冒号）
+      map[key] = value;
+      // 同时存储不带冒号的键名（兼容性）
+      if (key.endsWith(':') || key.endsWith('：')) {
+        map[key.slice(0, -1)] = value;
+      }
     }
+    
+    // 额外处理：尝试从原始文本中提取特定字段
+    // 处理"丛书"字段，格式可能是"丛书: xxx"或"丛书信息: xxx"
+    const seriesMatch = fixStr.match(/丛书(?:信息)?[：:]\s*([^\n]+)/);
+    if (seriesMatch && !map['丛书']) {
+      map['丛书'] = seriesMatch[1].trim();
+    }
+    
+    console.log('📋 解析信息映射:', JSON.stringify(map, null, 2));
     return map;
   }
 

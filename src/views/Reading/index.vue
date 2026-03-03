@@ -65,13 +65,7 @@ const readingStats = computed(() => {
 });
 
 onMounted(async () => {
-
-  if (goalCardRef.value) {
-    goalCardRef.value.loadGoal();
-  }
-
   try {
-
     const books = await bookService.getAllBooks();
 
     console.log('📚 书籍列表:', books.map(b => ({ id: b.id, title: b.title })));
@@ -81,6 +75,15 @@ onMounted(async () => {
     bookmarkStore.setBookmarks(bookmarks);
   } catch (error) {
     console.error('❌ 加载数据失败:', error);
+  }
+
+  // 在数据加载完成后加载阅读目标
+  if (goalCardRef.value) {
+    try {
+      await goalCardRef.value.loadGoal();
+    } catch (error) {
+      console.error('❌ 加载阅读目标失败:', error);
+    }
   }
 });
 </script>

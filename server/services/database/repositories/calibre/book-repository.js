@@ -9,16 +9,18 @@ import BaseRepository from '../base-repository.js';
  * Calibre 书籍仓储类
  */
 class BookRepository extends BaseRepository {
-  constructor(db, talebookDb = null) {
+  constructor(db, talebookDb = null, qcBooklogDb = null) {
     super(db);
+    this.talebookDb = talebookDb;
+    this.qcBooklogDb = qcBooklogDb;
+  }
+
+  setTalebookDb(talebookDb) {
     this.talebookDb = talebookDb;
   }
 
-  /**
-   * 设置 Talebook 数据库（用于获取书籍类型、分组等信息）
-   */
-  setTalebookDb(talebookDb) {
-    this.talebookDb = talebookDb;
+  setQcBooklogDb(qcBooklogDb) {
+    this.qcBooklogDb = qcBooklogDb;
   }
 
   /**
@@ -321,142 +323,217 @@ class BookRepository extends BaseRepository {
    * 丰富书籍信息（添加类型、分组、扩展数据等）
    */
   enrichBooks(books, readerId = 0) {
-    if (!this.talebookDb) {
-      // 如果 Talebook 数据库不可用，返回基础书籍数据
+    const bookDataMap = new Map();
+    const bookTypeMap = new Map();
+    const bookGroupsMap = new Map();
+    const readingStateMap = new Map();
+
+    if (books.length === 0) {
       return books.map(book => this.enrichBook(book, readerId));
     }
 
-    try {
-      const bookIds = books.map(book => book.id);
-      if (bookIds.length === 0) {
-        return books.map(book => this.enrichBook(book, readerId));
+    const bookIds = books.map(book => book.id);
+    const placeholders = bookIds.map(() => '?').join(',');
+
+    // ========== 获取分组数据 ==========
+    // 分组数据存储在 qcBooklogDb 中，使用 mapping_id 关联
+    if (this.qcBooklogDb) {
+      try {
+        const currentLibraryUuid = this.getCurrentLibraryUuid ? this.getCurrentLibraryUuid() : null;
+        const bookGroupsQuery = `
+          SELECT m.calibre_book_id as book_id, g.id as group_id, g.name as group_name
+          FROM qc_book_groups bg
+          JOIN qc_book_mapping m ON bg.mapping_id = m.id
+          JOIN qc_groups g ON bg.group_id = g.id
+          WHERE m.calibre_book_id IN (${placeholders}) AND m.library_uuid = ?
+        `;
+        const bookGroups = this.qcBooklogDb.prepare(bookGroupsQuery).all(...bookIds, currentLibraryUuid);
+        bookGroups.forEach(item => {
+          if (!bookGroupsMap.has(item.book_id)) {
+            bookGroupsMap.set(item.book_id, []);
+          }
+          // 只存储分组ID（字符串），匹配前端类型定义 string[]
+          bookGroupsMap.get(item.book_id).push(String(item.group_id));
+        });
+        console.log(`✅ 从 QCBookLog 数据库获取了 ${bookGroups.length} 条分组关联`);
+      } catch (error) {
+        console.warn('⚠️ 从 QCBookLog 获取分组数据失败:', error.message);
+      }
+    }
+
+    if (this.talebookDb) {
+      try {
+        const bookTypesQuery = `SELECT book_id as id, book_type FROM items WHERE book_id IN (${placeholders})`;
+        const bookTypes = this.talebookDb.prepare(bookTypesQuery).all(...bookIds);
+        bookTypes.forEach(bt => bookTypeMap.set(bt.id, bt.book_type));
+        console.log(`✅ 从 Talebook 数据库获取了 ${bookTypes.length} 本书籍的载体类型`);
+      } catch (error) {
+        console.warn('⚠️ 从 Talebook 获取书籍类型信息失败:', error.message);
       }
 
-      const placeholders = bookIds.map(() => '?').join(',');
-
-      // 获取书籍类型信息
-      const bookTypesQuery = `SELECT book_id as id, book_type FROM items WHERE book_id IN (${placeholders})`;
-      const bookTypes = this.talebookDb.prepare(bookTypesQuery).all(...bookIds);
-      const bookTypeMap = new Map(bookTypes.map(bt => [bt.id, bt.book_type]));
-
-      // 获取书籍分组信息
-      const bookGroupsQuery = `
-        SELECT bg.book_id, g.id as group_id, g.name as group_name FROM qc_book_groups bg
-        JOIN qc_groups g ON bg.group_id = g.id
-        WHERE bg.book_id IN (${placeholders})
-        ORDER BY g.name
-      `;
-      const bookGroups = this.talebookDb.prepare(bookGroupsQuery).all(...bookIds);
-      const bookGroupsMap = new Map();
-      bookGroups.forEach(item => {
-        if (!bookGroupsMap.has(item.book_id)) {
-          bookGroupsMap.set(item.book_id, []);
-        }
-        bookGroupsMap.get(item.book_id).push({
-          id: String(item.group_id),
-          name: item.group_name
-        });
-      });
-
-      // 获取书籍扩展数据
-      const bookDataQuery = `
-        SELECT book_id, page_count, standard_price, purchase_price, purchase_date,
-               binding1, binding2, note,
-               total_reading_time, read_pages, reading_count, last_read_date, last_read_duration
-        FROM qc_bookdata
-        WHERE book_id IN (${placeholders})
-      `;
-      const bookData = this.talebookDb.prepare(bookDataQuery).all(...bookIds);
-      const bookDataMap = new Map();
-      bookData.forEach(item => {
-        bookDataMap.set(item.book_id, {
-          page_count: item.page_count || 0,
-          standard_price: item.standard_price || 0,
-          purchase_price: item.purchase_price || 0,
-          purchase_date: item.purchase_date,
-          binding1: item.binding1 || 0,
-          binding2: item.binding2 || 0,
-          note: item.note || '',
-          total_reading_time: item.total_reading_time || 0,
-          read_pages: item.read_pages || 0,
-          reading_count: item.reading_count || 0,
-          last_read_date: item.last_read_date || null,
-          last_read_duration: item.last_read_duration || 0
-        });
-      });
-
-      // 获取阅读状态
-      const readingStateQuery = `
-        SELECT book_id, favorite, wants, read_state
-        FROM reading_state
-        WHERE book_id IN (${placeholders}) AND reader_id = ?
-      `;
-      const readingStates = this.talebookDb.prepare(readingStateQuery).all([...bookIds, readerId]);
-      const readingStateMap = new Map(readingStates.map(rs => [rs.book_id, rs]));
-
-      // 合并所有数据
-      return books.map(book => {
-        const bookData = bookDataMap.get(book.id) || {};
-        
-        // 提取出版年份
-        let publishYear = null;
-        if (book.pubdate) {
-          const dateStr = String(book.pubdate);
-          const yearMatch = dateStr.match(/\d{4}/);
-          if (yearMatch) {
-            publishYear = parseInt(yearMatch[0]);
-          }
-        }
-        
-        const enriched = {
-          ...book,
-          publishYear: publishYear,
-          book_type: bookTypeMap.get(book.id) || 1,
-          groups: bookGroupsMap.get(book.id) || [],
-          // 字段名转换：将数据库字段名转换为API字段名
-          pages: bookData.page_count || 0,
-          standardPrice: bookData.standard_price || 0,
-          purchasePrice: bookData.purchase_price || 0,
-          purchaseDate: bookData.purchase_date,
-          binding1: bookData.binding1 || 0,
-          binding2: bookData.binding2 || 0,
-          note: bookData.note || '',
-          total_reading_time: bookData.total_reading_time || 0,
-          read_pages: bookData.read_pages || 0,
-          reading_count: bookData.reading_count || 0,
-          last_read_date: bookData.last_read_date || null,
-          last_read_duration: bookData.last_read_duration || 0,
-          favorite: readingStateMap.get(book.id)?.favorite || 0,
-          wants: readingStateMap.get(book.id)?.wants || 0,
-          read_state: readingStateMap.get(book.id)?.read_state || 0
-        };
-
-        // 处理 JSON 字段
+      // 对于 Talebook 中没有找到的书籍，从 QCBookLog 获取
+      const missingBookIds = bookIds.filter(id => !bookTypeMap.has(id));
+      if (missingBookIds.length > 0 && this.qcBooklogDb) {
         try {
-          enriched.tags = enriched.tags ? JSON.parse(enriched.tags) : [];
-          enriched.formats = enriched.formats ? JSON.parse(enriched.formats) : [];
-        } catch (e) {
-          enriched.tags = [];
-          enriched.formats = [];
+          const missingPlaceholders = missingBookIds.map(() => '?').join(',');
+          const bookTypesQuery = `
+            SELECT m.calibre_book_id as id, bd.book_type
+            FROM qc_bookdata bd
+            JOIN qc_book_mapping m ON bd.mapping_id = m.id
+            WHERE m.calibre_book_id IN (${missingPlaceholders}) AND m.library_uuid = ?
+          `;
+          const currentLibraryUuid = this.getCurrentLibraryUuid ? this.getCurrentLibraryUuid() : null;
+          const bookTypes = this.qcBooklogDb.prepare(bookTypesQuery).all(...missingBookIds, currentLibraryUuid);
+          bookTypes.forEach(bt => bookTypeMap.set(bt.id, bt.book_type));
+          console.log(`✅ 从 QCBookLog 数据库获取了 ${bookTypes.length} 本书籍的载体类型（补充模式）`);
+        } catch (error) {
+          console.warn('⚠️ 从 QCBookLog 获取书籍类型失败:', error.message);
         }
-
-        return enriched;
-      });
-    } catch (error) {
-      console.error('❌ 丰富书籍信息失败:', error.message);
-      // 失败时返回基础数据
-      return books.map(book => this.enrichBook(book, readerId));
+      }
     }
+
+    if (!this.talebookDb && this.qcBooklogDb) {
+      try {
+        const currentLibraryUuid = this.getCurrentLibraryUuid ? this.getCurrentLibraryUuid() : null;
+        const readingStateQuery = `
+          SELECT m.calibre_book_id as book_id, rs.favorite, rs.wants, rs.read_state
+          FROM qc_reading_state rs
+          JOIN qc_book_mapping m ON rs.mapping_id = m.id
+          WHERE m.calibre_book_id IN (${placeholders}) AND m.library_uuid = ? AND rs.reader_id = ?
+        `;
+        const readingStates = this.qcBooklogDb.prepare(readingStateQuery).all(...bookIds, currentLibraryUuid, readerId);
+        readingStates.forEach(rs => readingStateMap.set(rs.book_id, rs));
+        console.log(`✅ 从 QCBookLog 数据库获取了 ${readingStates.length} 本书籍的阅读状态（降级模式）`);
+      } catch (error) {
+        console.warn('⚠️ 从 QCBookLog 获取阅读状态失败:', error.message);
+      }
+    }
+
+    if (this.qcBooklogDb) {
+      try {
+        const currentLibraryUuid = this.getCurrentLibraryUuid ? this.getCurrentLibraryUuid() : null;
+        const bookDataQuery = `
+          SELECT m.calibre_book_id as book_id, bd.page_count, bd.standard_price, bd.purchase_price, bd.purchase_date,
+                 bd.binding1, bd.binding2, bd.paper1, bd.edge1, bd.edge2, bd.note, bd.book_type
+          FROM qc_bookdata bd
+          JOIN qc_book_mapping m ON bd.mapping_id = m.id
+          WHERE m.calibre_book_id IN (${placeholders}) AND m.library_uuid = ?
+        `;
+        const bookData = this.qcBooklogDb.prepare(bookDataQuery).all(...bookIds, currentLibraryUuid);
+        bookData.forEach(item => {
+          bookDataMap.set(item.book_id, {
+            page_count: item.page_count || 0,
+            standard_price: item.standard_price || 0,
+            purchase_price: item.purchase_price || 0,
+            purchase_date: item.purchase_date,
+            binding1: item.binding1 || 0,
+            binding2: item.binding2 || 0,
+            paper1: item.paper1 || 0,
+            edge1: item.edge1 || 0,
+            edge2: item.edge2 || 0,
+            note: item.note || '',
+            book_type: item.book_type || 0,
+            total_reading_time: 0,
+            read_pages: 0,
+            reading_count: 0,
+            last_read_date: null,
+            last_read_duration: 0
+          });
+        });
+        console.log(`✅ 从 QCBookLog 数据库获取了 ${bookData.length} 本书籍的扩展数据`);
+      } catch (error) {
+        console.warn('⚠️ 从 QCBookLog 获取书籍扩展数据失败:', error.message);
+      }
+    } else if (this.talebookDb) {
+      try {
+        const bookDataQuery = `
+          SELECT book_id, page_count, standard_price, purchase_price, purchase_date,
+                 binding1, binding2, note,
+                 total_reading_time, read_pages, reading_count, last_read_date, last_read_duration
+          FROM qc_bookdata
+          WHERE book_id IN (${placeholders})
+        `;
+        const bookData = this.talebookDb.prepare(bookDataQuery).all(...bookIds);
+        bookData.forEach(item => {
+          bookDataMap.set(item.book_id, {
+            page_count: item.page_count || 0,
+            standard_price: item.standard_price || 0,
+            purchase_price: item.purchase_price || 0,
+            purchase_date: item.purchase_date,
+            binding1: item.binding1 || 0,
+            binding2: item.binding2 || 0,
+            paper1: 0,
+            edge1: 0,
+            edge2: 0,
+            note: item.note || '',
+            total_reading_time: item.total_reading_time || 0,
+            read_pages: item.read_pages || 0,
+            reading_count: item.reading_count || 0,
+            last_read_date: item.last_read_date || null,
+            last_read_duration: item.last_read_duration || 0
+          });
+        });
+        console.log(`✅ 从 Talebook 数据库获取了 ${bookData.length} 本书籍的扩展数据（降级模式）`);
+      } catch (error) {
+        console.warn('⚠️ 从 Talebook 获取书籍扩展数据失败:', error.message);
+      }
+    }
+
+    return books.map(book => {
+      const bookData = bookDataMap.get(book.id) || {};
+      
+      let publishYear = null;
+      if (book.pubdate) {
+        const dateStr = String(book.pubdate);
+        const yearMatch = dateStr.match(/\d{4}/);
+        if (yearMatch) {
+          publishYear = parseInt(yearMatch[0]);
+        }
+      }
+      
+      const enriched = {
+        ...book,
+        publishYear: publishYear,
+        book_type: bookTypeMap.get(book.id) !== undefined && bookTypeMap.get(book.id) !== null ? bookTypeMap.get(book.id) : 0,
+        groups: bookGroupsMap.get(book.id) || [],
+        pages: bookData.page_count || 0,
+        standardPrice: bookData.standard_price || 0,
+        purchasePrice: bookData.purchase_price || 0,
+        purchaseDate: bookData.purchase_date,
+        binding1: bookData.binding1 || 0,
+        binding2: bookData.binding2 || 0,
+        paper1: bookData.paper1 || 0,
+        edge1: bookData.edge1 || 0,
+        edge2: bookData.edge2 || 0,
+        note: bookData.note || '',
+        total_reading_time: bookData.total_reading_time || 0,
+        read_pages: bookData.read_pages || 0,
+        reading_count: bookData.reading_count || 0,
+        last_read_date: bookData.last_read_date || null,
+        last_read_duration: bookData.last_read_duration || 0,
+        favorite: readingStateMap.get(book.id)?.favorite || 0,
+        wants: readingStateMap.get(book.id)?.wants || 0,
+        read_state: readingStateMap.get(book.id)?.read_state || 0
+      };
+
+      try {
+        enriched.tags = enriched.tags ? JSON.parse(enriched.tags) : [];
+        enriched.formats = enriched.formats ? JSON.parse(enriched.formats) : [];
+      } catch (e) {
+        enriched.tags = [];
+        enriched.formats = [];
+      }
+
+      return enriched;
+    });
   }
 
   /**
    * 丰富单个书籍信息
    */
   enrichBook(book, readerId = 0) {
-    // 提取出版年份
     let publishYear = null;
     if (book.pubdate) {
-      // pubdate 可能是 ISO 日期格式或其他格式，提取年份部分
       const dateStr = String(book.pubdate);
       const yearMatch = dateStr.match(/\d{4}/);
       if (yearMatch) {
@@ -464,30 +541,176 @@ class BookRepository extends BaseRepository {
       }
     }
 
+    let extendedData = {
+      pages: 0,
+      standardPrice: 0,
+      purchasePrice: 0,
+      purchaseDate: null,
+      binding1: 0,
+      binding2: 0,
+      paper1: 0,
+      edge1: 0,
+      edge2: 0,
+      note: '',
+      total_reading_time: 0,
+      read_pages: 0,
+      reading_count: 0,
+      last_read_date: null,
+      last_read_duration: 0
+    };
+
+    if (this.qcBooklogDb) {
+      try {
+        const bookData = this.qcBooklogDb.prepare(`
+          SELECT page_count, standard_price, purchase_price, purchase_date,
+                 binding1, binding2, paper1, edge1, edge2, note,
+                 total_reading_time, read_pages, reading_count, last_read_date, last_read_duration, book_type
+          FROM qc_bookdata
+          WHERE book_id = ?
+        `).get(book.id);
+        
+        if (bookData) {
+          extendedData = {
+            pages: bookData.page_count || 0,
+            standardPrice: bookData.standard_price || 0,
+            purchasePrice: bookData.purchase_price || 0,
+            purchaseDate: bookData.purchase_date,
+            binding1: bookData.binding1 || 0,
+            binding2: bookData.binding2 || 0,
+            paper1: bookData.paper1 || 0,
+            edge1: bookData.edge1 || 0,
+            edge2: bookData.edge2 || 0,
+            note: bookData.note || '',
+            total_reading_time: bookData.total_reading_time || 0,
+            read_pages: bookData.read_pages || 0,
+            reading_count: bookData.reading_count || 0,
+            last_read_date: bookData.last_read_date || null,
+            last_read_duration: bookData.last_read_duration || 0,
+            book_type: bookData.book_type !== undefined && bookData.book_type !== null ? bookData.book_type : 1
+          };
+        }
+      } catch (error) {
+        console.warn(`⚠️ 从 QCBookLog 获取书籍 ${book.id} 扩展数据失败:`, error.message);
+      }
+    } else if (this.talebookDb) {
+      try {
+        const bookData = this.talebookDb.prepare(`
+          SELECT page_count, standard_price, purchase_price, purchase_date,
+                 binding1, binding2, note,
+                 total_reading_time, read_pages, reading_count, last_read_date, last_read_duration
+          FROM qc_bookdata
+          WHERE book_id = ?
+        `).get(book.id);
+        
+        if (bookData) {
+          extendedData = {
+            pages: bookData.page_count || 0,
+            standardPrice: bookData.standard_price || 0,
+            purchasePrice: bookData.purchase_price || 0,
+            purchaseDate: bookData.purchase_date,
+            binding1: bookData.binding1 || 0,
+            binding2: bookData.binding2 || 0,
+            paper1: 0,
+            edge1: 0,
+            edge2: 0,
+            note: bookData.note || '',
+            total_reading_time: bookData.total_reading_time || 0,
+            read_pages: bookData.read_pages || 0,
+            reading_count: bookData.reading_count || 0,
+            last_read_date: bookData.last_read_date || null,
+            last_read_duration: bookData.last_read_duration || 0
+          };
+        }
+      } catch (error) {
+        console.warn(`⚠️ 从 Talebook 获取书籍 ${book.id} 扩展数据失败:`, error.message);
+      }
+    }
+
+    let bookType = 1;
+    if (this.talebookDb) {
+      try {
+        const bookTypeResult = this.talebookDb.prepare(`
+          SELECT book_type FROM items WHERE book_id = ?
+        `).get(book.id);
+        
+        if (bookTypeResult) {
+          bookType = bookTypeResult.book_type;
+        }
+      } catch (error) {
+        console.warn(`⚠️ 从 Talebook 获取书籍 ${book.id} 类型失败:`, error.message);
+      }
+    }
+
+    // 如果 extendedData 中有 book_type 且 talebook 中没有找到，使用 extendedData 的值
+    if (bookType === 1 && extendedData.book_type !== undefined && extendedData.book_type !== null) {
+      bookType = extendedData.book_type;
+    }
+
+    // 获取分组数据
+    let groups = [];
+    if (this.qcBooklogDb) {
+      try {
+        const currentLibraryUuid = this.getCurrentLibraryUuid ? this.getCurrentLibraryUuid() : null;
+        const bookGroups = this.qcBooklogDb.prepare(`
+          SELECT g.id, g.name
+          FROM qc_book_groups bg
+          JOIN qc_book_mapping m ON bg.mapping_id = m.id
+          JOIN qc_groups g ON bg.group_id = g.id
+          WHERE m.calibre_book_id = ? AND m.library_uuid = ?
+        `).all(book.id, currentLibraryUuid);
+        groups = bookGroups.map(g => String(g.id));
+      } catch (error) {
+        console.warn(`⚠️ 从 QCBookLog 获取书籍 ${book.id} 分组失败:`, error.message);
+      }
+    }
+
     const enriched = {
       ...book,
-      publishYear: publishYear, // 添加出版年份字段
-      book_type: 1,
-      groups: [],
-      // 字段名转换：将数据库字段名转换为API字段名
-      pages: book.page_count || 0,
-      standardPrice: book.standard_price || 0,
-      purchasePrice: book.purchase_price || 0,
-      purchaseDate: book.purchase_date,
-      binding1: book.binding1 || 0,
-      binding2: book.binding2 || 0,
-      note: book.note || '',
-      total_reading_time: book.total_reading_time || 0,
-      read_pages: book.read_pages || 0,
-      reading_count: book.reading_count || 0,
-      last_read_date: book.last_read_date || null,
-      last_read_duration: book.last_read_duration || 0,
+      publishYear: publishYear,
+      groups: groups,
+      ...extendedData,
+      book_type: bookType,
       favorite: 0,
       wants: 0,
       read_state: 0
     };
 
-    // 处理 JSON 字段
+    if (this.talebookDb) {
+      try {
+        const readingState = this.talebookDb.prepare(`
+          SELECT favorite, wants, read_state
+          FROM reading_state
+          WHERE book_id = ? AND reader_id = ?
+        `).get(book.id, readerId);
+        
+        if (readingState) {
+          enriched.favorite = readingState.favorite || 0;
+          enriched.wants = readingState.wants || 0;
+          enriched.read_state = readingState.read_state || 0;
+        }
+      } catch (error) {
+        console.warn(`⚠️ 从 Talebook 获取书籍 ${book.id} 阅读状态失败:`, error.message);
+      }
+    } else if (this.qcBooklogDb) {
+      try {
+        const currentLibraryUuid = this.getCurrentLibraryUuid ? this.getCurrentLibraryUuid() : null;
+        const readingState = this.qcBooklogDb.prepare(`
+          SELECT rs.favorite, rs.wants, rs.read_state
+          FROM qc_reading_state rs
+          JOIN qc_book_mapping m ON rs.mapping_id = m.id
+          WHERE m.calibre_book_id = ? AND m.library_uuid = ? AND rs.reader_id = ?
+        `).get(book.id, currentLibraryUuid, readerId);
+        
+        if (readingState) {
+          enriched.favorite = readingState.favorite || 0;
+          enriched.wants = readingState.wants || 0;
+          enriched.read_state = readingState.read_state || 0;
+        }
+      } catch (error) {
+        console.warn(`⚠️ 从 QCBookLog 获取书籍 ${book.id} 阅读状态失败:`, error.message);
+      }
+    }
+
     try {
       enriched.tags = enriched.tags ? JSON.parse(enriched.tags) : [];
       enriched.formats = enriched.formats ? JSON.parse(enriched.formats) : [];

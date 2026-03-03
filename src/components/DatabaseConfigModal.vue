@@ -242,10 +242,7 @@ const handleOverlayClick = () => {
 };
 
 const proceedToConfig = () => {
-  // 关闭弹窗
-  handleClose();
-  
-  // 跳转到配置页面的同步状态标签页
+  emit('close');
   window.location.href = '/config?tab=sync-status';
 };
 

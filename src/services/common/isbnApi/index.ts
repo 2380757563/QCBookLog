@@ -2,9 +2,16 @@ import axios from 'axios';
 import type { BookSearchResult } from './types';
 import { dbrApi } from '@/services/apiClient';
 
-// ISBN搜索结果缓存，独立于书籍列表缓存，用于批量添加功能
+type ISBNSearchResult = {
+  douban: BookSearchResult | null;
+  isbnWork: BookSearchResult | null;
+  tanshu: BookSearchResult | null;
+  dbr: BookSearchResult | null;
+  bestResult: BookSearchResult | null;
+};
+
 const ISBN_SEARCH_CACHE = new Map<string, {
-  data: ReturnType<typeof searchBookByISBN>;
+  data: ISBNSearchResult;
   timestamp: number;
 }>();
 
@@ -123,6 +130,23 @@ async function searchTanshu(isbn: string): Promise<BookSearchResult | null> {
           }
         }
 
+        // 处理装帧信息
+        const bindingText = (data.binding || '').toLowerCase();
+        let binding1: number = 1; // 默认平装
+        let binding2: number = 0; // 默认无细分
+        let book_type: number = 1; // 默认实体书
+
+        if (bindingText.includes('平装') || bindingText.includes('paperback') || bindingText.includes('平裝')) {
+          binding1 = 1;
+        } else if (bindingText.includes('精装') || bindingText.includes('hardcover') || bindingText.includes('精裝')) {
+          binding1 = 2;
+        } else if (bindingText.includes('电子') || bindingText.includes('ebook') || bindingText.includes('电子书')) {
+          binding1 = 0;
+          book_type = 0;
+        } else {
+          binding1 = 3; // 特殊装帧
+        }
+
         return {
           source: '探数图书',
           title: data.title || '',
@@ -132,6 +156,9 @@ async function searchTanshu(isbn: string): Promise<BookSearchResult | null> {
           publishYear: publishYear,
           pages: pages,
           binding: data.binding || '',
+          binding1: binding1,
+          binding2: binding2,
+          book_type: book_type,
           coverUrl: data.img || '',
           description: data.summary || '',
           price: data.price || '',
@@ -238,9 +265,26 @@ async function searchIsbnWork(isbn: string): Promise<BookSearchResult | null> {
 
             }
           }
-        } catch (e) {
+        } catch (e: unknown) {
           console.error('解析封面图片失败:', e);
         }
+      }
+      
+      // 处理装帧信息
+      const bindingText = (data.binding || '').toLowerCase();
+      let binding1: number = 1; // 默认平装
+      let binding2: number = 0; // 默认无细分
+      let book_type: number = 1; // 默认实体书
+
+      if (bindingText.includes('平装') || bindingText.includes('paperback') || bindingText.includes('平裝')) {
+        binding1 = 1;
+      } else if (bindingText.includes('精装') || bindingText.includes('hardcover') || bindingText.includes('精裝')) {
+        binding1 = 2;
+      } else if (bindingText.includes('电子') || bindingText.includes('ebook') || bindingText.includes('电子书')) {
+        binding1 = 0;
+        book_type = 0;
+      } else {
+        binding1 = 3; // 特殊装帧
       }
       
       // 探数图书和公共图书都直接返回封面URL，不使用localCoverData
@@ -257,6 +301,9 @@ async function searchIsbnWork(isbn: string): Promise<BookSearchResult | null> {
         publishYear: publishYear,
         pages: pages,
         binding: data.binding || '',
+        binding1: binding1,
+        binding2: binding2,
+        book_type: book_type,
         coverUrl: coverUrl,
         description: data.bookDesc || '',
         price: price,
@@ -287,13 +334,20 @@ async function searchIsbnWork(isbn: string): Promise<BookSearchResult | null> {
  * 调用DBR (Douban Book Rust) API
  */
 async function searchDBR(isbn: string): Promise<BookSearchResult | null> {
+  console.log(`📊 [searchDBR] 开始调用 DBR API，ISBN: ${isbn}`);
   try {
 
     // 调用DBR API获取书籍信息
     const response = await dbrApi.getByIsbn(isbn);
+    console.log(`📊 [searchDBR] DBR API 响应:`, {
+      hasResponse: !!response,
+      code: response?.code,
+      hasData: !!response?.data,
+      dataKeys: response?.data ? Object.keys(response.data) : []
+    });
 
     if (!response || response.code === undefined || response.code !== 0 || !response.data) {
-      console.error('DBR API返回无效数据:', response);
+      console.error('❌ [searchDBR] DBR API返回无效数据:', response);
       return null;
     }
     
@@ -346,6 +400,23 @@ async function searchDBR(isbn: string): Promise<BookSearchResult | null> {
     // 确保作者信息不为空
     authorText = authorText.trim();
 
+    // 处理装帧信息
+    const bindingText = (data.binding || '').toLowerCase();
+    let binding1: number = 1; // 默认平装
+    let binding2: number = 0; // 默认无细分
+    let book_type: number = 1; // 默认实体书
+
+    if (bindingText.includes('平装') || bindingText.includes('paperback') || bindingText.includes('平裝')) {
+      binding1 = 1;
+    } else if (bindingText.includes('精装') || bindingText.includes('hardcover') || bindingText.includes('精裝')) {
+      binding1 = 2;
+    } else if (bindingText.includes('电子') || bindingText.includes('ebook') || bindingText.includes('电子书')) {
+      binding1 = 0;
+      book_type = 0;
+    } else {
+      binding1 = 3; // 特殊装帧
+    }
+
     // 构建返回结果
     const result: BookSearchResult = {
       source: 'DBR',
@@ -356,6 +427,9 @@ async function searchDBR(isbn: string): Promise<BookSearchResult | null> {
       publishYear: publishYear,
       pages: pages,
       binding: data.binding || '',
+      binding1: binding1,
+      binding2: binding2,
+      book_type: book_type,
       coverUrl: coverUrl,
       description: data.summary || '',
       price: data.price || '',
@@ -368,6 +442,17 @@ async function searchDBR(isbn: string): Promise<BookSearchResult | null> {
       rawHtml: data.rawHtml,
       sourceUrl: data.sourceUrl
     };
+
+    console.log('📊 [searchDBR] 解析结果:', {
+      title: result.title,
+      rating: result.rating,
+      series: result.series,
+      tags: result.tags,
+      tagsCount: result.tags?.length || 0,
+      rawSerials: data.serials,
+      rawSeries: data.series,
+      rawRating: data.rating
+    });
 
     return result;
   } catch (error) {
@@ -441,6 +526,23 @@ async function searchDouban(isbn: string): Promise<BookSearchResult | null> {
 
     }
 
+    // 处理装帧信息
+    const bindingText = (data.binding || '').toLowerCase();
+    let binding1: number = 1; // 默认平装
+    let binding2: number = 0; // 默认无细分
+    let book_type: number = 1; // 默认实体书
+
+    if (bindingText.includes('平装') || bindingText.includes('paperback') || bindingText.includes('平裝')) {
+      binding1 = 1;
+    } else if (bindingText.includes('精装') || bindingText.includes('hardcover') || bindingText.includes('精裝')) {
+      binding1 = 2;
+    } else if (bindingText.includes('电子') || bindingText.includes('ebook') || bindingText.includes('电子书')) {
+      binding1 = 0;
+      book_type = 0;
+    } else {
+      binding1 = 3; // 特殊装帧
+    }
+
     return {
       source: '豆瓣图书',
       title: data.title || '',
@@ -450,6 +552,9 @@ async function searchDouban(isbn: string): Promise<BookSearchResult | null> {
       publishYear: data.pubdate ? parseInt(data.pubdate.split('-')[0]) : undefined,
       pages: data.pages ? parseInt(data.pages) : undefined,
       binding: data.binding || '',
+      binding1: binding1,
+      binding2: binding2,
+      book_type: book_type,
       coverUrl: coverUrl,
       localCoverData: localCoverData,
       description: data.summary || '',
@@ -480,13 +585,7 @@ async function searchDouban(isbn: string): Promise<BookSearchResult | null> {
  * 只调用免费API：DBR、公共图书、豆瓣
  * 探数API仅在用户主动点击时调用
  */
-export async function searchBookByISBN(isbn: string): Promise<{
-  douban: BookSearchResult | null;
-  isbnWork: BookSearchResult | null;
-  tanshu: BookSearchResult | null;
-  dbr: BookSearchResult | null; // 添加DBR搜索结果字段
-  bestResult: BookSearchResult | null; // 添加最佳结果字段
-}> {
+export async function searchBookByISBN(isbn: string): Promise<ISBNSearchResult> {
   console.log(`开始多源搜索ISBN: ${isbn} (免费API模式)`);
   
   // 先检查缓存
@@ -540,6 +639,20 @@ export async function searchBookByISBN(isbn: string): Promise<{
   // 确定最佳结果，优先使用免费API的高质量数据源
   // 优先级: DBR > 公共图书 > 豆瓣 > 探数
   const bestResult = finalDBRResult || finalIsbnWorkResult || finalDoubanResult || finalTanshuResult;
+  
+  console.log(`📊 [searchBookByISBN] 最佳结果选择:`, {
+    hasDBR: !!finalDBRResult,
+    hasIsbnWork: !!finalIsbnWorkResult,
+    hasDouban: !!finalDoubanResult,
+    selectedSource: bestResult?.source,
+    bestResultData: bestResult ? {
+      title: bestResult.title,
+      rating: bestResult.rating,
+      series: bestResult.series,
+      tags: bestResult.tags?.slice(0, 3),
+      tagsCount: bestResult.tags?.length || 0
+    } : null
+  });
   
   // 构建结果对象
   const result = {
@@ -661,9 +774,43 @@ export const isbnCacheUtils = {
 
 export default {
   searchBookByISBN,
+  searchBookByISBNWithSource,
   searchTanshuByISBN,
   searchDoubanByISBN,
   searchIsbnWorkByISBN,
   getApiStats,
   isbnCacheUtils
 };
+
+export async function searchBookByISBNWithSource(isbn: string, source: string): Promise<BookSearchResult | null> {
+  console.log(`📊 [searchBookByISBNWithSource] 开始搜索，ISBN: ${isbn}, 书源: ${source}`);
+  
+  const sourceMap: Record<string, () => Promise<BookSearchResult | null>> = {
+    'dbr': () => searchDBR(isbn),
+    'douban': () => searchDouban(isbn),
+    'isbnWork': () => searchIsbnWork(isbn),
+    'tanshu': () => searchTanshu(isbn)
+  };
+  
+  const searchFunction = sourceMap[source];
+  if (!searchFunction) {
+    console.error(`❌ 未知的书源: ${source}`);
+    return null;
+  }
+  
+  try {
+    const result = await searchFunction();
+    if (result) {
+      console.log(`✅ [searchBookByISBNWithSource] 搜索成功:`, {
+        source: result.source,
+        title: result.title
+      });
+    } else {
+      console.log(`⚠️ [searchBookByISBNWithSource] 未找到结果`);
+    }
+    return result;
+  } catch (error) {
+    console.error(`❌ [searchBookByISBNWithSource] 搜索失败:`, error);
+    return null;
+  }
+}

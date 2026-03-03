@@ -7,6 +7,9 @@ export interface BookSearchResult {
   publishYear?: number; // 出版年份
   pages?: number; // 页数
   binding?: string; // 装帧
+  binding1?: number; // 装帧类型: 0=电子书, 1=平装, 2=精装, 3=特殊装帧
+  binding2?: number; // 装帧细分类型
+  book_type?: number; // 书籍载体类型: 0=电子书, 1=实体书
   coverUrl?: string; // 封面图片URL
   localCoverData?: string; // 本地存储的封面图片数据
   description?: string; // 描述

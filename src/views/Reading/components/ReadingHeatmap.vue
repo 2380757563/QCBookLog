@@ -9,7 +9,7 @@
     <div class="scroll-heatmap-nav">
       <!-- 左侧透明大箭头 -->
       <div class="scroll-arrow-large scroll-arrow-left" @click="scrollHeatmapLeftStep" title="回溯更早的时间">
-        <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 1.41-1.41L10.83 12z"/></svg>
+        <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
       </div>
 
       <div class="scroll-heatmap-content-wrapper">
