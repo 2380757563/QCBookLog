@@ -225,19 +225,19 @@ class ApiClient {
   /**
    * GET请求
    */
-  get<T = any>(url: string, config?: RequestConfig): Promise<T> {
-    return this.request<T>(url, { ...config, method: 'GET' });
+  get<T = any>(url: string, config?: RequestConfig, responseType?: 'json' | 'blob' | 'text'): Promise<T> {
+    return this.request<T>(url, { ...config, method: 'GET' }, responseType);
   }
 
   /**
    * POST请求
    */
-  post<T = any>(url: string, data?: any, config?: RequestConfig): Promise<T> {
+  post<T = any>(url: string, data?: any, config?: RequestConfig, responseType?: 'json' | 'blob' | 'text'): Promise<T> {
     return this.request<T>(url, {
       ...config,
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined
-    });
+    }, responseType);
   }
 
   /**

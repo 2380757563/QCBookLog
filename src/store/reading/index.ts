@@ -8,6 +8,7 @@ import { ref, computed } from 'vue';
 import type { ReadingTimerState } from '@/services/readingTracking/types';
 import readingTrackingService from '@/services/readingTracking';
 import { useBookStore } from '@/store/book';
+import userSettingsService from '@/services/userSettings';
 
 export const useReadingStore = defineStore('reading', () => {
   // ==================== 状态 ====================
@@ -55,7 +56,18 @@ export const useReadingStore = defineStore('reading', () => {
   /**
    * 加载当前读者ID
    */
-  const loadReaderId = () => {
+  const loadReaderId = async () => {
+    try {
+      const settings = await userSettingsService.getSettings('high');
+      if (settings && settings.currentReaderId !== undefined) {
+        currentReaderId.value = Number(settings.currentReaderId);
+        localStorage.setItem('currentReaderId', String(settings.currentReaderId));
+        return;
+      }
+    } catch (error) {
+      console.error('从数据库加载读者ID失败:', error);
+    }
+    
     const saved = localStorage.getItem('currentReaderId');
     if (saved) {
       currentReaderId.value = Number(saved);
@@ -337,9 +349,15 @@ export const useReadingStore = defineStore('reading', () => {
    * 设置当前读者ID
    * @param readerId - 读者ID
    */
-  const setReaderId = (readerId: number) => {
+  const setReaderId = async (readerId: number) => {
     currentReaderId.value = readerId;
     localStorage.setItem('currentReaderId', String(readerId));
+    
+    try {
+      await userSettingsService.saveSetting('currentReaderId', readerId, 'high');
+    } catch (error) {
+      console.error('保存读者ID到数据库失败:', error);
+    }
   };
 
   // ==================== 私有方法 ====================

@@ -42,7 +42,36 @@
 
     <!-- 分组信息区域 -->
     <div class="book-group-card__info">
-      <h3 class="book-group-card__name">{{ group.name }}</h3>
+      <template v-if="isEditing">
+        <input
+          ref="editInputRef"
+          v-model="editingName"
+          class="book-group-card__name-input"
+          placeholder="输入分组名称"
+          @click.stop
+          @keydown.enter="handleSaveEdit"
+          @keydown.escape="handleCancelEdit"
+          @blur="handleSaveEdit"
+        />
+      </template>
+      <template v-else>
+        <h3
+          class="book-group-card__name"
+          @dblclick.stop="handleStartEdit"
+          title="双击编辑名称"
+        >
+          {{ group.name }}
+        </h3>
+        <button
+          class="book-group-card__edit-btn"
+          @click.stop="handleStartEdit"
+          title="编辑分组名称"
+        >
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+          </svg>
+        </button>
+      </template>
     </div>
 
     <!-- 书籍数量标签 -->
@@ -54,7 +83,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { ref, nextTick, computed } from 'vue';
 import { BookGroup } from '@/services/book/types';
 import { Book } from '@/services/book/types';
 
@@ -74,7 +103,40 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   click: [groupId: string];
+  updateGroup: [groupId: string, newName: string];
 }>();
+
+const isEditing = ref(false);
+const editingName = ref('');
+const editInputRef = ref<HTMLInputElement | null>(null);
+
+const handleStartEdit = () => {
+  isEditing.value = true;
+  editingName.value = props.group.name;
+  nextTick(() => {
+    editInputRef.value?.focus();
+    editInputRef.value?.select();
+  });
+};
+
+const handleSaveEdit = () => {
+  if (!editingName.value.trim()) {
+    handleCancelEdit();
+    return;
+  }
+  
+  if (editingName.value.trim() !== props.group.name) {
+    emit('updateGroup', props.group.id, editingName.value.trim());
+  }
+  
+  isEditing.value = false;
+  editingName.value = '';
+};
+
+const handleCancelEdit = () => {
+  isEditing.value = false;
+  editingName.value = '';
+};
 
 // 根据maxThumbnails确定网格布局
 const displayThumbnails = computed(() => {
@@ -94,7 +156,9 @@ const displayBooks = computed(() => {
 });
 
 const handleClick = () => {
-  emit('click', props.group.id);
+  if (!isEditing.value) {
+    emit('click', props.group.id);
+  }
 };
 </script>
 
@@ -201,8 +265,12 @@ const handleClick = () => {
 /* 分组信息区域 */
 .book-group-card__info {
   padding: 8px 10px;
-  flex-shrink: 0; /* 防止被压缩 */
-  min-height: 52px; /* 固定高度确保布局稳定 */
+  flex-shrink: 0;
+  min-height: 52px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .book-group-card__name {
@@ -214,6 +282,61 @@ const handleClick = () => {
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 1.4;
+  flex: 1;
+  cursor: text;
+}
+
+.book-group-card__name:hover {
+  color: var(--primary-color);
+}
+
+.book-group-card__name-input {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border: 1px solid var(--primary-color);
+  border-radius: 4px;
+  outline: none;
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+  min-width: 0;
+}
+
+.book-group-card__name-input:focus {
+  box-shadow: 0 0 0 2px rgba(255, 107, 53, 0.2);
+}
+
+.book-group-card__edit-btn {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  opacity: 0;
+  transition: opacity 0.2s ease, color 0.2s ease;
+  padding: 0;
+}
+
+.book-group-card__info:hover .book-group-card__edit-btn {
+  opacity: 1;
+}
+
+.book-group-card__edit-btn:hover {
+  color: var(--primary-color);
+}
+
+.book-group-card__edit-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 /* 书籍数量标签 */

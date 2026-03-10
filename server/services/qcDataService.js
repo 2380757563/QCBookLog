@@ -419,6 +419,29 @@ class QcDataService {
     }
   }
 
+  /**
+   * 获取书籍的所有自定义标签
+   */
+  getBookTags(bookId) {
+    if (!this.isAvailable()) {
+      return [];
+    }
+
+    try {
+      const query = `
+        SELECT DISTINCT tag_name
+        FROM qc_book_tags
+        WHERE book_id = ?
+        ORDER BY tag_name
+      `;
+      const results = this.db.prepare(query).all(bookId);
+      return results.map(item => item.tag_name);
+    } catch (error) {
+      console.error(`❌ 获取书籍ID ${bookId} 的标签失败:`, error.message);
+      return [];
+    }
+  }
+
   // ----------------------
   // 书摘管理 (bookmarks)
   // ----------------------

@@ -418,6 +418,213 @@ class ConfigController {
       res.status(500).json({ success: false, error: error.message });
     }
   }
+
+  async createDatabase(req, res) {
+    try {
+      const { type, path: dbPath, libraryName } = req.body;
+
+      if (!dbPath) {
+        return res.status(400).json({
+          success: false,
+          error: '请提供数据库路径'
+        });
+      }
+
+      if (!type) {
+        return res.status(400).json({
+          success: false,
+          error: '请提供数据库类型 (calibre 或 talebook)'
+        });
+      }
+
+      const normalizedPath = dbPath.endsWith('.db') ? dbPath : path.join(dbPath, type === 'calibre' ? 'metadata.db' : 'calibre-webserver.db');
+
+      if (fs.existsSync(normalizedPath)) {
+        return res.status(400).json({
+          success: false,
+          error: '数据库文件已存在: ' + normalizedPath
+        });
+      }
+
+      let result;
+      if (type === 'calibre') {
+        result = await databaseService.connectionManager.createNewCalibreDatabase(normalizedPath, libraryName || 'My Library');
+      } else if (type === 'talebook') {
+        result = await databaseService.connectionManager.createNewTalebookDatabase(normalizedPath);
+      } else {
+        return res.status(400).json({
+          success: false,
+          error: '不支持的数据库类型: ' + type
+        });
+      }
+
+      if (type === 'calibre') {
+        await configManager.saveConfig({
+          calibrePath: normalizedPath,
+          calibreDir: path.dirname(normalizedPath)
+        });
+      } else if (type === 'talebook') {
+        await configManager.saveConfig({
+          talebookPath: normalizedPath,
+          talebookDir: path.dirname(normalizedPath)
+        });
+      }
+
+      res.json({
+        success: true,
+        message: result.message,
+        path: result.path,
+        libraryUuid: result.libraryUuid
+      });
+    } catch (error) {
+      console.error('❌ 创建数据库失败:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  async setDefault(req, res) {
+    try {
+      const { type, dbPath } = req.body;
+
+      if (!type || !dbPath) {
+        return res.status(400).json({
+          success: false,
+          error: '请提供数据库类型和路径'
+        });
+      }
+
+      if (!fs.existsSync(dbPath)) {
+        return res.status(400).json({
+          success: false,
+          error: '数据库文件不存在: ' + dbPath
+        });
+      }
+
+      if (type === 'calibre') {
+        await databaseService.updateCalibreDbPath(dbPath);
+        calibreService.updateBookDir();
+        await configManager.saveConfig({
+          calibrePath: dbPath,
+          calibreDir: path.dirname(dbPath)
+        });
+      } else if (type === 'talebook') {
+        await databaseService.updateTalebookDbPath(dbPath);
+        await configManager.saveConfig({
+          talebookPath: dbPath,
+          talebookDir: path.dirname(dbPath)
+        });
+      } else {
+        return res.status(400).json({
+          success: false,
+          error: '不支持的数据库类型: ' + type
+        });
+      }
+
+      res.json({
+        success: true,
+        message: '默认数据库已设置',
+        type: type,
+        path: dbPath
+      });
+    } catch (error) {
+      console.error('❌ 设置默认数据库失败:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  /**
+   * 获取第三方设置配置
+   */
+  async getThirdPartyConfig(req, res) {
+    try {
+      const db = databaseService.getQcBooklogDb();
+      
+      // 从数据库获取talebook设置
+      const talebookEnabled = db.prepare('SELECT setting_value FROM qc_user_settings WHERE setting_key = ? AND user_id = 0').get('talebookEnabled');
+      const talebookLocalUrl = db.prepare('SELECT setting_value FROM qc_user_settings WHERE setting_key = ? AND user_id = 0').get('talebookLocalUrl');
+      const talebookLocalPort = db.prepare('SELECT setting_value FROM qc_user_settings WHERE setting_key = ? AND user_id = 0').get('talebookLocalPort');
+      const talebookRemoteUrl = db.prepare('SELECT setting_value FROM qc_user_settings WHERE setting_key = ? AND user_id = 0').get('talebookRemoteUrl');
+      const talebookRemotePort = db.prepare('SELECT setting_value FROM qc_user_settings WHERE setting_key = ? AND user_id = 0').get('talebookRemotePort');
+      const talebookRemoteUseHttps = db.prepare('SELECT setting_value FROM qc_user_settings WHERE setting_key = ? AND user_id = 0').get('talebookRemoteUseHttps');
+
+      const parseValue = (value, type = 'string') => {
+        if (!value) return null;
+        switch (type) {
+          case 'boolean':
+            return value === 'true';
+          case 'number':
+            return parseFloat(value);
+          default:
+            return value;
+        }
+      };
+
+      res.json({
+        success: true,
+        config: {
+          talebook: {
+            enabled: parseValue(talebookEnabled?.setting_value, 'boolean') || false,
+            localUrl: parseValue(talebookLocalUrl?.setting_value) || '',
+            localPort: parseValue(talebookLocalPort?.setting_value) || '',
+            remoteUrl: parseValue(talebookRemoteUrl?.setting_value) || '',
+            remotePort: parseValue(talebookRemotePort?.setting_value) || '',
+            remoteUseHttps: parseValue(talebookRemoteUseHttps?.setting_value, 'boolean') || false
+          }
+        }
+      });
+    } catch (error) {
+      console.error('❌ 获取第三方设置失败:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  /**
+   * 保存第三方设置配置
+   */
+  async saveThirdPartyConfig(req, res) {
+    try {
+      const { talebook } = req.body;
+      
+      console.log('📝 保存第三方设置:', { talebook });
+      
+      const db = databaseService.getQcBooklogDb();
+      
+      // 保存到数据库
+      const settings = [
+        { key: 'talebookEnabled', value: talebook?.enabled ? 'true' : 'false', type: 'boolean' },
+        { key: 'talebookLocalUrl', value: talebook?.localUrl || '', type: 'string' },
+        { key: 'talebookLocalPort', value: talebook?.localPort || '', type: 'string' },
+        { key: 'talebookRemoteUrl', value: talebook?.remoteUrl || '', type: 'string' },
+        { key: 'talebookRemotePort', value: talebook?.remotePort || '', type: 'string' },
+        { key: 'talebookRemoteUseHttps', value: talebook?.remoteUseHttps ? 'true' : 'false', type: 'boolean' }
+      ];
+
+      settings.forEach(setting => {
+        const existing = db.prepare('SELECT id FROM qc_user_settings WHERE setting_key = ? AND user_id = 0').get(setting.key);
+        if (existing) {
+          db.prepare('UPDATE qc_user_settings SET setting_value = ?, setting_type = ? WHERE setting_key = ? AND user_id = 0').run(setting.value, setting.type, setting.key);
+        } else {
+          db.prepare('INSERT INTO qc_user_settings (user_id, setting_key, setting_value, setting_type, priority) VALUES (0, ?, ?, ?, ?)').run(setting.key, setting.value, setting.type, 'high');
+        }
+      });
+      
+      res.json({
+        success: true,
+        message: '第三方设置已保存',
+        config: {
+          enabled: talebook?.enabled || false,
+          localUrl: talebook?.localUrl || '',
+          localPort: talebook?.localPort || '',
+          remoteUrl: talebook?.remoteUrl || '',
+          remotePort: talebook?.remotePort || '',
+          remoteUseHttps: talebook?.remoteUseHttps || false
+        }
+      });
+    } catch (error) {
+      console.error('❌ 保存第三方设置失败:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
 }
 
 export default new ConfigController();

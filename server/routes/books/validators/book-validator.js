@@ -41,8 +41,8 @@ function validateBookCreateData(data) {
   }
   
   // 验证评分
-  if (data.rating !== undefined && (data.rating < 0 || data.rating > 5)) {
-    errors.push('评分范围无效（应在0-5之间）');
+  if (data.rating !== undefined && (data.rating < 0 || data.rating > 10)) {
+    errors.push('评分范围无效（应在0-10之间）');
   }
   
   // 验证页数

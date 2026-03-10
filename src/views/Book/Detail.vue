@@ -38,7 +38,7 @@
             {{ book.readStatus }}
           </div>
           <div v-if="book.rating" class="book-rating">
-            <span class="stars">{{ '★'.repeat(Math.floor(book.rating)) }}{{ '☆'.repeat(5 - Math.floor(book.rating)) }}</span>
+            <span class="stars">{{ '★'.repeat(Math.max(0, Math.min(5, Math.round(book.rating / 2)))) }}{{ '☆'.repeat(Math.max(0, 5 - Math.max(0, Math.min(5, Math.round(book.rating / 2))))) }}</span>
             <span class="rating-value">{{ book.rating.toFixed(1) }}</span>
           </div>
         </div>
@@ -147,7 +147,7 @@
         <h3 class="card-title">阅读信息</h3>
         <div class="info-list">
           <!-- 阅读进度条 -->
-          <div v-if="readingStore.progressDisplayMode === 'progress' && book.read_pages && (book.pages || book.page_count)" class="reading-progress-section">
+          <div v-if="readingStore.progressDisplayMode === 'progress' && book.read_pages && book.pages" class="reading-progress-section">
             <ReadingProgressBarList :book="book" :show-duration="true" />
           </div>
           <div class="info-item" v-if="book.readCompleteDate">
@@ -179,14 +179,45 @@
         <span>开始阅读</span>
       </button>
 
+      <!-- 跳转Talebook按钮组 -->
+      <div v-if="talebookEnabled && book" class="talebook-jump-section">
+        <h3 class="card-title">跳转 Talebook</h3>
+        <div class="talebook-jump-buttons">
+          <button
+            v-if="talebookLocalUrl"
+            class="talebook-jump-btn talebook-jump-btn--local"
+            @click="jumpToTalebook('local')"
+          >
+            <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+            <span>内网跳转</span>
+          </button>
+          <button
+            v-if="talebookRemoteUrl"
+            class="talebook-jump-btn talebook-jump-btn--remote"
+            @click="jumpToTalebook('remote')"
+          >
+            <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+            <span>外网跳转</span>
+          </button>
+        </div>
+      </div>
+
       <!-- 分组 -->
-      <div class="card" v-if="bookGroups.length > 0 || (book.calibreTags && book.calibreTags.length > 0)">
+      <div class="card" v-if="bookGroups.length > 0 || (book.calibreTags && book.calibreTags.length > 0) || bookCustomTags.length > 0">
         <h3 class="card-title">分组与标签</h3>
         <div v-if="bookGroups.length > 0" class="tags-section">
           <span class="tags-label">分组</span>
           <div class="tags-list">
             <span v-for="group in bookGroups" :key="group.id" class="tag-item">
               {{ group.name }}
+            </span>
+          </div>
+        </div>
+        <div v-if="bookCustomTags.length > 0" class="tags-section">
+          <span class="tags-label">标签</span>
+          <div class="tags-list">
+            <span v-for="tag in bookCustomTags" :key="tag" class="tag-item">
+              {{ tag }}
             </span>
           </div>
         </div>
@@ -225,7 +256,7 @@
             v-for="bookmark in filteredBookmarks.slice(0, 5)"
             :key="bookmark.id"
             class="bookmark-item"
-            @click="goToBookmarkDetail(bookmark.id)"
+            @click="goToBookmarkDetail(String(bookmark.id))"
           >
             <p class="bookmark-content">{{ bookmark.content }}</p>
             <div class="bookmark-meta">
@@ -267,8 +298,6 @@
         </div>
       </div>
     </div>
-
-    <div v-else class="loading">加载中...</div>
   </div>
 </template>
 
@@ -278,6 +307,7 @@ import { useRouter, useRoute } from 'vue-router';
 import { useBookStore } from '@/store/book';
 import { useReaderStore } from '@/store/reader';
 import { useReadingStore } from '@/store/reading';
+import { useTalebookStore } from '@/store/talebook';
 import { bookService } from '@/services/book';
 import { bookmarkService } from '@/services/bookmark';
 import readingTrackingService from '@/services/readingTracking';
@@ -290,10 +320,12 @@ const route = useRoute();
 const bookStore = useBookStore();
 const readerStore = useReaderStore();
 const readingStore = useReadingStore();
+const talebookStore = useTalebookStore();
 
 const book = ref<Book | null>(null);
 const bookmarks = ref<Bookmark[]>([]);
 const bookGroups = ref<BookGroup[]>([]);
+const bookCustomTags = ref<string[]>([]);
 const showActions = ref(false);
 const showDeleteConfirm = ref(false);
 const readingState = ref<ReadingState>({
@@ -310,13 +342,73 @@ const readingState = ref<ReadingState>({
 });
 const currentReadingState = ref<number>(0);
 
+// 监听Talebook配置变化
+watch(() => talebookStore.settings.value, (newSettings) => {
+  talebookEnabled.value = newSettings.enabled;
+  talebookLocalUrl.value = newSettings.localUrl;
+  talebookLocalPort.value = newSettings.localPort;
+  talebookRemoteUrl.value = newSettings.remoteUrl;
+  talebookRemotePort.value = newSettings.remotePort;
+  remoteUseHttps.value = newSettings.remoteUseHttps;
+}, { deep: true });
+
+// Talebook 配置
+const talebookEnabled = ref(false);
+const talebookLocalUrl = ref('');
+const talebookLocalPort = ref('');
+const talebookRemoteUrl = ref('');
+const talebookRemotePort = ref('');
+const remoteUseHttps = ref(false);
+
+// 加载Talebook配置
+const loadTalebookConfig = () => {
+  talebookEnabled.value = talebookStore.enabled.value;
+  talebookLocalUrl.value = talebookStore.localUrl.value;
+  talebookLocalPort.value = talebookStore.localPort.value;
+  talebookRemoteUrl.value = talebookStore.remoteUrl.value;
+  talebookRemotePort.value = talebookStore.remotePort.value;
+  remoteUseHttps.value = talebookStore.remoteUseHttps.value;
+};
+
+// 获取Talebook跳转URL
+const getTalebookUrl = (type: 'local' | 'remote'): string => {
+  if (!book.value) return '';
+
+  let baseUrl = '';
+  let port = '';
+
+  if (type === 'local') {
+    baseUrl = talebookLocalUrl.value;
+    port = talebookLocalPort.value;
+  } else {
+    baseUrl = talebookRemoteUrl.value;
+    port = talebookRemotePort.value;
+  }
+
+  if (!baseUrl) return '';
+
+  // 构建URL - 内网使用http，外网根据配置决定
+  const protocol = type === 'local' ? 'http' : (remoteUseHttps.value ? 'https' : 'http');
+  const portPart = port && port !== '80' && port !== '443' ? `:${port}` : '';
+  const bookId = book.value.id;
+
+  return `${protocol}://${baseUrl}${portPart}/book/${bookId}`;
+};
+
+// 跳转Talebook
+const jumpToTalebook = (type: 'local' | 'remote') => {
+  const url = getTalebookUrl(type);
+  if (url) {
+    window.open(url, '_blank');
+  }
+};
+
 // 过滤后的书摘列表，确保只显示与当前书籍ID匹配的书摘
 const filteredBookmarks = computed(() => {
   if (!book.value) return [];
 
   const result = bookmarks.value.filter(bm => {
-    // 兼容 bookId 和 bookId 字段
-    const bookmarkBookId = bm.bookId !== undefined ? bm.bookId : bm.book_id;
+    const bookmarkBookId = bm.bookId;
     const isValid = bookmarkBookId === book.value?.id;
 
     if (!isValid && bm.id) {
@@ -390,17 +482,7 @@ const handleUpdateProgress = async (page: number) => {
   if (!book.value) return;
 
   try {
-    // 将页码转换为进度百分比
-    const progress = book.value.pages ? Math.round((page / book.value.pages) * 100) : 0;
-
-    await bookService.updateBook(book.value.id, {
-      progress
-    });
-
-    if (book.value) {
-      book.value.progress = progress;
-      bookStore.addBook(book.value);
-    }
+    await bookService.updateReadingProgress(book.value.id, page);
   } catch (error) {
     console.error('更新阅读进度失败:', error);
   }
@@ -430,12 +512,11 @@ const loadReadingStats = async () => {
     // 将统计信息应用到书籍对象
     if (stats && book.value) {
       book.value.read_pages = stats.readPages;
-      book.value.page_count = stats.totalPages;
       book.value.total_reading_time = stats.totalReadingTime;
       book.value.reading_count = stats.readingCount;
       book.value.last_read_date = stats.lastReadDate;
       book.value.last_read_duration = stats.lastReadDuration;
-      // 使用 page_count 作为 pages（兼容不同字段名）
+      // 使用 totalPages 作为 pages（兼容不同字段名）
       if (!book.value.pages && stats.totalPages) {
         book.value.pages = stats.totalPages;
       }
@@ -469,33 +550,31 @@ onMounted(async () => {
   // 加载阅读设置中的进度显示模式
   readingStore.loadProgressDisplayMode();
 
+  // 加载Talebook配置
+  loadTalebookConfig();
+
   const bookIdStr = route.params.id as string;
   const bookId = Number(bookIdStr);
 
 
   try {
-    // 优先从缓存中获取书籍信息
-    let cachedBook = bookStore.getBookById(bookId);
-
-    if (cachedBook) {
-
-      book.value = cachedBook;
-    } else {
-
-      book.value = await bookService.getBookById(bookId) || null;
-      // 加载成功后更新缓存
-      if (book.value) {
-        // 将API返回的tags字段（Calibre标签）复制到calibreTags
-        if (Array.isArray(book.value.tags)) {
-          book.value.calibreTags = book.value.tags as string[];
-          // 清空tags字段，用于应用自己的Tag系统
-          book.value.tags = [];
-        }
-        bookStore.addBook(book.value);
-      }
-    }
+    // 总是从API获取最新的书籍信息，确保groups和tags数据完整
+    book.value = await bookService.getBookById(bookId) || null;
 
     if (book.value) {
+      // 将API返回的tags字段（Calibre标签）复制到calibreTags
+      if (Array.isArray(book.value.tags)) {
+        book.value.calibreTags = book.value.tags as string[];
+        // 清空tags字段，用于应用自己的Tag系统
+        book.value.tags = [];
+      }
+      // 更新缓存
+      bookStore.updateBook(book.value);
+
+      // 确保groups字段存在且为数组
+      if (!Array.isArray(book.value.groups)) {
+        book.value.groups = [];
+      }
 
       // 加载相关书摘
       bookmarks.value = await bookmarkService.getBookmarksByBookId(bookId);
@@ -510,6 +589,14 @@ onMounted(async () => {
       const allGroups = await bookService.getAllGroups();
       bookGroups.value = allGroups.filter(g => book.value?.groups.includes(g.id));
 
+      // 加载自定义标签
+      try {
+        bookCustomTags.value = await bookService.getTags(bookId);
+      } catch (error) {
+        console.error('加载自定义标签失败:', error);
+        bookCustomTags.value = [];
+      }
+
       // 加载阅读状态
       await loadReadingState();
 
@@ -518,6 +605,14 @@ onMounted(async () => {
     }
   } catch (error) {
     console.error('加载数据失败:', error);
+  }
+});
+
+// 监听用户切换，重新加载阅读状态
+watch(() => readerStore.currentReaderId, async (newReaderId, oldReaderId) => {
+  if (newReaderId !== oldReaderId && book.value) {
+    console.log('👤 用户切换，重新加载阅读状态:', { oldReaderId, newReaderId });
+    await loadReadingState();
   }
 });
 </script>
@@ -539,20 +634,25 @@ onMounted(async () => {
   z-index: 100;
 }
 
-.back-btn,
-.action-btn {
-  width: 36px;
-  height: 36px;
-  border: none;
-  background: none;
+.detail-container .back-btn,
+.detail-container .action-btn {
+  width: 36px !important;
+  height: 36px !important;
+  border: none !important;
+  background: none !important;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  font-size: inherit !important;
+  font-weight: inherit !important;
+  color: inherit !important;
 }
 
-.back-btn svg,
-.action-btn svg {
+.detail-container .back-btn svg,
+.detail-container .action-btn svg {
   width: 24px;
   height: 24px;
   fill: var(--text-primary);
@@ -1027,5 +1127,58 @@ onMounted(async () => {
 .btn-danger {
   background-color: #f44336;
   color: #fff;
+}
+
+/* Talebook跳转按钮组 */
+.talebook-jump-section {
+  background-color: var(--bg-card);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.talebook-jump-buttons {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.talebook-jump-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.talebook-jump-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+.talebook-jump-btn--local {
+  background-color: #e3f2fd;
+  color: #1976d2;
+}
+
+.talebook-jump-btn--local:hover {
+  background-color: #bbdefb;
+}
+
+.talebook-jump-btn--remote {
+  background-color: #f3e5f5;
+  color: #7b1fa2;
+}
+
+.talebook-jump-btn--remote:hover {
+  background-color: #e1bee7;
 }
 </style>

@@ -59,6 +59,21 @@
               </option>
             </select>
           </div>
+          <div class="list-item">
+            <div class="item-icon">⭐</div>
+            <div class="item-info">
+              <span class="item-title">默认用户</span>
+              <span class="item-desc">下次访问时自动登录此用户</span>
+            </div>
+            <button 
+              class="btn-set-default" 
+              :class="{ 'is-default': isDefaultReader }"
+              @click="setDefaultReader"
+              :disabled="isDefaultReader"
+            >
+              {{ isDefaultReader ? '当前默认' : '设为默认' }}
+            </button>
+          </div>
           <div class="list-item" @click="goToReadingSettings">
             <div class="item-icon">📖</div>
             <div class="item-info">
@@ -72,6 +87,30 @@
             <div class="item-info">
               <span class="item-title">书签设置</span>
               <span class="item-desc">书签卡片背景、显示样式</span>
+            </div>
+            <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+          </div>
+          <div class="list-item" @click="goToBorderSettings">
+            <div class="item-icon">🖼️</div>
+            <div class="item-info">
+              <span class="item-title">书籍边框设置</span>
+              <span class="item-desc">自定义书籍卡片边框样式</span>
+            </div>
+            <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+          </div>
+          <div class="list-item" @click="goToBindingSettings">
+            <div class="item-icon">📚</div>
+            <div class="item-info">
+              <span class="item-title">装帧包边设置</span>
+              <span class="item-desc">书籍装帧风格右下角包边</span>
+            </div>
+            <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+          </div>
+          <div class="list-item" @click="goToThirdPartySettings">
+            <div class="item-icon">🔗</div>
+            <div class="item-info">
+              <span class="item-title">第三方设置</span>
+              <span class="item-desc">Talebook等第三方服务配置</span>
             </div>
             <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
           </div>
@@ -110,6 +149,71 @@
       </div>
 
       <div class="section">
+        <h3 class="section-title">数据管理</h3>
+        <div class="settings-list">
+          <div class="list-item" @click="goToExport">
+            <div class="item-icon">📤</div>
+            <div class="item-info">
+              <span class="item-title">导出数据</span>
+              <span class="item-desc">导出书籍为JSON/CSV/Excel</span>
+            </div>
+            <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+          </div>
+          <div class="list-item" @click="goToImport">
+            <div class="item-icon">📥</div>
+            <div class="item-info">
+              <span class="item-title">导入数据</span>
+              <span class="item-desc">从文件导入书籍数据</span>
+            </div>
+            <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+          </div>
+          <div class="list-item" @click="goToConfig">
+            <div class="item-icon">🔄</div>
+            <div class="item-info">
+              <span class="item-title">配置书库</span>
+              <span class="item-desc">设置书库同步</span>
+            </div>
+            <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+          </div>
+          <div class="list-item danger" @click="handleClearData">
+            <div class="item-icon">🗑️</div>
+            <div class="item-info">
+              <span class="item-title">清除数据</span>
+              <span class="item-desc">清除所有本地数据</span>
+            </div>
+            <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h3 class="section-title">快捷功能</h3>
+        <div class="settings-list">
+          <div class="list-item" @click="goToAddBook">
+            <div class="item-icon">📚</div>
+            <div class="item-info">
+              <span class="item-title">添加书籍</span>
+            </div>
+            <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+          </div>
+          <div class="list-item" @click="goToAddBookmark">
+            <div class="item-icon">📝</div>
+            <div class="item-info">
+              <span class="item-title">添加书摘</span>
+            </div>
+            <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+          </div>
+          <div class="list-item" @click="goToSearch">
+            <div class="item-icon">🔍</div>
+            <div class="item-info">
+              <span class="item-title">搜索</span>
+            </div>
+            <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
         <h3 class="section-title">帮助与合规</h3>
         <div class="settings-list">
           <div class="list-item" @click="openLink('manual')">
@@ -137,36 +241,6 @@
             <div class="item-icon">💬</div>
             <div class="item-info">
               <span class="item-title">反馈入口</span>
-            </div>
-            <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
-          </div>
-        </div>
-      </div>
-
-      <div class="section">
-        <h3 class="section-title">数据管理</h3>
-        <div class="settings-list">
-          <div class="list-item" @click="handleExport">
-            <div class="item-icon">📤</div>
-            <div class="item-info">
-              <span class="item-title">导出数据</span>
-              <span class="item-desc">导出所有书籍和书摘数据</span>
-            </div>
-            <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
-          </div>
-          <div class="list-item" @click="handleImport">
-            <div class="item-icon">📥</div>
-            <div class="item-info">
-              <span class="item-title">导入数据</span>
-              <span class="item-desc">从备份文件恢复数据</span>
-            </div>
-            <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
-          </div>
-          <div class="list-item danger" @click="handleClearData">
-            <div class="item-icon">🗑️</div>
-            <div class="item-info">
-              <span class="item-title">清除数据</span>
-              <span class="item-desc">清除所有本地数据</span>
             </div>
             <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
           </div>
@@ -211,6 +285,7 @@ import { useBookmarkStore } from '@/store/bookmark';
 import { useReaderStore } from '@/store/reader';
 import { bookService } from '@/services/book';
 import { bookmarkService } from '@/services/bookmark';
+import userSettingsService from '@/services/userSettings';
 
 const router = useRouter();
 const bookStore = useBookStore();
@@ -285,6 +360,42 @@ const goToBookmarkSettings = () => {
   router.push('/bookmark-settings');
 };
 
+const goToBorderSettings = () => {
+  router.push('/border-settings');
+};
+
+const goToBindingSettings = () => {
+  router.push('/binding-settings');
+};
+
+const goToThirdPartySettings = () => {
+  router.push('/third-party-settings');
+};
+
+const goToExport = () => {
+  router.push('/export');
+};
+
+const goToImport = () => {
+  router.push('/import');
+};
+
+const goToConfig = () => {
+  router.push('/config');
+};
+
+const goToAddBook = () => {
+  router.push('/book/edit');
+};
+
+const goToAddBookmark = () => {
+  router.push('/bookmark/edit');
+};
+
+const goToSearch = () => {
+  router.push('/search');
+};
+
 // 加载书籍列表
 const loadBooks = async () => {
   try {
@@ -297,25 +408,6 @@ const loadBooks = async () => {
 
 const openLink = (type: string) => {
   alert(`${type} 页面开发中...`);
-};
-
-const handleExport = () => {
-  const data = {
-    books: bookStore.allBooks,
-    bookmarks: bookmarkStore.allBookmarks,
-    exportTime: new Date().toISOString()
-  };
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `青橙读书记录_备份_${new Date().toISOString().split('T')[0]}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-};
-
-const handleImport = () => {
-  alert('导入数据功能开发中...');
 };
 
 const handleClearData = () => {
@@ -331,6 +423,25 @@ const handleReaderChange = () => {
 
   // 刷新书籍列表以更新阅读状态
   loadBooks();
+};
+
+// 检查当前用户是否为默认用户
+const isDefaultReader = computed(() => {
+  const defaultReaderId = localStorage.getItem('defaultReaderId');
+  return defaultReaderId === String(readerStore.currentReaderId);
+});
+
+// 设置默认用户
+const setDefaultReader = async () => {
+  localStorage.setItem('defaultReaderId', String(readerStore.currentReaderId));
+  
+  try {
+    await userSettingsService.saveSetting('defaultReaderId', readerStore.currentReaderId, 'high');
+    alert(`已将 "${readerStore.currentReader.name || readerStore.currentReader.username}" 设为默认用户`);
+  } catch (error) {
+    console.error('保存默认读者ID到数据库失败:', error);
+    alert(`已将 "${readerStore.currentReader.name || readerStore.currentReader.username}" 设为默认用户（本地存储）`);
+  }
 };
 
 // 保存设置
@@ -509,6 +620,33 @@ onMounted(async () => {
   color: var(--text-secondary);
   background-color: #fff;
   outline: none;
+}
+
+.btn-set-default {
+  padding: 6px 12px;
+  border: 1px solid var(--primary-color);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--primary-color);
+  background-color: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-set-default:hover:not(:disabled) {
+  background-color: var(--primary-color);
+  color: #fff;
+}
+
+.btn-set-default.is-default {
+  background-color: var(--primary-color);
+  color: #fff;
+  cursor: default;
+}
+
+.btn-set-default:disabled {
+  opacity: 0.7;
+  cursor: default;
 }
 
 .item-arrow {

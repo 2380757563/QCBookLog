@@ -115,8 +115,12 @@ export const bookApi = {
   /**
    * 根据ID获取书籍
    * @param id 书籍ID
+   * @param readerId 读者ID（可选，默认为0）
    */
-  getById: (id: number) => apiRequest(`/books/${id}`),
+  getById: (id: number, readerId?: number) => {
+    const queryString = readerId !== undefined ? `?readerId=${readerId}` : '';
+    return apiRequest(`/books/${id}${queryString}`);
+  },
 
   /**
    * 创建书籍
@@ -131,11 +135,17 @@ export const bookApi = {
    * 更新书籍
    * @param id 书籍ID
    * @param book 书籍数据
+   * @param readerId 读者ID（可选，默认为0）
    */
-  update: (id: number, book: any) => apiRequest(`/books/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(book)
-  }),
+  update: (id: number, book: any, readerId?: number) => {
+    console.log('🔍 bookApi.update 收到的readerId:', readerId);
+    const queryString = readerId !== undefined ? `?readerId=${readerId}` : '';
+    console.log('🔍 构建的queryString:', queryString);
+    return apiRequest(`/books/${id}${queryString}`, {
+      method: 'PUT',
+      body: JSON.stringify(book)
+    });
+  },
 
   /**
    * 删除书籍
@@ -228,6 +238,14 @@ export const bookApi = {
       method: 'PUT',
       body: JSON.stringify({ readPages })
     });
+  },
+
+  /**
+   * 获取书籍的自定义标签
+   * @param id 书籍ID
+   */
+  getTags: (id: number) => {
+    return apiRequest(`/books/${id}/tags`);
   }
 };
 

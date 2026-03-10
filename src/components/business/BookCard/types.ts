@@ -12,6 +12,10 @@ export interface BookCardProps {
     rating?: number;
     tags: string[];
     groups: string[];
+    favorite?: number;
+    wants?: number;
+    binding1?: number;
+    binding2?: number;
   };
   /**
    * 布局类型

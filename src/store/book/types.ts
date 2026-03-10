@@ -6,9 +6,12 @@ export interface Book {
   publisher?: string;
   publishYear?: number;
   pages?: number;
-  read_pages?: number; // 已读页数
+  read_pages?: number;
   binding1?: number;
   binding2?: number;
+  paper1?: number;
+  edge1?: number;
+  edge2?: number;
   book_type: number;
   coverUrl?: string;
   localCoverData?: string;
@@ -21,10 +24,19 @@ export interface Book {
   tags: string[];
   groups: string[];
   series?: string;
+  calibreTags?: string[];
   note?: string;
   description?: string;
   createTime: string;
   updateTime: string;
+  total_reading_time?: number;
+  reading_count?: number;
+  last_read_date?: string | null;
+  last_read_duration?: number;
+  favorite?: number;
+  favorite_date?: string | null;
+  wants?: number;
+  wants_date?: string | null;
 }
 
 export interface BookState {

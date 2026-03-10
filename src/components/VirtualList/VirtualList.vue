@@ -19,14 +19,14 @@
         :style="{ transform: `translateY(${offsetY}px)` }"
       >
         <div
-          v-for="item in visibleItems"
-          :key="getItemKey(item)"
-          :style="getItemStyle(item, $index)"
+          v-for="(item, index) in visibleItems"
+          :key="getItemKey(item, index)"
+          :style="getItemStyle?.(item, index)"
           class="virtual-list-item"
-          :class="getItemClass(item, $index)"
-          @click="handleItemClick(item, $index)"
+          :class="getItemClass?.(item, index)"
+          @click="handleItemClick(item, index)"
         >
-          <slot :item="item" :index="$index" />
+          <slot :item="item" :index="index" />
         </div>
       </div>
     </div>
@@ -171,7 +171,7 @@ const itemPositions = computed(() => {
 
   let currentOffset = 0;
   return props.items.map((item, index) => {
-    const height = props.getItemHeight(item, index);
+    const height = props.getItemHeight!(item, index);
     const position = {
       offset: currentOffset,
       height,

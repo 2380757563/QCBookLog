@@ -217,14 +217,14 @@ class ImportService {
               const yearCount = Object.keys(heatmapData.heatmap).length;
               let dayCount = 0;
               Object.values(heatmapData.heatmap).forEach((dataset: any) => {
-                dayCount += dataset.data?.length || 0;
+                dayCount += ((dataset as any).data?.length || 0) as number;
               });
 
               // 使用 readingHeatmapService 导入热力图数据
               for (const [year, dataset] of Object.entries(heatmapData.heatmap)) {
                 const yearNum = parseInt(year);
-                if (dataset.data && Array.isArray(dataset.data)) {
-                  for (const day of dataset.data) {
+                if ((dataset as any).data && Array.isArray((dataset as any).data)) {
+                  for (const day of (dataset as any).data) {
                     if (day.date && day.count > 0) {
                       try {
                         await readingHeatmapService.updateHeatmapData(day.date, day.count);

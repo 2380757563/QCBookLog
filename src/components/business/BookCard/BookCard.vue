@@ -10,7 +10,7 @@
     @click="handleClick"
   >
     <!-- 书籍封面 -->
-    <div class="book-card__cover-wrapper">
+    <div class="book-card__cover-wrapper" :style="coverWrapperStyle">
       <img
         v-if="book.localCoverData || book.coverUrl"
         :src="book.localCoverData || book.coverUrl"
@@ -29,42 +29,53 @@
       </div>
     </div>
 
-    <!-- 书籍信息 -->
-    <div class="book-card__info">
-      <h3 class="book-card__title">{{ book.title }}</h3>
-      <p class="book-card__author">{{ book.author }}</p>
-      
-      <!-- 评分 -->
-      <div v-if="book.rating" class="book-card__rating">
-        <span class="book-card__rating-text">{{ book.rating.toFixed(1) }}</span>
-        <div class="book-card__rating-stars">
+    <!-- 书籍信息 - 带包边效果 -->
+    <div class="book-card__info-wrapper">
+      <div class="book-card__info">
+        <h3 class="book-card__title">{{ book.title }}</h3>
+        <p class="book-card__author">{{ book.author }}</p>
+        
+        <!-- 评分 -->
+        <div v-if="book.rating" class="book-card__rating">
+          <span class="book-card__rating-text">{{ book.rating.toFixed(1) }}</span>
+          <div class="book-card__rating-stars">
+            <span
+              v-for="i in 5"
+              :key="i"
+              class="book-card__rating-star"
+              :class="{
+                'book-card__rating-star--filled': i <= Math.floor(book.rating / 2),
+                'book-card__rating-star--half': i > Math.floor(book.rating / 2) && i < book.rating / 2 + 1
+              }"
+            >
+              ★
+            </span>
+          </div>
+        </div>
+
+        <!-- 标签 -->
+        <div v-if="book.tags.length > 0" class="book-card__tags">
           <span
-            v-for="i in 5"
-            :key="i"
-            class="book-card__rating-star"
-            :class="{
-              'book-card__rating-star--filled': i <= Math.floor(book.rating),
-              'book-card__rating-star--half': i > Math.floor(book.rating) && i < book.rating + 1
-            }"
+            v-for="tag in book.tags.slice(0, 3)"
+            :key="tag"
+            class="book-card__tag"
           >
-            ★
+            {{ tag }}
+          </span>
+          <span v-if="book.tags.length > 3" class="book-card__tag-more">
+            +{{ book.tags.length - 3 }}
           </span>
         </div>
       </div>
 
-      <!-- 标签 -->
-      <div v-if="book.tags.length > 0" class="book-card__tags">
-        <span
-          v-for="tag in book.tags.slice(0, 3)"
-          :key="tag"
-          class="book-card__tag"
-        >
-          {{ tag }}
-        </span>
-        <span v-if="book.tags.length > 3" class="book-card__tag-more">
-          +{{ book.tags.length - 3 }}
-        </span>
-      </div>
+      <!-- 装帧包边 - 包裹信息区域 -->
+      <BindingBorder
+        v-if="showBindingBorder"
+        :binding1="binding1"
+        :binding2="binding2"
+        :params="bindingBorderParams"
+        class="book-card__binding-border"
+      />
     </div>
 
     <!-- 操作按钮 -->
@@ -95,7 +106,23 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import { BookCardProps, BookCardEmits } from './types';
+import { useBookBorderStore } from '@/store/bookBorder';
+import { BookStatus } from '@/store/bookBorder/types';
+import { useBindingBorderStore } from '@/store/bindingBorder';
+import { 
+  getBindingType, 
+  getHardcoverTexture, 
+  shouldShowOilEdge, 
+  getSpecialPattern,
+  getPaperbackVariant,
+  getEbookVariant,
+  BindingBorderParams,
+  Binding1Type,
+  Binding2Type
+} from '@/store/bindingBorder/types';
+import BindingBorder from '@/components/business/BindingBorder/BindingBorder.vue';
 
 const props = withDefaults(defineProps<BookCardProps>(), {
   layout: 'grid',
@@ -103,6 +130,111 @@ const props = withDefaults(defineProps<BookCardProps>(), {
 });
 
 const emit = defineEmits<BookCardEmits>();
+const borderStore = useBookBorderStore();
+const bindingBorderStore = useBindingBorderStore();
+
+const bookStatus = computed((): BookStatus => {
+  if (props.book.favorite === 1) {
+    return 'favorite';
+  }
+  if (props.book.wants === 1) {
+    return 'pending';
+  }
+  return 'normal';
+});
+
+const borderParams = computed(() => borderStore.getBorderParams(bookStatus.value));
+
+const binding1 = computed((): Binding1Type => {
+  const val = props.book.binding1;
+  if (val === undefined || val === null) return 1;
+  return val as Binding1Type;
+});
+const binding2 = computed((): Binding2Type => {
+  const val = props.book.binding2;
+  if (val === undefined || val === null) return 0;
+  return val as Binding2Type;
+});
+
+const showBindingBorder = computed(() => true);
+
+const bindingBorderParams = computed((): BindingBorderParams => {
+  const type = getBindingType(binding1.value);
+  const settings = bindingBorderStore.settings;
+  
+  // 直接使用设置的参数（包含 texture），不再根据 binding2 覆盖
+  switch (type) {
+    case 'ebook':
+      return { ...settings.ebook };
+    case 'paperback':
+      return { ...settings.paperback };
+    case 'hardcover':
+      return { ...settings.hardcover };
+    case 'special':
+      return { ...settings.special };
+    default:
+      return settings.paperback;
+  }
+});
+
+const coverWrapperStyle = computed(() => {
+  const params = borderParams.value;
+  const style: Record<string, string> = {
+    borderRadius: `${params.borderRadius}px`
+  };
+
+  if (params.glow.enabled) {
+    style.boxShadow = `0 0 ${params.glow.spread}px ${params.glow.color}`;
+  }
+
+  switch (params.type) {
+    case 'normal-1':
+    case 'normal-2':
+    case 'normal-3':
+    case 'normal-4':
+    case 'normal-5':
+    case 'pending-2':
+    case 'favorite-4':
+      style.border = `${params.lineWidth}px solid ${params.color}`;
+      if (params.type === 'normal-2' && 'hoverEnabled' in params && params.hoverEnabled) {
+        style.borderColor = 'transparent';
+      }
+      break;
+    case 'pending-1':
+      const dashLength = 6 * (params.dashRatio || 1);
+      style.border = `${params.lineWidth}px dashed ${params.color}`;
+      break;
+    case 'pending-3':
+      style.border = `${params.lineWidth}px solid ${params.color}`;
+      break;
+    case 'pending-4':
+      style.border = `${params.lineWidth}px solid ${params.color}`;
+      break;
+    case 'pending-5':
+    case 'favorite-2':
+    case 'favorite-5':
+      if ('gradientStartColor' in params && 'gradientEndColor' in params) {
+        style.border = `${params.lineWidth}px solid transparent`;
+        style.backgroundImage = `linear-gradient(#f5f5f5, #f5f5f5), linear-gradient(135deg, ${params.gradientStartColor}, ${params.gradientEndColor})`;
+        style.backgroundOrigin = 'border-box';
+        style.backgroundClip = 'padding-box, border-box';
+      }
+      break;
+    case 'favorite-1':
+      const gap = 'doubleLineGap' in params ? params.doubleLineGap : 4;
+      style.border = `${params.lineWidth}px solid ${params.color}`;
+      style.boxShadow = `inset 0 0 0 ${gap}px #f5f5f5, inset 0 0 0 ${gap + params.lineWidth}px ${params.color}`;
+      if (params.glow.enabled) {
+        style.boxShadow += `, 0 0 ${params.glow.spread}px ${params.glow.color}`;
+      }
+      break;
+    case 'favorite-3':
+      style.border = `${params.lineWidth}px solid ${params.color}`;
+      break;
+  }
+
+  return style;
+});
 
 const handleClick = () => {
   emit('click', props.book.id);
@@ -124,8 +256,10 @@ const handleViewBookmarks = () => {
 <style scoped>
 .xm-book-card {
   background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  box-shadow: 
+    0 4px 12px rgba(0, 0, 0, 0.08),
+    0 2px 4px rgba(0, 0, 0, 0.04);
   overflow: hidden;
   transition: all 0.3s ease;
   cursor: pointer;
@@ -136,7 +270,7 @@ const handleViewBookmarks = () => {
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-width: 200px;
+  /* 移除 max-width 限制，让卡片自适应网格宽度 */
 }
 
 .xm-book-card--list {
@@ -147,8 +281,10 @@ const handleViewBookmarks = () => {
 }
 
 .xm-book-card--hover:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transform: translateY(-4px);
+  box-shadow: 
+    0 8px 24px rgba(0, 0, 0, 0.12),
+    0 4px 8px rgba(0, 0, 0, 0.06);
 }
 
 /* 封面样式 */
@@ -158,6 +294,7 @@ const handleViewBookmarks = () => {
   padding-top: 133.33%; /* 3:4 比例 */
   overflow: hidden;
   background-color: #f5f5f5;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .xm-book-card--list .book-card__cover-wrapper {
@@ -165,6 +302,10 @@ const handleViewBookmarks = () => {
   height: 107px;
   padding-top: 0;
   margin-right: 16px;
+}
+
+.xm-book-card--hover:hover .book-card__cover-wrapper {
+  border-color: inherit !important;
 }
 
 .book-card__cover {
@@ -175,6 +316,7 @@ const handleViewBookmarks = () => {
   height: 100%;
   object-fit: cover;
   transition: transform 0.3s ease;
+  z-index: 1;
 }
 
 .xm-book-card--hover:hover .book-card__cover {
@@ -208,6 +350,7 @@ const handleViewBookmarks = () => {
   font-size: 12px;
   font-weight: 500;
   color: #fff;
+  z-index: 10;
 }
 
 .book-card__read-status--未读 {
@@ -222,15 +365,37 @@ const handleViewBookmarks = () => {
   background-color: #2ecc71;
 }
 
+/* 信息包装器 - 带立体包边效果 */
+.book-card__info-wrapper {
+  position: relative;
+  flex: 1;
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(250, 250, 250, 0.9) 100%
+  );
+  box-shadow: 
+    inset 0 1px 3px rgba(0, 0, 0, 0.05),
+    inset -2px -2px 8px rgba(0, 0, 0, 0.03);
+  border-radius: 0 0 12px 12px;
+  overflow: hidden;
+}
+
+.xm-book-card--list .book-card__info-wrapper {
+  border-radius: 8px;
+  margin: -4px;
+}
+
 /* 信息部分 */
 .book-card__info {
   padding: 12px;
-  flex: 1;
+  position: relative;
+  z-index: 2;
 }
 
 .xm-book-card--list .book-card__info {
   flex: 1;
-  padding: 0;
+  padding: 8px 12px;
 }
 
 .book-card__title {
@@ -316,6 +481,11 @@ const handleViewBookmarks = () => {
   color: #666;
 }
 
+/* 包边样式 */
+.book-card__binding-border {
+  z-index: 5;
+}
+
 /* 操作按钮 */
 .book-card__actions {
   position: absolute;
@@ -325,6 +495,7 @@ const handleViewBookmarks = () => {
   gap: 8px;
   opacity: 0;
   transition: opacity 0.3s ease;
+  z-index: 20;
 }
 
 .xm-book-card--hover:hover .book-card__actions {

@@ -85,29 +85,16 @@
                   自动
                 </button>
                 <button
-                  :class="['row-btn', { active: gridColumns === '2' }]"
-                  @click="setGridColumns('2')"
+                  :class="['row-btn', { active: gridColumns !== 'auto' }]"
+                  @click="toggleManualColumns"
                 >
-                  2列
+                  手动
                 </button>
-                <button
-                  :class="['row-btn', { active: gridColumns === '3' }]"
-                  @click="setGridColumns('3')"
-                >
-                  3列
-                </button>
-                <button
-                  :class="['row-btn', { active: gridColumns === '4' }]"
-                  @click="setGridColumns('4')"
-                >
-                  4列
-                </button>
-                <button
-                  :class="['row-btn', { active: gridColumns === '5' }]"
-                  @click="setGridColumns('5')"
-                >
-                  5列
-                </button>
+              </div>
+              <div v-if="gridColumns !== 'auto'" class="manual-columns-select">
+                <select v-model="manualColumnCount" @change="applyManualColumns" class="column-select">
+                  <option v-for="n in 20" :key="n" :value="n">{{ n }}列</option>
+                </select>
               </div>
             </div>
           </div>
@@ -133,22 +120,6 @@
           <span class="dialog-close" @click="showAdvancedFilter = false">×</span>
         </div>
         <div class="filter-body">
-          <!-- 标签筛选 -->
-          <div class="filter-section">
-            <label class="filter-label">标签（多选）</label>
-            <div class="tags-filter">
-              <span
-                v-for="tag in availableTags"
-                :key="tag"
-                :class="['filter-tag', { 'filter-tag--active': filterConditions.tags.includes(tag) }]"
-                @click="toggleTagFilter(tag)"
-              >
-                {{ tag }}
-              </span>
-              <span v-if="availableTags.length === 0" class="no-tags">暂无标签</span>
-            </div>
-          </div>
-
           <!-- 阅读状态 -->
           <div class="filter-section">
             <label class="filter-label">阅读状态</label>
@@ -176,6 +147,31 @@
                 @click="filterConditions.readStatus = '已读'; saveFilterConditions();"
               >
                 已读
+              </button>
+            </div>
+          </div>
+
+          <!-- 喜欢/待读状态 -->
+          <div class="filter-section">
+            <label class="filter-label">喜欢/待读</label>
+            <div class="filter-options">
+              <button
+                :class="['filter-option-btn', { 'filter-option-btn--active': filterConditions.favorite === null && filterConditions.wants === null }]"
+                @click="filterConditions.favorite = null; filterConditions.wants = null; saveFilterConditions();"
+              >
+                全部
+              </button>
+              <button
+                :class="['filter-option-btn', { 'filter-option-btn--active': filterConditions.favorite === 1 }]"
+                @click="filterConditions.favorite = filterConditions.favorite === 1 ? null : 1; saveFilterConditions();"
+              >
+                ❤️ 喜欢
+              </button>
+              <button
+                :class="['filter-option-btn', { 'filter-option-btn--active': filterConditions.wants === 1 }]"
+                @click="filterConditions.wants = filterConditions.wants === 1 ? null : 1; saveFilterConditions();"
+              >
+                📚 待读
               </button>
             </div>
           </div>
@@ -289,6 +285,22 @@
                 placeholder="输入作者名称..."
               />
               <button v-if="filterConditions.author" class="clear-input-btn" @click="filterConditions.author = ''; saveFilterConditions();">×</button>
+            </div>
+          </div>
+
+          <!-- 标签筛选 -->
+          <div class="filter-section">
+            <label class="filter-label">标签（多选）</label>
+            <div class="tags-filter">
+              <span
+                v-for="tag in availableTags"
+                :key="tag"
+                :class="['filter-tag', { 'filter-tag--active': filterConditions.tags.includes(tag) }]"
+                @click="toggleTagFilter(tag)"
+              >
+                {{ tag }}
+              </span>
+              <span v-if="availableTags.length === 0" class="no-tags">暂无标签</span>
             </div>
           </div>
         </div>
@@ -418,7 +430,13 @@
       <div v-if="activeTab === 'library'" class="tab-content">
         <!-- 分组区域 -->
         <div v-if="sortedGroups.length > 0" class="groups-section">
-          <h3 v-if="!isOrganizeMode" class="section-title">分组</h3>
+          <h3 v-if="!isOrganizeMode" class="section-title section-title--collapsible" @click="toggleGroupsCollapse">
+            <svg :class="['collapse-icon', { 'collapse-icon--collapsed': isGroupsCollapsed }]" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path fill="currentColor" d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+            </svg>
+            分组
+          </h3>
+          <div :class="['section-content', { 'section-content--collapsed': isGroupsCollapsed }]">
           <div :class="['groups-grid', `grid-cols-${gridColumns}`, { 'groups-grid--organize': isOrganizeMode }]">
             <BookGroupCard
               v-for="group in sortedGroups"
@@ -429,7 +447,9 @@
               :selected="selectedGroupIds.includes(group.id)"
               :is-organize-mode="isOrganizeMode"
               @click="isOrganizeMode ? toggleGroupSelection(group.id) : handleGroupClick(group.id)"
+              @update-group="handleUpdateGroupName"
             />
+          </div>
           </div>
         </div>
 
@@ -443,8 +463,14 @@
               {{ currentGroup?.name }}
             </span>
           </div>
-          <h3 v-else-if="!isOrganizeMode && sortedGroups.length > 0" class="section-title">全部书籍</h3>
-          
+          <h3 v-else-if="!isOrganizeMode && sortedGroups.length > 0" class="section-title section-title--collapsible" @click="toggleBooksCollapse">
+            <svg :class="['collapse-icon', { 'collapse-icon--collapsed': isBooksCollapsed }]" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path fill="currentColor" d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
+            </svg>
+            全部书籍
+          </h3>
+
+          <div :class="['section-content', { 'section-content--collapsed': isBooksCollapsed }]">
           <!-- 加载状态 -->
           <div v-if="isLoading" class="loading-state">
             <div class="loading-spinner"></div>
@@ -456,7 +482,7 @@
             v-for="book in filteredBooks"
             :key="book.id"
             :class="['book-card', `book-card--${layout}`, { 'book-card--selected': selectedBookIds.includes(book.id), 'book-card--organize': isOrganizeMode }]"
-            @click="isOrganizeMode ? toggleBookSelection(book.id) : goToBookDetail(book.id)"
+            @click="isOrganizeMode ? toggleBookSelection(book.id) : goToBookDetail(String(book.id))"
             :title="book.title"
           >
             <!-- 整理模式下的选择复选框 -->
@@ -468,23 +494,31 @@
                 <path fill="currentColor" d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>
               </svg>
             </div>
-            <div class="book-cover">
-              <img v-if="book.coverUrl" :src="book.coverUrl" :alt="book.title" loading="lazy" @error="handleImgError" />
-              <div v-else class="cover-placeholder">
-                <span>{{ book.title ? book.title.charAt(0) : '?' }}</span>
+            <div class="book-card-inner" :style="getBookBorderStyle(book)">
+              <div class="book-cover">
+                <img v-if="book.coverUrl" :src="book.coverUrl" :alt="book.title" loading="lazy" @error="handleImgError" />
+                <div v-else class="cover-placeholder">
+                  <span>{{ book.title ? book.title.charAt(0) : '?' }}</span>
+                </div>
+                <div v-if="readingStore.progressDisplayMode === 'label'" :class="['read-status', `read-status--${book.readStatus}`]">{{ book.readStatus }}</div>
               </div>
-              <div v-if="readingStore.progressDisplayMode === 'label'" :class="['read-status', `read-status--${book.readStatus}`]">{{ book.readStatus }}</div>
-            </div>
-            <div class="book-info">
-              <h3 class="book-title">{{ book.title || '未知书名' }}</h3>
-              <p class="book-author">{{ book.author || '未知作者' }}</p>
-              <ReadingProgressBarList v-if="readingStore.progressDisplayMode === 'progress' && book.read_pages && book.pages" :book="book" :show-duration="true" />
-              <div v-if="book.rating" class="book-rating">
-                <span class="rating-stars">{{ '★'.repeat(Math.max(0, Math.min(5, Math.floor(book.rating)))) }}{{ '☆'.repeat(Math.max(0, 5 - Math.max(0, Math.min(5, Math.floor(book.rating))))) }}</span>
-                <span class="rating-value">{{ book.rating.toFixed(1) }}</span>
+              <div class="book-info">
+                <h3 class="book-title">{{ book.title || '未知书名' }}</h3>
+                <p class="book-author">{{ book.author || '未知作者' }}</p>
+                <ReadingProgressBarList v-if="readingStore.progressDisplayMode === 'progress' && book.read_pages && book.pages" :book="book" :show-duration="true" />
+                <div v-if="book.rating" class="book-rating">
+                  <span class="rating-stars">{{ '★'.repeat(Math.max(0, Math.min(5, Math.round(book.rating / 2)))) }}{{ '☆'.repeat(Math.max(0, 5 - Math.max(0, Math.min(5, Math.round(book.rating / 2))))) }}</span>
+                  <span class="rating-value">{{ book.rating.toFixed(1) }}</span>
+                </div>
               </div>
             </div>
-            <div v-if="!isOrganizeMode" class="book-actions">
+            <!-- 装帧包边 - 仅右下角 -->
+            <BindingBorder
+              :binding1="getBinding1(book)"
+              :binding2="getBinding2(book)"
+              :params="getBindingBorderParams(book)"
+            />
+            <div v-if="isOrganizeMode" class="book-actions">
               <button class="action-btn-sm" @click.stop="handleEdit(book.id)" title="编辑">
                 <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
               </button>
@@ -499,6 +533,7 @@
           <p>暂无书籍</p>
           <button class="btn-primary" @click="goToAddBook">添加第一本书</button>
         </div>
+          </div>
         </div>
       </div>
 
@@ -540,10 +575,31 @@
               <div class="group-item-content">
                 <span class="folder-icon">📁</span>
                 <div class="group-item-details">
-                  <span class="group-name-text">{{ group.name }}</span>
+                  <template v-if="editingGroupId === group.id">
+                    <input
+                      v-model="editingGroupName"
+                      class="group-name-input"
+                      placeholder="输入分组名称"
+                      @click.stop
+                      @keydown.enter="saveGroupName(group.id)"
+                      @keydown.escape="cancelEditGroupName"
+                      @blur="saveGroupName(group.id)"
+                      ref="editInputRef"
+                      autofocus
+                    />
+                  </template>
+                  <template v-else>
+                    <span
+                      class="group-name-text"
+                      @dblclick.stop="startEditGroupName(group.id, group.name)"
+                      title="双击编辑名称"
+                    >
+                      {{ group.name }}
+                    </span>
+                  </template>
                   <span class="group-count-text">{{ group.bookCount }} 本</span>
                 </div>
-                <div v-if="selectedGroupId === group.id" class="check-icon">✓</div>
+                <div v-if="selectedGroupId === group.id && editingGroupId !== group.id" class="check-icon">✓</div>
               </div>
             </div>
             <div class="group-selector-item group-selector-item--create" @click="showGroupSelector = false; showAddGroup = true;">
@@ -642,6 +698,20 @@
       </div>
     </div>
 
+    <!-- 返回顶部按钮 -->
+    <transition name="fade">
+      <button 
+        v-if="showBackToTop" 
+        class="back-to-top-btn" 
+        @click="scrollToTop"
+        title="返回顶部"
+      >
+        <svg viewBox="0 0 24 24">
+          <path d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/>
+        </svg>
+      </button>
+    </transition>
+
 
   </div>
 
@@ -656,19 +726,51 @@ import { useBookStore } from '@/store/book';
 import { useAppStore } from '@/store/app';
 import { useReaderStore } from '@/store/reader';
 import { useReadingStore } from '@/store/reading';
+import { useBookBorderStore } from '@/store/bookBorder';
+import { BookStatus } from '@/store/bookBorder/types';
 import { bookService } from '@/services/book';
 import { wishlistService } from '@/services/wishlistService';
 import type { Book, BookGroup } from '@/services/book/types';
 import type { WishlistItem } from '@/services/wishlistService';
 import BookGroupCard from '@/components/business/BookGroupCard/BookGroupCard.vue';
 import ReadingProgressBarList from '@/components/ReadingProgressBarList/ReadingProgressBarList.vue';
+import BindingBorder from '@/components/business/BindingBorder/BindingBorder.vue';
+import { useBindingBorderStore } from '@/store/bindingBorder';
+import { 
+  getBindingType, 
+  getHardcoverTexture, 
+  shouldShowOilEdge, 
+  getSpecialPattern,
+  BindingBorderParams,
+  Binding1Type,
+  Binding2Type
+} from '@/store/bindingBorder/types';
 
 const router = useRouter();
 const route = useRoute();
+
+// 返回顶部相关
+const showBackToTop = ref(false);
+const SCROLL_THRESHOLD = 300; // 滚动超过300px显示返回顶部按钮
+
+// 滚动监听
+const handleScroll = () => {
+  showBackToTop.value = window.scrollY > SCROLL_THRESHOLD;
+};
+
+// 返回顶部
+const scrollToTop = () => {
+  window.scrollTo({
+    top: 0,
+    behavior: 'smooth'
+  });
+};
 const bookStore = useBookStore();
 const appStore = useAppStore();
 const readerStore = useReaderStore();
 const readingStore = useReadingStore();
+const borderStore = useBookBorderStore();
+const bindingBorderStore = useBindingBorderStore();
 const { books: storeBooks } = storeToRefs(bookStore);
 
 const isLoading = ref(true);
@@ -692,14 +794,16 @@ const showAdvancedFilter = ref(false);
 const filterConditions = ref({
   tags: [] as string[],
   readStatus: '' as '未读' | '在读' | '已读' | '',
-  book_type: null as number | null, // 书籍载体类型: 0=电子书, 1=实体书
-  binding1: null as number | null, // 装帧类型: 0=电子书, 1=平装, 2=精装, 3=特殊装帧
-  binding2: null as number | null, // 装帧细分类型
-  paper1: null as number | null, // 纸张类型
-  edge1: null as number | null, // 刷边位置
-  edge2: null as number | null, // 刷边工艺
+  book_type: null as number | null,
+  binding1: null as number | null,
+  binding2: null as number | null,
+  paper1: null as number | null,
+  edge1: null as number | null,
+  edge2: null as number | null,
   publisher: '' as string,
-  author: '' as string
+  author: '' as string,
+  favorite: null as number | null,
+  wants: null as number | null
 });
 
 // 可用的标签列表
@@ -745,8 +849,29 @@ const showSettingsMenu = ref(false);
 const scanDropdownRef = ref<HTMLElement | null>(null);
 const settingsDropdownRef = ref<HTMLElement | null>(null);
 
-// 网格列数配置
-const gridColumns = ref<'auto' | '2' | '3' | '4' | '5'>('auto');
+const gridColumns = ref<'auto' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15' | '16' | '17' | '18' | '19' | '20'>('auto');
+const manualColumnCount = ref(3);
+
+// 切换到手动模式
+const toggleManualColumns = () => {
+  if (gridColumns.value === 'auto') {
+    // 从localStorage读取之前的手动设置
+    const saved = localStorage.getItem('bookGridManualColumns');
+    manualColumnCount.value = saved ? parseInt(saved, 10) : 3;
+    applyManualColumns();
+  }
+};
+
+// 应用手动列数
+const applyManualColumns = () => {
+  gridColumns.value = String(manualColumnCount.value) as any;
+  localStorage.setItem('bookGridColumns', gridColumns.value);
+  localStorage.setItem('bookGridManualColumns', String(manualColumnCount.value));
+  if (layout.value === 'list') {
+    layout.value = 'grid';
+    bookStore.setLayout('grid');
+  }
+};
 
 // 点击外部关闭菜单的处理函数
 const handleClickOutside = (event: MouseEvent) => {
@@ -790,6 +915,61 @@ const selectedGroupIds = ref<string[]>([]);
 // 状态选择弹窗
 const showStatusSelector = ref(false);
 const newStatus = ref<'未读' | '在读' | '已读'>('未读');
+
+// 分区折叠状态
+const isGroupsCollapsed = ref(false);
+const isBooksCollapsed = ref(false);
+
+// 切换分组区域折叠状态
+const toggleGroupsCollapse = () => {
+  isGroupsCollapsed.value = !isGroupsCollapsed.value;
+};
+
+// 切换书籍区域折叠状态
+const toggleBooksCollapse = () => {
+  isBooksCollapsed.value = !isBooksCollapsed.value;
+};
+
+// 分组名称编辑状态
+const editingGroupId = ref<string | null>(null);
+const editingGroupName = ref('');
+
+// 开始编辑分组名称
+const startEditGroupName = (groupId: string, currentName: string) => {
+  editingGroupId.value = groupId;
+  editingGroupName.value = currentName;
+};
+
+// 取消编辑分组名称
+const cancelEditGroupName = () => {
+  editingGroupId.value = null;
+  editingGroupName.value = '';
+};
+
+// 保存分组名称
+const saveGroupName = async (groupId: string) => {
+  if (!editingGroupName.value.trim()) {
+    cancelEditGroupName();
+    return;
+  }
+
+  try {
+    const group = groups.value.find(g => g.id === groupId);
+    if (group) {
+      const updated = await bookService.updateGroup({
+        ...group,
+        name: editingGroupName.value.trim()
+      });
+      const index = groups.value.findIndex(g => g.id === updated.id);
+      if (index !== -1) groups.value[index] = updated;
+    }
+  } catch (error) {
+    console.error('保存分组名称失败:', error);
+    alert('保存分组名称失败，请重试');
+  } finally {
+    cancelEditGroupName();
+  }
+};
 
 // 筛选后的书籍列表
 const filteredBooks = computed(() => {
@@ -860,6 +1040,16 @@ const filteredBooks = computed(() => {
     );
   }
 
+  // 喜欢筛选
+  if (filterConditions.value.favorite !== null) {
+    books = books.filter(b => (b.favorite || 0) === filterConditions.value.favorite);
+  }
+
+  // 待读筛选
+  if (filterConditions.value.wants !== null) {
+    books = books.filter(b => (b.wants || 0) === filterConditions.value.wants);
+  }
+
   // 排序
   books.sort((a, b) => {
     switch (sortBy.value) {
@@ -896,6 +1086,122 @@ const groupBooksMap = computed(() => {
 // 获取分组中的书籍（使用缓存的映射）
 const groupBooks = (groupId: string): Book[] => {
   return groupBooksMap.value.get(groupId) || [];
+};
+
+const getBookStatus = (book: Book): BookStatus => {
+  if (book.favorite === 1) {
+    return 'favorite';
+  }
+  if (book.wants === 1) {
+    return 'pending';
+  }
+  return 'normal';
+};
+
+const getBookBorderStyle = (book: Book): Record<string, string> => {
+  const status = getBookStatus(book);
+  const params = borderStore.getBorderParams(status);
+  const style: Record<string, string> = {
+    borderRadius: `${params.borderRadius}px`
+  };
+
+  if (params.glow.enabled) {
+    style.boxShadow = `0 0 ${params.glow.spread}px ${params.glow.color}`;
+  }
+
+  switch (params.type) {
+    case 'normal-1':
+    case 'normal-2':
+    case 'normal-3':
+    case 'normal-4':
+    case 'normal-5':
+    case 'pending-2':
+    case 'favorite-4':
+      style.border = `${params.lineWidth}px solid ${params.color}`;
+      style.boxSizing = 'border-box';
+      break;
+    case 'pending-1':
+      style.border = `${params.lineWidth}px dashed ${params.color}`;
+      style.boxSizing = 'border-box';
+      break;
+    case 'pending-3':
+    case 'pending-4':
+      style.border = `${params.lineWidth}px solid ${params.color}`;
+      style.boxSizing = 'border-box';
+      break;
+    case 'pending-5':
+    case 'favorite-2':
+    case 'favorite-5':
+      if ('gradientStartColor' in params && 'gradientEndColor' in params) {
+        style.border = `${params.lineWidth}px solid transparent`;
+        style.backgroundImage = `linear-gradient(#f5f5f5, #f5f5f5), linear-gradient(135deg, ${params.gradientStartColor}, ${params.gradientEndColor})`;
+        style.backgroundOrigin = 'border-box';
+        style.backgroundClip = 'padding-box, border-box';
+        style.boxSizing = 'border-box';
+      }
+      break;
+    case 'favorite-1':
+      const gap = 'doubleLineGap' in params ? params.doubleLineGap : 4;
+      style.border = `${params.lineWidth}px solid ${params.color}`;
+      const innerShadow = `inset 0 0 0 ${gap}px #f5f5f5, inset 0 0 0 ${gap + params.lineWidth}px ${params.color}`;
+      if (params.glow.enabled) {
+        style.boxShadow = `${innerShadow}, 0 0 ${params.glow.spread}px ${params.glow.color}`;
+      } else {
+        style.boxShadow = innerShadow;
+      }
+      style.boxSizing = 'border-box';
+      break;
+    case 'favorite-3':
+      style.border = `${params.lineWidth}px solid ${params.color}`;
+      style.boxSizing = 'border-box';
+      break;
+  }
+
+  return style;
+};
+
+const getBindingBorderParams = (book: Book): BindingBorderParams => {
+  const binding1 = (book.binding1 ?? 1) as Binding1Type;
+  const binding2 = (book.binding2 ?? 0) as Binding2Type;
+  const type = getBindingType(binding1);
+  const settings = bindingBorderStore.settings;
+  
+  switch (type) {
+    case 'ebook':
+      return { ...settings.ebook };
+    case 'paperback':
+      return { ...settings.paperback };
+    case 'hardcover': {
+      const texture = getHardcoverTexture(binding2);
+      const oilEdge = shouldShowOilEdge(binding2);
+      return {
+        ...settings.hardcover,
+        texture,
+        oilEdgeEnabled: oilEdge
+      };
+    }
+    case 'special': {
+      const pattern = getSpecialPattern(binding2);
+      return {
+        ...settings.special,
+        texture: pattern
+      };
+    }
+    default:
+      return settings.paperback;
+  }
+};
+
+const getBinding1 = (book: Book): Binding1Type => {
+  const val = book.binding1;
+  if (val === undefined || val === null) return 1;
+  return val as Binding1Type;
+};
+
+const getBinding2 = (book: Book): Binding2Type => {
+  const val = book.binding2;
+  if (val === undefined || val === null) return 0;
+  return val as Binding2Type;
 };
 
 // 当前分组
@@ -950,7 +1256,9 @@ const clearFilterConditions = () => {
     edge1: null,
     edge2: null,
     publisher: '',
-    author: ''
+    author: '',
+    favorite: null,
+    wants: null
   };
   saveFilterConditions();
 };
@@ -966,7 +1274,9 @@ const hasActiveFilters = computed(() => {
     filterConditions.value.edge1 !== null ||
     filterConditions.value.edge2 !== null ||
     filterConditions.value.publisher.trim() !== '' ||
-    filterConditions.value.author.trim() !== ''
+    filterConditions.value.author.trim() !== '' ||
+    filterConditions.value.favorite !== null ||
+    filterConditions.value.wants !== null
   );
 });
 
@@ -991,9 +1301,10 @@ const loadFilterConditions = () => {
         edge1: conditions.edge1 || null,
         edge2: conditions.edge2 || null,
         publisher: conditions.publisher || '',
-        author: conditions.author || ''
+        author: conditions.author || '',
+        favorite: conditions.favorite !== undefined ? conditions.favorite : null,
+        wants: conditions.wants !== undefined ? conditions.wants : null
       };
-
     } catch (error) {
       console.error('⚠️ 加载筛选条件失败:', error);
     }
@@ -1093,6 +1404,24 @@ const confirmDelete = async () => {
     showDeleteConfirm.value = false;
   } catch (error) {
     console.error('删除失败:', error);
+  }
+};
+
+// 更新分组名称
+const handleUpdateGroupName = async (groupId: string, newName: string) => {
+  try {
+    const group = groups.value.find(g => g.id === groupId);
+    if (group) {
+      const updated = await bookService.updateGroup({
+        ...group,
+        name: newName
+      });
+      const index = groups.value.findIndex(g => g.id === updated.id);
+      if (index !== -1) groups.value[index] = updated;
+    }
+  } catch (error) {
+    console.error('更新分组名称失败:', error);
+    alert('更新分组名称失败，请重试');
   }
 };
 
@@ -1358,6 +1687,9 @@ onMounted(async () => {
 
   // 添加点击外部关闭菜单的事件监听
   document.addEventListener('click', handleClickOutside);
+
+  // 添加滚动监听
+  window.addEventListener('scroll', handleScroll, { passive: true });
 });
 
 onActivated(async () => {
@@ -1367,9 +1699,19 @@ onActivated(async () => {
   await loadData();
 });
 
+// 监听用户切换，自动刷新书籍列表
+watch(() => readerStore.currentReaderId, async (newReaderId, oldReaderId) => {
+  if (newReaderId !== oldReaderId) {
+
+    await loadData();
+  }
+});
+
 onUnmounted(() => {
   // 移除点击外部关闭菜单的事件监听
   document.removeEventListener('click', handleClickOutside);
+  // 移除滚动监听
+  window.removeEventListener('scroll', handleScroll);
 });
 
 // 整理模式方法
@@ -1423,10 +1765,6 @@ const invertSelection = () => {
 
   const allGroupIds = sortedGroups.value.map(group => group.id);
   selectedGroupIds.value = allGroupIds.filter(id => !selectedGroupIds.value.includes(id));
-};
-
-const scrollToTop = () => {
-  window.scrollTo({ top: 0, behavior: 'smooth' });
 };
 
 const pinToTop = async () => {
@@ -1726,7 +2064,8 @@ const deleteSelected = async () => {
       exitOrganizeMode();
     } catch (error) {
       console.error('删除失败:', error);
-      alert(`删除失败：${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      alert(`删除失败：${errorMessage}`);
       // 确保无论是否失败都退出整理模式
       exitOrganizeMode();
     }
@@ -1757,6 +2096,12 @@ watch(
   padding: 12px 16px;
   background-color: var(--bg-secondary);
   gap: 12px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .search-bar {
@@ -1940,6 +2285,33 @@ watch(
   flex-wrap: wrap;
 }
 
+/* 手动列数选择框 */
+.manual-columns-select {
+  margin-top: 8px;
+}
+
+.column-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: #fff;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.column-select:hover {
+  border-color: var(--primary-color, #FF6B35);
+}
+
+.column-select:focus {
+  border-color: var(--primary-color, #FF6B35);
+  box-shadow: 0 0 0 2px rgba(255, 107, 53, 0.2);
+}
+
 .row-btn {
   flex: 1;
   min-width: 50px;
@@ -2007,6 +2379,7 @@ watch(
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-light);
   padding: 0 16px;
+  margin-top: 60px;
 }
 
 .tab-item {
@@ -2068,26 +2441,121 @@ watch(
 
 .book-grid--grid {
   /* 默认使用 auto 布局 */
+  align-items: stretch;
 }
 
+/* 根据列数动态调整 gap 和卡片样式 */
 .book-grid--grid.grid-cols-auto {
   grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
 }
 
+/* 5-8列：中等密度 */
+.book-grid--grid[class*="grid-cols-5"],
+.book-grid--grid[class*="grid-cols-6"],
+.book-grid--grid[class*="grid-cols-7"],
+.book-grid--grid[class*="grid-cols-8"] {
+  gap: 12px;
+}
+
+/* 9-12列：高密度 */
+.book-grid--grid[class*="grid-cols-9"],
+.book-grid--grid[class*="grid-cols-10"],
+.book-grid--grid[class*="grid-cols-11"],
+.book-grid--grid[class*="grid-cols-12"] {
+  gap: 10px;
+}
+
+/* 13-20列：超高密度 */
+.book-grid--grid[class*="grid-cols-13"],
+.book-grid--grid[class*="grid-cols-14"],
+.book-grid--grid[class*="grid-cols-15"],
+.book-grid--grid[class*="grid-cols-16"],
+.book-grid--grid[class*="grid-cols-17"],
+.book-grid--grid[class*="grid-cols-18"],
+.book-grid--grid[class*="grid-cols-19"],
+.book-grid--grid[class*="grid-cols-20"] {
+  gap: 8px;
+}
+
+/* 手动列数设置 - 使用 minmax 确保卡片等宽 */
+.book-grid--grid.grid-cols-1 {
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
 .book-grid--grid.grid-cols-2 {
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .book-grid--grid.grid-cols-3 {
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .book-grid--grid.grid-cols-4 {
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .book-grid--grid.grid-cols-5 {
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.book-grid--grid.grid-cols-6 {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.book-grid--grid.grid-cols-7 {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.book-grid--grid.grid-cols-8 {
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+}
+
+.book-grid--grid.grid-cols-9 {
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+}
+
+.book-grid--grid.grid-cols-10 {
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+}
+
+.book-grid--grid.grid-cols-11 {
+  grid-template-columns: repeat(11, minmax(0, 1fr));
+}
+
+.book-grid--grid.grid-cols-12 {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+}
+
+.book-grid--grid.grid-cols-13 {
+  grid-template-columns: repeat(13, minmax(0, 1fr));
+}
+
+.book-grid--grid.grid-cols-14 {
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+}
+
+.book-grid--grid.grid-cols-15 {
+  grid-template-columns: repeat(15, minmax(0, 1fr));
+}
+
+.book-grid--grid.grid-cols-16 {
+  grid-template-columns: repeat(16, minmax(0, 1fr));
+}
+
+.book-grid--grid.grid-cols-17 {
+  grid-template-columns: repeat(17, minmax(0, 1fr));
+}
+
+.book-grid--grid.grid-cols-18 {
+  grid-template-columns: repeat(18, minmax(0, 1fr));
+}
+
+.book-grid--grid.grid-cols-19 {
+  grid-template-columns: repeat(19, minmax(0, 1fr));
+}
+
+.book-grid--grid.grid-cols-20 {
+  grid-template-columns: repeat(20, minmax(0, 1fr));
 }
 
 .book-grid--list {
@@ -2097,7 +2565,7 @@ watch(
 .book-card {
   background-color: var(--bg-card);
   border-radius: var(--radius-lg);
-  overflow: hidden;
+  overflow: visible;
   cursor: pointer;
   transition: all 0.3s;
   position: relative;
@@ -2111,6 +2579,32 @@ watch(
 .book-card--grid {
   display: flex;
   flex-direction: column;
+  height: 100%;
+  width: 100%;
+  min-width: 0;
+}
+
+/* 确保所有书籍卡片在网格中保持统一高度 */
+.book-grid--grid .book-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  min-width: 0;
+}
+
+.book-grid--grid .book-card-inner {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.book-grid--grid .book-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 50px;
 }
 
 .book-card--list {
@@ -2119,17 +2613,38 @@ watch(
   padding: 12px;
 }
 
-.book-cover {
+.book-card-inner {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-card);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
   position: relative;
+  z-index: 1;
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
-.book-card--grid .book-cover {
+.book-card--list .book-card-inner {
+  flex-direction: row;
+  align-items: center;
+  overflow: visible;
+}
+
+.book-cover {
+  position: relative;
+  overflow: hidden;
+  z-index: 0;
+  flex-shrink: 0;
+}
+
+.book-card--grid .book-card-inner .book-cover {
   width: 100%;
   padding-top: 133.33%;
 }
 
-.book-card--list .book-cover {
+.book-card--list .book-card-inner .book-cover {
   width: 60px;
   height: 80px;
   flex-shrink: 0;
@@ -2145,7 +2660,7 @@ watch(
   object-fit: cover;
 }
 
-.book-card--list .book-cover img {
+.book-card--list .book-card-inner .book-cover img {
   position: static;
   border-radius: 4px;
 }
@@ -2187,12 +2702,35 @@ watch(
 .read-status--在读 { background-color: var(--primary-color); }
 .read-status--已读 { background-color: #4caf50; }
 
+.favorite-badge,
+.wants-badge {
+  position: absolute;
+  bottom: 8px;
+  font-size: 16px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.favorite-badge {
+  left: 8px;
+}
+
+.wants-badge {
+  left: 36px;
+}
+
 .book-info {
   padding: 12px;
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.book-card--list .book-info {
+.book-card--list .book-card-inner .book-info {
   padding: 0;
 }
 
@@ -2205,6 +2743,7 @@ watch(
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  word-break: break-word;
 }
 
 .book-card--list .book-title {
@@ -2218,6 +2757,91 @@ watch(
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
+/* 根据列数调整卡片内部元素样式 */
+/* 5-8列：中等密度 */
+.book-grid--grid[class*="grid-cols-5"] .book-info,
+.book-grid--grid[class*="grid-cols-6"] .book-info,
+.book-grid--grid[class*="grid-cols-7"] .book-info,
+.book-grid--grid[class*="grid-cols-8"] .book-info {
+  padding: 10px;
+}
+
+.book-grid--grid[class*="grid-cols-5"] .book-title,
+.book-grid--grid[class*="grid-cols-6"] .book-title,
+.book-grid--grid[class*="grid-cols-7"] .book-title,
+.book-grid--grid[class*="grid-cols-8"] .book-title {
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.book-grid--grid[class*="grid-cols-5"] .book-author,
+.book-grid--grid[class*="grid-cols-6"] .book-author,
+.book-grid--grid[class*="grid-cols-7"] .book-author,
+.book-grid--grid[class*="grid-cols-8"] .book-author {
+  font-size: 11px;
+}
+
+/* 9-12列：高密度 */
+.book-grid--grid[class*="grid-cols-9"] .book-info,
+.book-grid--grid[class*="grid-cols-10"] .book-info,
+.book-grid--grid[class*="grid-cols-11"] .book-info,
+.book-grid--grid[class*="grid-cols-12"] .book-info {
+  padding: 8px;
+}
+
+.book-grid--grid[class*="grid-cols-9"] .book-title,
+.book-grid--grid[class*="grid-cols-10"] .book-title,
+.book-grid--grid[class*="grid-cols-11"] .book-title,
+.book-grid--grid[class*="grid-cols-12"] .book-title {
+  font-size: 12px;
+  margin-bottom: 2px;
+  -webkit-line-clamp: 1;
+}
+
+.book-grid--grid[class*="grid-cols-9"] .book-author,
+.book-grid--grid[class*="grid-cols-10"] .book-author,
+.book-grid--grid[class*="grid-cols-11"] .book-author,
+.book-grid--grid[class*="grid-cols-12"] .book-author {
+  font-size: 10px;
+}
+
+/* 13-20列：超高密度 */
+.book-grid--grid[class*="grid-cols-13"] .book-info,
+.book-grid--grid[class*="grid-cols-14"] .book-info,
+.book-grid--grid[class*="grid-cols-15"] .book-info,
+.book-grid--grid[class*="grid-cols-16"] .book-info,
+.book-grid--grid[class*="grid-cols-17"] .book-info,
+.book-grid--grid[class*="grid-cols-18"] .book-info,
+.book-grid--grid[class*="grid-cols-19"] .book-info,
+.book-grid--grid[class*="grid-cols-20"] .book-info {
+  padding: 6px;
+}
+
+.book-grid--grid[class*="grid-cols-13"] .book-title,
+.book-grid--grid[class*="grid-cols-14"] .book-title,
+.book-grid--grid[class*="grid-cols-15"] .book-title,
+.book-grid--grid[class*="grid-cols-16"] .book-title,
+.book-grid--grid[class*="grid-cols-17"] .book-title,
+.book-grid--grid[class*="grid-cols-18"] .book-title,
+.book-grid--grid[class*="grid-cols-19"] .book-title,
+.book-grid--grid[class*="grid-cols-20"] .book-title {
+  font-size: 11px;
+  margin-bottom: 1px;
+  -webkit-line-clamp: 1;
+}
+
+.book-grid--grid[class*="grid-cols-13"] .book-author,
+.book-grid--grid[class*="grid-cols-14"] .book-author,
+.book-grid--grid[class*="grid-cols-15"] .book-author,
+.book-grid--grid[class*="grid-cols-16"] .book-author,
+.book-grid--grid[class*="grid-cols-17"] .book-author,
+.book-grid--grid[class*="grid-cols-18"] .book-author,
+.book-grid--grid[class*="grid-cols-19"] .book-author,
+.book-grid--grid[class*="grid-cols-20"] .book-author {
+  font-size: 9px;
 }
 
 .book-rating {
@@ -2239,22 +2863,33 @@ watch(
 
 .book-actions {
   position: absolute;
-  top: 8px;
+  bottom: 8px;
   right: 8px;
   display: flex;
   gap: 4px;
   opacity: 0;
-  transition: opacity 0.3s;
+  transform: translateY(10px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 4px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
-.book-card:hover .book-actions {
+.book-card--organize .book-actions {
   opacity: 1;
+  transform: translateY(0);
 }
 
 .book-card--list .book-actions {
   position: static;
   opacity: 1;
+  transform: translateY(0);
   margin-left: auto;
+  background: none;
+  padding: 0;
+  box-shadow: none;
 }
 
 .action-btn-sm {
@@ -2335,6 +2970,10 @@ watch(
 /* 分组区域和面包屑导航 */
 .groups-section {
   margin-bottom: 24px;
+  background: linear-gradient(135deg, #f0f7ff 0%, #e8f4fd 100%);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  border: 1px solid rgba(33, 150, 243, 0.1);
 }
 
 .section-title {
@@ -2344,29 +2983,127 @@ watch(
   margin: 0 0 12px 0;
 }
 
+.groups-section .section-title {
+  color: #1565c0;
+  position: relative;
+  padding-left: 12px;
+}
+
+.groups-section .section-title::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 18px;
+  background: linear-gradient(180deg, #2196f3 0%, #1976d2 100%);
+  border-radius: 2px;
+}
+
+/* 可折叠标题样式 */
+.section-title--collapsible {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin: -8px -12px 12px -12px;
+  border-radius: var(--radius-md);
+  transition: background-color 0.2s ease;
+}
+
+.section-title--collapsible:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.section-title--collapsible:active {
+  background-color: rgba(0, 0, 0, 0.08);
+}
+
+/* 折叠箭头图标 */
+.collapse-icon {
+  width: 20px;
+  height: 20px;
+  transition: transform 0.3s ease;
+  flex-shrink: 0;
+}
+
+.collapse-icon--collapsed {
+  transform: rotate(-90deg);
+}
+
+/* 折叠内容区域 */
+.section-content {
+  overflow: visible;
+  transition: max-height 0.3s ease-out, opacity 0.2s ease-out;
+  max-height: none;
+  opacity: 1;
+}
+
+.section-content--collapsed {
+  max-height: 0;
+  opacity: 0;
+  transition: max-height 0.3s ease-out, opacity 0.2s ease-out;
+}
+
 .groups-grid {
   display: grid;
   gap: 12px;
+  align-items: stretch;
 }
 
 .groups-grid.grid-cols-auto {
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
 }
 
+.groups-grid.grid-cols-1 {
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
 .groups-grid.grid-cols-2 {
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .groups-grid.grid-cols-3 {
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .groups-grid.grid-cols-4 {
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .groups-grid.grid-cols-5 {
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.groups-grid.grid-cols-6 {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.groups-grid.grid-cols-7 {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.groups-grid.grid-cols-8 {
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+}
+
+.groups-grid.grid-cols-9 {
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+}
+
+.groups-grid.grid-cols-10 {
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+}
+
+.groups-grid.grid-cols-11 {
+  grid-template-columns: repeat(11, minmax(0, 1fr));
+}
+
+.groups-grid.grid-cols-12 {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
 }
 
 /* 分组卡片高度根据列数调整 - 跟随书籍变化 */
@@ -2466,6 +3203,32 @@ watch(
 
 .books-section {
   margin-top: 16px;
+  background: linear-gradient(135deg, #fff8f0 0%, #ffefde 100%);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  border: 1px solid rgba(255, 152, 0, 0.1);
+}
+
+.books-section .section-title {
+  color: #e65100;
+  position: relative;
+  padding-left: 12px;
+}
+
+.books-section .section-title::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 18px;
+  background: linear-gradient(180deg, #ff9800 0%, #f57c00 100%);
+  border-radius: 2px;
+}
+
+.books-section .breadcrumb-nav {
+  margin-bottom: 12px;
 }
 
 .breadcrumb-nav {
@@ -2762,6 +3525,31 @@ watch(
   font-size: 14px;
   font-weight: 500;
   color: var(--text-primary);
+  cursor: text;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+}
+
+.group-name-text:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.group-name-input {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  padding: 4px 8px;
+  border: 2px solid var(--primary-color, #FF6B35);
+  border-radius: 6px;
+  outline: none;
+  background-color: #fff;
+  min-width: 80px;
+  max-width: 150px;
+}
+
+.group-name-input:focus {
+  box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.2);
 }
 
 .group-count-text {
@@ -3031,6 +3819,11 @@ watch(
   border: 2px solid transparent;
 }
 
+.book-card--organize:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
 .book-card--selected {
   border-color: var(--primary-color, #FF6B35) !important;
   box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.15);
@@ -3062,11 +3855,6 @@ watch(
   fill: var(--primary-color, #FF6B35);
 }
 
-/* 整理模式下隐藏书籍操作按钮 */
-.book-card--organize .book-actions {
-  display: none;
-}
-
 /* 整理模式下内容区域下移，避免被顶部栏遮挡 */
 .book-container:has(.organize-mode-overlay) .content {
   padding-top: 60px;
@@ -3087,6 +3875,23 @@ watch(
 
 /* 响应式设计 */
 @media (max-width: 640px) {
+  .book-actions {
+    bottom: 6px;
+    right: 6px;
+    padding: 3px;
+    gap: 3px;
+  }
+
+  .action-btn-sm {
+    width: 24px;
+    height: 24px;
+  }
+
+  .action-btn-sm svg {
+    width: 12px;
+    height: 12px;
+  }
+
   .organize-bottom-bar {
     height: calc(64px + env(safe-area-inset-bottom, 0));
     gap: 8px;
@@ -3425,6 +4230,53 @@ watch(
   align-items: center;
   justify-content: center;
   line-height: 18px;
+}
+
+/* 返回顶部按钮 */
+.back-to-top-btn {
+  position: fixed;
+  right: 20px;
+  bottom: calc(80px + env(safe-area-inset-bottom, 0));
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ff6b35 0%, #ff8c5a 100%);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(255, 107, 53, 0.3);
+  z-index: 500;
+  transition: all 0.3s ease;
+}
+
+.back-to-top-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(255, 107, 53, 0.4);
+}
+
+.back-to-top-btn:active {
+  transform: translateY(-1px);
+}
+
+.back-to-top-btn svg {
+  width: 28px;
+  height: 28px;
+  fill: currentColor;
+}
+
+/* 返回顶部按钮过渡动画 */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+  transform: translateY(20px);
 }
 </style>
 

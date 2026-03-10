@@ -132,7 +132,9 @@ class BookServiceImpl implements BookService {
     }
   }
 
-  async updateBook(book: Book): Promise<Book> {
+  async updateBook(book: Book, readerId?: number): Promise<Book> {
+
+    console.log('🔍 bookService.updateBook 收到的readerId:', readerId);
 
     // 确保tags和groups是字符串数组
     const safeBookData = {
@@ -157,7 +159,7 @@ class BookServiceImpl implements BookService {
     // 使用API更新书籍，确保ID是数字
     const bookId = typeof book.id === 'string' ? parseInt(book.id, 10) : book.id;
 
-    const updatedBook = await bookApi.update(bookId, safeBookData);
+    const updatedBook = await bookApi.update(bookId, safeBookData, readerId);
 
     return updatedBook;
   }
@@ -174,8 +176,8 @@ class BookServiceImpl implements BookService {
     }
   }
 
-  async getBookById(id: number): Promise<Book | undefined> {
-    return bookApi.getById(id);
+  async getBookById(id: number, readerId?: number): Promise<Book | undefined> {
+    return bookApi.getById(id, readerId);
   }
 
   async getBooks(params?: BookQueryParams): Promise<BookQueryResult> {
@@ -299,6 +301,10 @@ class BookServiceImpl implements BookService {
   // 标签管理
   async getAllTags(): Promise<string[]> {
     return tagApi.getAll();
+  }
+
+  async getTags(bookId: number): Promise<string[]> {
+    return bookApi.getTags(bookId);
   }
 
   // 阅读状态管理

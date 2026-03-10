@@ -15,14 +15,6 @@ const routes: Array<RouteRecordRaw> = [
     }
   },
   {
-    path: '/calendar',
-    name: 'Calendar',
-    component: () => import('@/views/CalendarPage/index.vue'),
-    meta: {
-      title: '阅读日历'
-    }
-  },
-  {
     path: '/daily-stats',
     name: 'DailyStats',
     component: () => import('@/views/DailyStats/index.vue'),
@@ -44,6 +36,22 @@ const routes: Array<RouteRecordRaw> = [
     component: () => import('@/views/BookmarkSettings/index.vue'),
     meta: {
       title: '书签设置'
+    }
+  },
+  {
+    path: '/border-settings',
+    name: 'BorderSettings',
+    component: () => import('@/views/BorderSettings/index.vue'),
+    meta: {
+      title: '书籍边框设置'
+    }
+  },
+  {
+    path: '/binding-settings',
+    name: 'BindingSettings',
+    component: () => import('@/views/BindingSettings/index.vue'),
+    meta: {
+      title: '装帧包边设置'
     }
   },
   {
@@ -100,6 +108,14 @@ const routes: Array<RouteRecordRaw> = [
     component: () => import('@/views/Profile/index.vue'),
     meta: {
       title: '个人中心'
+    }
+  },
+  {
+    path: '/third-party-settings',
+    name: 'ThirdPartySettings',
+    component: () => import('@/views/ThirdPartySettings/index.vue'),
+    meta: {
+      title: '第三方设置'
     }
   },
   {

@@ -130,9 +130,9 @@ const bookResults = computed(() => {
   if (!searchQuery.value.trim()) return [];
   const query = searchQuery.value.toLowerCase();
   return bookStore.allBooks.filter(book => 
-    book.title.toLowerCase().includes(query) ||
-    book.author.toLowerCase().includes(query) ||
-    book.isbn.includes(query) ||
+    (book.title && book.title.toLowerCase().includes(query)) ||
+    (book.author && book.author.toLowerCase().includes(query)) ||
+    (book.isbn && book.isbn.includes(query)) ||
     (book.publisher && book.publisher.toLowerCase().includes(query))
   );
 });
@@ -141,7 +141,7 @@ const bookmarkResults = computed(() => {
   if (!searchQuery.value.trim()) return [];
   const query = searchQuery.value.toLowerCase();
   return bookmarkStore.allBookmarks
-    .filter(b => b.content.toLowerCase().includes(query) || (b.note && b.note.toLowerCase().includes(query)))
+    .filter(b => (b.content && b.content.toLowerCase().includes(query)) || (b.note && b.note.toLowerCase().includes(query)))
     .map(b => {
       const book = bookStore.allBooks.find(book => book.id === b.bookId);
       return { ...b, bookTitle: book?.title || '未知书籍' };
@@ -156,7 +156,7 @@ const tabs = computed(() => [
 
 // 高亮匹配文本
 const highlightText = (text: string): string => {
-  if (!searchQuery.value.trim()) return text;
+  if (!text || !searchQuery.value.trim()) return text || '';
   const regex = new RegExp(`(${searchQuery.value})`, 'gi');
   return text.replace(regex, '<mark>$1</mark>');
 };

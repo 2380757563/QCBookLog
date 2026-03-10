@@ -162,18 +162,65 @@
           </div>
         </div>
 
+        <div class="form-item">
+          <label class="form-label">喜欢/待读</label>
+          <div class="status-options">
+            <span
+              :class="['status-option', { active: form.favorite === 1 }]"
+              @click="toggleFavorite"
+            >
+              <span class="status-icon">{{ form.favorite === 1 ? '❤️' : '🤍' }}</span>
+              <span>喜欢</span>
+            </span>
+            <span
+              :class="['status-option', { active: form.wants === 1 }]"
+              @click="toggleWants"
+            >
+              <span class="status-icon">{{ form.wants === 1 ? '📚' : '📖' }}</span>
+              <span>待读</span>
+            </span>
+          </div>
+        </div>
+
         <div class="form-row">
           <div class="form-item">
-            <label class="form-label">评分</label>
+            <label class="form-label">评分（豆瓣）</label>
             <div class="rating-input">
               <span
                 v-for="i in 5"
                 :key="i"
                 class="rating-star"
-                :class="{ active: i <= (form.rating || 0) }"
-                @click="form.rating = i"
+                :class="{ active: i <= Math.round((form.rating || 0) / 2) }"
+                @click="form.rating = i * 2"
               >★</span>
               <span class="rating-value">{{ form.rating || 0 }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-item">
+            <label class="form-label">个人评分</label>
+            <div class="personal-rating-container">
+              <input 
+                type="number" 
+                v-model.number="personalRatingInput" 
+                class="form-input personal-rating-input"
+                min="0.1" 
+                max="10.0" 
+                step="0.1"
+                placeholder="0.1-10.0"
+                @input="handlePersonalRatingInput"
+              />
+              <div class="personal-rating-stars">
+                <span
+                  v-for="i in 10"
+                  :key="i"
+                  class="rating-star-small"
+                  :class="{ active: i <= (form.personal_rating || 0) }"
+                  @click="setPersonalRatingFromStars(i)"
+                >★</span>
+              </div>
             </div>
           </div>
         </div>
@@ -269,7 +316,7 @@
           <label class="form-label">标签</label>
           
           <!-- 已选标签展示 -->
-          <div class="tags-container" v-if="form.calibreTags.length > 0">
+          <div class="tags-container" v-if="form.calibreTags && form.calibreTags.length > 0">
             <span
               v-for="(tag, index) in form.calibreTags"
               :key="index"
@@ -398,18 +445,24 @@ const form = reactive<Omit<Book, 'id' | 'createTime' | 'updateTime'> & { id?: st
   purchasePrice: undefined,
   standardPrice: undefined,
   readStatus: '未读',
-  readCompleteDate: '',
+  readCompleteDate: undefined,
   rating: undefined,
+  personal_rating: 0,
+  personal_rating_date: null,
   tags: [],
   groups: [],
   series: '',
   calibreTags: [],
   note: '',
-  description: ''
+  description: '',
+  favorite: 0,
+  favorite_date: null,
+  wants: 0,
+  wants_date: null
 });
 
 // 阅读状态选项
-const readStatusOptions = [
+const readStatusOptions: { value: '未读' | '在读' | '已读'; label: string; icon: string }[] = [
   { value: '未读', label: '未读', icon: '📕' },
   { value: '在读', label: '在读', icon: '📖' },
   { value: '已读', label: '已读', icon: '✅' }
@@ -603,9 +656,53 @@ const fetchBookByISBN = async () => {
 };
 
 // 切换阅读状态
-const toggleReadStatus = (status: string) => {
+const toggleReadStatus = (status: '未读' | '在读' | '已读') => {
   form.readStatus = status;
 };
+
+const toggleFavorite = () => {
+  form.favorite = form.favorite === 1 ? 0 : 1;
+  if (form.favorite === 1) {
+    form.favorite_date = new Date().toISOString();
+  } else {
+    form.favorite_date = null;
+  }
+};
+
+const toggleWants = () => {
+  form.wants = form.wants === 1 ? 0 : 1;
+  if (form.wants === 1) {
+    form.wants_date = new Date().toISOString();
+  } else {
+    form.wants_date = null;
+  }
+};
+
+const personalRatingInput = ref<number | undefined>(undefined);
+
+const handlePersonalRatingInput = () => {
+  let value = personalRatingInput.value;
+  if (value !== undefined) {
+    if (value < 0.1) value = 0.1;
+    if (value > 10.0) value = 10.0;
+    value = Math.round(value * 10) / 10;
+    form.personal_rating = value;
+    personalRatingInput.value = value;
+    form.personal_rating_date = new Date().toISOString();
+  }
+};
+
+const setPersonalRatingFromStars = (starCount: number) => {
+  form.personal_rating = starCount;
+  personalRatingInput.value = starCount;
+  form.personal_rating_date = new Date().toISOString();
+};
+
+watch(() => form.personal_rating, (newVal) => {
+  if (newVal !== undefined && newVal !== null) {
+    personalRatingInput.value = newVal;
+  }
+});
 
 // 加载阅读统计
 const loadReadingStats = async () => {
@@ -663,20 +760,20 @@ const addTag = () => {
   if (!tagName) return;
 
   // 检查标签是否已存在
-  if (form.calibreTags.includes(tagName)) {
+  if (form.calibreTags?.includes(tagName)) {
     alert('该标签已存在');
     return;
   }
 
   // 添加标签
-  form.calibreTags.push(tagName);
+  form.calibreTags?.push(tagName);
   calibreTagInput.value = '';
 };
 
 // 选择推荐标签
 const selectTag = (tagName: string) => {
-  if (!form.calibreTags.includes(tagName)) {
-    form.calibreTags.push(tagName);
+  if (!form.calibreTags?.includes(tagName)) {
+    form.calibreTags?.push(tagName);
   }
   calibreTagInput.value = '';
 };
@@ -689,7 +786,7 @@ const filteredTags = computed(() => {
   // 从所有标签中过滤
   return allTags.value.filter(tag => {
     const tagLower = tag.toLowerCase();
-    return tagLower.includes(input) && !form.calibreTags.includes(tag);
+    return tagLower.includes(input) && !form.calibreTags?.includes(tag);
   });
 });
 
@@ -748,8 +845,8 @@ const validateForm = (): { valid: boolean; errors: string[] } => {
   }
 
   if (form.rating !== undefined && form.rating !== null) {
-    if (form.rating < 0 || form.rating > 5) {
-      errors.push('评分应在0-5之间');
+    if (form.rating < 0 || form.rating > 10) {
+      errors.push('评分应在0-10之间');
     }
   }
 
@@ -790,7 +887,6 @@ const validateForm = (): { valid: boolean; errors: string[] } => {
       // 确保所有重要字段都被包含
       const finalSaveData = {
         ...saveData,
-        // 确保这些字段被正确传递
         book_type: saveData.book_type,
         binding1: saveData.binding1,
         binding2: saveData.binding2,
@@ -802,7 +898,13 @@ const validateForm = (): { valid: boolean; errors: string[] } => {
         note: saveData.note,
         purchaseDate: saveData.purchaseDate,
         publishYear: saveData.publishYear,
-        groups: saveData.groups || []
+        groups: saveData.groups || [],
+        favorite: saveData.favorite || 0,
+        favorite_date: saveData.favorite_date || null,
+        wants: saveData.wants || 0,
+        wants_date: saveData.wants_date || null,
+        personal_rating: saveData.personal_rating || 0,
+        personal_rating_date: saveData.personal_rating_date || null
       };
 
       console.log('💾 要保存的数据:', JSON.parse(JSON.stringify(finalSaveData)));
@@ -829,7 +931,8 @@ const validateForm = (): { valid: boolean; errors: string[] } => {
 
     if (isEdit.value && form.id) {
 
-      const updatedBook = await bookService.updateBook(finalSaveData as Book);
+      console.log('🔍 保存书籍时当前读者ID:', readerStore.currentReaderId);
+      const updatedBook = await bookService.updateBook(finalSaveData as Book, readerStore.currentReaderId);
 
       bookStore.updateBook(updatedBook);
       savedBook = updatedBook;
@@ -914,50 +1017,73 @@ const validateForm = (): { valid: boolean; errors: string[] } => {
   }
 };
 
+// 加载书籍数据的函数
+const loadBookData = async () => {
+  if (!isEdit.value) return;
+  
+  const bookId = route.params.id as string;
+  const book = await bookService.getBookById(parseInt(bookId));
+  if (book) {
+    Object.assign(form, {
+      ...book,
+      publishYear: book.publishYear ?? undefined,
+      pages: book.pages ?? undefined,
+      standardPrice: book.standardPrice ?? undefined,
+      purchasePrice: book.purchasePrice ?? undefined,
+      purchaseDate: book.purchaseDate ? new Date(book.purchaseDate).toISOString().split('T')[0] : '',
+      readCompleteDate: book.readCompleteDate ? new Date(book.readCompleteDate).toISOString().split('T')[0] : '',
+      book_type: book.book_type !== undefined && book.book_type !== null ? book.book_type : 1,
+      binding1: book.binding1 !== undefined && book.binding1 !== null ? book.binding1 : 0,
+      binding2: book.binding2 !== undefined && book.binding2 !== null ? book.binding2 : 0,
+      favorite: book.favorite ?? 0,
+      wants: book.wants ?? 0,
+      favorite_date: book.favorite_date ?? null,
+      wants_date: book.wants_date ?? null,
+      personal_rating: book.personal_rating ?? 0,
+      personal_rating_date: book.personal_rating_date ?? null
+    });
+
+    if (book.personal_rating) {
+      personalRatingInput.value = book.personal_rating;
+    }
+
+    if (book.readStatus) {
+      originalReadStatus.value = book.readStatus;
+    }
+
+    if (Array.isArray(book.tags)) {
+      form.calibreTags = book.tags as string[];
+      form.tags = [];
+    }
+
+    loadReadingStats();
+  }
+};
+
+// 监听用户切换，重新加载书籍数据
+watch(() => readerStore.currentReaderId, async (newReaderId, oldReaderId) => {
+  if (newReaderId !== oldReaderId && isEdit.value) {
+    console.log('👤 用户切换，重新加载书籍数据:', { oldReaderId, newReaderId });
+    await loadBookData();
+  }
+});
+
 // 加载数据
 onMounted(async () => {
+  // 确保退出整理模式，恢复导航栏显示
+  document.body.classList.remove('organize-mode-active');
+
   // 加载分组和标签
   try {
     allGroups.value = await bookService.getAllGroups();
-    allTags.value = await bookService.getAllTags('book');
+    allTags.value = await bookService.getAllTags();
   } catch (error) {
     console.error('加载数据失败:', error);
   }
 
   // 编辑模式，加载书籍信息
   if (isEdit.value) {
-    const bookId = route.params.id as string;
-    const book = await bookService.getBookById(parseInt(bookId));
-    if (book) {
-      // 复制书籍信息到表单，同时确保关键字段不会为null
-      Object.assign(form, {
-        ...book,
-        publishYear: book.publishYear ?? undefined,
-        pages: book.pages ?? undefined,
-        standardPrice: book.standardPrice ?? undefined,
-        purchasePrice: book.purchasePrice ?? undefined,
-        purchaseDate: book.purchaseDate ? new Date(book.purchaseDate).toISOString().split('T')[0] : '',
-        readCompleteDate: book.readCompleteDate ? new Date(book.readCompleteDate).toISOString().split('T')[0] : '',
-        // 确保书籍类型和装帧字段正确设置
-        book_type: book.book_type !== undefined && book.book_type !== null ? book.book_type : 1,
-        binding1: book.binding1 !== undefined && book.binding1 !== null ? book.binding1 : 0,
-        binding2: book.binding2 !== undefined && book.binding2 !== null ? book.binding2 : 0,
-      });
-
-      // 保存原始阅读状态（用于比较是否变化）
-      if (book.readStatus) {
-        originalReadStatus.value = book.readStatus;
-      }
-
-      // 将tags字段（Calibre标签）复制到calibreTags字段
-      if (Array.isArray(book.tags)) {
-        form.calibreTags = book.tags as string[];
-        form.tags = []; // 清空tags，用于应用自己的Tag系统
-      }
-
-      // 加载阅读统计
-      loadReadingStats();
-    }
+    await loadBookData();
   } else {
       // 新增模式，检查是否有ISBN搜索参数
       const query = route.query;
@@ -1290,6 +1416,37 @@ onMounted(async () => {
   margin-left: 8px;
   font-size: 16px;
   color: var(--text-secondary);
+}
+
+.personal-rating-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.personal-rating-input {
+  width: 120px;
+  text-align: center;
+}
+
+.personal-rating-stars {
+  display: flex;
+  gap: 2px;
+}
+
+.rating-star-small {
+  font-size: 16px;
+  color: #ddd;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.rating-star-small.active {
+  color: #ff9800;
+}
+
+.rating-star-small:hover {
+  color: #ff9800;
 }
 
 /* 标签和分组 */

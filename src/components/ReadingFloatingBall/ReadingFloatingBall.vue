@@ -151,7 +151,7 @@ const formatDuration = (minutes: number): string => {
 // 今日统计（从后端获取或从localStorage）
 const todayStats = computed(() => {
   // 这里应该从后端获取，暂时返回null
-  return null;
+  return null as { totalTime: number; totalPages: number } | null;
 });
 
 // 处理点击（展开/收起）

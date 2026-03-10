@@ -35,7 +35,11 @@ async function getAllBooks(req, res) {
  */
 async function getBookById(req, res) {
   try {
-    const book = await calibreService.getBookFromCalibreById(req.params.id);
+    // 从查询参数获取readerId，默认为0
+    const readerId = parseInt(req.query.readerId) || 0;
+    console.log('📖 GET /:id - 书籍ID:', req.params.id, '读者ID:', readerId);
+    
+    const book = await calibreService.getBookFromCalibreById(req.params.id, readerId);
     if (!book) {
       return res.status(404).json({ error: 'Book not found' });
     }
@@ -203,8 +207,12 @@ async function updateBook(req, res) {
 
     console.log('📖 请求体:', JSON.stringify(req.body, null, 2));
 
+    // 从查询参数获取readerId，默认为0
+    const readerId = parseInt(req.query.readerId) || 0;
+    console.log('📖 读者ID:', readerId);
+
     // 从 Calibre 格式获取当前书籍
-    const currentBook = await calibreService.getBookFromCalibreById(bookId);
+    const currentBook = await calibreService.getBookFromCalibreById(bookId, readerId);
     if (!currentBook) {
       console.error('❌ 书籍不存在:', bookId);
       return res.status(404).json({ error: 'Book not found' });
@@ -249,6 +257,36 @@ async function updateBook(req, res) {
       console.error('❌ 数据库更新失败:', dbError);
       console.error('❌ 错误堆栈:', dbError.stack);
       throw new Error(`数据库更新失败: ${dbError.message}`);
+    }
+
+    // 1.5 更新阅读状态（favorite/wants/personal_rating）
+    console.log('🔍 检查阅读状态更新条件...');
+    console.log('🔍 req.body.favorite:', req.body.favorite, '!== undefined:', req.body.favorite !== undefined);
+    console.log('🔍 req.body.wants:', req.body.wants, '!== undefined:', req.body.wants !== undefined);
+    console.log('🔍 req.body.personal_rating:', req.body.personal_rating, '!== undefined:', req.body.personal_rating !== undefined);
+    if (req.body.favorite !== undefined || req.body.wants !== undefined || req.body.personal_rating !== undefined) {
+      console.log('📖 步骤1.5: 更新阅读状态（favorite/wants/personal_rating）... readerId:', readerId);
+      try {
+        const readingState = {
+          favorite: req.body.favorite !== undefined ? req.body.favorite : 0,
+          wants: req.body.wants !== undefined ? req.body.wants : 0,
+          favorite_date: req.body.favorite_date || null,
+          wants_date: req.body.wants_date || null,
+          personal_rating: req.body.personal_rating !== undefined ? req.body.personal_rating : 0,
+          personal_rating_date: req.body.personal_rating_date || null
+        };
+        databaseService.updateReadingState(bookId, readingState, readerId);
+        console.log('✅ 阅读状态更新成功:', readingState, 'readerId:', readerId);
+        // 同步更新到 updatedBook 对象
+        updatedBook.favorite = readingState.favorite;
+        updatedBook.wants = readingState.wants;
+        updatedBook.favorite_date = readingState.favorite_date;
+        updatedBook.wants_date = readingState.wants_date;
+        updatedBook.personal_rating = readingState.personal_rating;
+        updatedBook.personal_rating_date = readingState.personal_rating_date;
+      } catch (readingStateError) {
+        console.error('❌ 更新阅读状态失败:', readingStateError.message);
+      }
     }
 
     // 2. 保存到 Calibre 文件系统格式

@@ -14,7 +14,7 @@ class BookmarkServiceImpl implements BookmarkService {
   }
 
   async updateBookmark(bookmark: Bookmark): Promise<Bookmark> {
-    return bookmarkApi.update(bookmark.id, bookmark);
+    return bookmarkApi.update(String(bookmark.id), bookmark);
   }
 
   async deleteBookmark(id: string | number): Promise<void> {

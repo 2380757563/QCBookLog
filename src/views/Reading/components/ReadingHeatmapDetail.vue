@@ -1,7 +1,7 @@
 <template>
   <div v-if="modelValue" class="heatmap-detail-card card">
     <div class="card-header">
-      <span class="card-title">📅 {{ formatDate(selectedDate) }} 阅读详情</span>
+      <span class="card-title">📅 {{ selectedDate ? formatDate(selectedDate) : '' }} 阅读详情</span>
       <span class="card-action" @click="close">关闭</span>
     </div>
     <div v-if="loading" class="loading-state">
@@ -57,7 +57,7 @@
     </div>
     <div v-else class="empty-state">
       <span class="empty-icon">📅</span>
-      <p>{{ formatDate(selectedDate) }} 没有阅读记录</p>
+      <p>{{ selectedDate ? formatDate(selectedDate) : '' }} 没有阅读记录</p>
     </div>
   </div>
 </template>
