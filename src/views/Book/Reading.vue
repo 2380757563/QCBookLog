@@ -113,6 +113,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useReadingStore } from '@/store/reading';
 import { useBookStore } from '@/store/book';
+import { useReaderStore } from '@/store/reader';
 import { bookmarkService } from '@/services/bookmark';
 import { bookService } from '@/services/book';
 import readingTrackingService from '@/services/readingTracking';
@@ -122,6 +123,7 @@ const router = useRouter();
 const route = useRoute();
 const readingStore = useReadingStore();
 const bookStore = useBookStore();
+const readerStore = useReaderStore();
 
 const book = ref<Book | null>(null);
 const bookmarkContent = ref('');
@@ -191,7 +193,7 @@ const decrementPage = () => {
 
 // 增加页码
 const incrementPage = () => {
-  if (book.value && currentPage.value < book.value.pages) {
+  if (book.value && currentPage.value < (book.value.pages || 0)) {
     currentPage.value++;
     updateProgress();
   }
@@ -241,7 +243,7 @@ const handleAddBookmark = async () => {
       bookId: book.value.id,
       content,
       pageNum: currentPage.value,
-      createTime: new Date().toISOString()
+      tags: []
     });
 
     bookmarkContent.value = '';

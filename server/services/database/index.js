@@ -1445,7 +1445,9 @@ class DatabaseService {
       wants: 0,
       read_state: 0,
       online_read: 0,
-      download: 0
+      download: 0,
+      personal_rating: 0,
+      personal_rating_date: null
     };
   }
 
@@ -1476,13 +1478,29 @@ class DatabaseService {
             updates.push('favorite = ?');
             values.push(data.favorite);
           }
+          if (data.favorite_date !== undefined) {
+            updates.push('favorite_date = ?');
+            values.push(data.favorite_date);
+          }
           if (data.wants !== undefined) {
             updates.push('wants = ?');
             values.push(data.wants);
           }
+          if (data.wants_date !== undefined) {
+            updates.push('wants_date = ?');
+            values.push(data.wants_date);
+          }
           if (data.read_state !== undefined) {
             updates.push('read_state = ?');
             values.push(data.read_state);
+          }
+          if (data.personal_rating !== undefined) {
+            updates.push('personal_rating = ?');
+            values.push(data.personal_rating);
+          }
+          if (data.personal_rating_date !== undefined) {
+            updates.push('personal_rating_date = ?');
+            values.push(data.personal_rating_date);
           }
 
           if (updates.length > 0) {
@@ -1492,14 +1510,18 @@ class DatabaseService {
           }
         } else {
           talebookDb.prepare(`
-            INSERT INTO reading_state (book_id, reader_id, favorite, wants, read_state)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO reading_state (book_id, reader_id, favorite, favorite_date, wants, wants_date, read_state, personal_rating, personal_rating_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(
             bookId,
             readerId,
             data.favorite || 0,
+            data.favorite_date || null,
             data.wants || 0,
-            data.read_state || 0
+            data.wants_date || null,
+            data.read_state || 0,
+            data.personal_rating || 0,
+            data.personal_rating_date || null
           );
         }
 
@@ -1544,9 +1566,17 @@ class DatabaseService {
             updates.push('favorite = ?');
             values.push(data.favorite);
           }
+          if (data.favorite_date !== undefined) {
+            updates.push('favorite_date = ?');
+            values.push(data.favorite_date);
+          }
           if (data.wants !== undefined) {
             updates.push('wants = ?');
             values.push(data.wants);
+          }
+          if (data.wants_date !== undefined) {
+            updates.push('wants_date = ?');
+            values.push(data.wants_date);
           }
           if (data.online_read !== undefined) {
             updates.push('online_read = ?');
@@ -1580,6 +1610,14 @@ class DatabaseService {
             updates.push('rating = ?');
             values.push(data.rating);
           }
+          if (data.personal_rating !== undefined) {
+            updates.push('personal_rating = ?');
+            values.push(data.personal_rating);
+          }
+          if (data.personal_rating_date !== undefined) {
+            updates.push('personal_rating_date = ?');
+            values.push(data.personal_rating_date);
+          }
 
           updates.push('last_read_time = ?');
           values.push(new Date().toISOString());
@@ -1597,16 +1635,19 @@ class DatabaseService {
 
           qcBooklogDb.prepare(`
             INSERT INTO qc_reading_state (
-              mapping_id, book_id, reader_id, read_state, favorite, wants, online_read, download,
-              current_page, total_pages, progress_percent, current_chapter, notes, rating, last_read_time
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              mapping_id, book_id, reader_id, read_state, favorite, favorite_date, wants, wants_date, online_read, download,
+              current_page, total_pages, progress_percent, current_chapter, notes, rating, 
+              personal_rating, personal_rating_date, last_read_time
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(
             mapping.id,
             bookId,
             readerId,
             data.read_state || 0,
             data.favorite || 0,
+            data.favorite_date || null,
             data.wants || 0,
+            data.wants_date || null,
             data.online_read || 0,
             data.download || 0,
             data.current_page || 0,
@@ -1615,6 +1656,8 @@ class DatabaseService {
             String(data.current_chapter || ''),
             data.notes || null,
             data.rating || 0,
+            data.personal_rating || 0,
+            data.personal_rating_date || null,
             new Date().toISOString()
           );
         }

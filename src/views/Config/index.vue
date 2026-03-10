@@ -644,7 +644,7 @@ const executeSync = async () => {
 };
 
 // 定时器引用
-let configSyncTimer = null;
+let configSyncTimer: ReturnType<typeof setInterval> | null = null;
 
 // 定期同步配置状态
 const startConfigSync = () => {

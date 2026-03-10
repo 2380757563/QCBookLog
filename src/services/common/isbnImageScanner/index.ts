@@ -148,7 +148,7 @@ class ISBNImageScannerServiceImpl implements ISBNImageScannerService {
     
     try {
       // 先调整尺寸
-      let processedBase64 = resizeImage(base64, maxWidth, maxHeight);
+      let processedBase64 = await resizeImage(base64, maxWidth, maxHeight);
       
       // 创建Canvas进行图像增强
       const image = new Image();
@@ -182,14 +182,12 @@ class ISBNImageScannerServiceImpl implements ISBNImageScannerService {
         // 转换回Base64
         processedBase64 = enhancedCanvas.toDataURL('image/jpeg', 0.95);
       } catch (e) {
-
-        // 图像增强失败时，返回调整尺寸后的原始图像
+        console.warn('图像增强失败，使用调整尺寸后的原始图像:', e);
       }
       
       return processedBase64;
     } catch (e) {
-
-      // 预处理完全失败时，返回原始图像
+      console.warn('预处理完全失败，返回原始图像:', e);
       return base64;
     }
   }
@@ -211,8 +209,13 @@ class ISBNImageScannerServiceImpl implements ISBNImageScannerService {
     const strategies = [
       // 策略1: 原始图像
       () => {
-
-        return this.decodeWithCanvas(image, { });
+        const canvas = document.createElement('canvas');
+        canvas.width = image.width;
+        canvas.height = image.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('无法获取Canvas上下文');
+        ctx.drawImage(image, 0, 0);
+        return this.decodeWithCanvas(canvas);
       },
       // 策略2: 自动增强
       () => {

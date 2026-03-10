@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import axios from 'axios';
+import userSettingsService from '@/services/userSettings';
 
 export interface Reader {
   id: number;
@@ -38,28 +39,60 @@ export const useReaderStore = defineStore('reader', () => {
   /**
    * 从本地存储加载当前读者ID
    */
-  const loadCurrentReaderId = () => {
+  const loadCurrentReaderId = async () => {
     try {
+      const settings = await userSettingsService.getSettings('high');
+      
+      if (settings && settings.defaultReaderId !== undefined) {
+        const id = parseInt(settings.defaultReaderId, 10);
+        if (!isNaN(id)) {
+          currentReaderId.value = id;
+          localStorage.setItem('defaultReaderId', String(id));
+          return;
+        }
+      }
+      
+      if (settings && settings.currentReaderId !== undefined) {
+        const id = parseInt(settings.currentReaderId, 10);
+        if (!isNaN(id)) {
+          currentReaderId.value = id;
+          localStorage.setItem('currentReaderId', String(id));
+          return;
+        }
+      }
+    } catch (error) {
+      console.error('从数据库加载读者ID失败:', error);
+    }
+    
+    try {
+      const defaultReaderId = localStorage.getItem('defaultReaderId');
+      if (defaultReaderId !== null) {
+        const id = parseInt(defaultReaderId, 10);
+        if (!isNaN(id)) {
+          currentReaderId.value = id;
+          return;
+        }
+      }
+
       const saved = localStorage.getItem('currentReaderId');
       if (saved !== null) {
         const id = parseInt(saved, 10);
         if (!isNaN(id)) {
           currentReaderId.value = id;
-
         }
       }
     } catch (error) {
-      console.error('❌ 加载读者ID失败:', error);
+      console.error('❌ 保存读者ID失败:', error);
     }
   };
 
   /**
    * 保存当前读者ID到本地存储
    */
-  const saveCurrentReaderId = () => {
+  const saveCurrentReaderId = async () => {
     try {
       localStorage.setItem('currentReaderId', currentReaderId.value.toString());
-
+      await userSettingsService.saveSetting('currentReaderId', currentReaderId.value, 'high');
     } catch (error) {
       console.error('❌ 保存读者ID失败:', error);
     }

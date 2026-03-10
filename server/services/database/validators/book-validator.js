@@ -80,8 +80,8 @@ class BookValidator {
     }
 
     // 验证评分范围
-    if (book.rating !== undefined && (book.rating < 0 || book.rating > 5)) {
-      errors.push('评分范围无效（应在0-5之间）');
+    if (book.rating !== undefined && (book.rating < 0 || book.rating > 10)) {
+      errors.push('评分范围无效（应在0-10之间）');
     }
 
     return {

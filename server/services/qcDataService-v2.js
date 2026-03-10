@@ -140,35 +140,35 @@ const GroupsRepository = {
  */
 const BookmarksRepository = {
   findAll(options = {}) {
-    return databaseService.repositories.qcbooklog.qcBookmarks.findAll(options);
+    return databaseService.repositories.talebook.qcBookmarks.findAll(options);
   },
 
   findById(id) {
-    return databaseService.repositories.qcbooklog.qcBookmarks.findById(id);
+    return databaseService.repositories.talebook.qcBookmarks.findById(id);
   },
 
   findByBookId(bookId) {
-    return databaseService.repositories.qcbooklog.qcBookmarks.findByBookId(bookId);
+    return databaseService.repositories.talebook.qcBookmarks.findByBookId(bookId);
   },
 
   create(data) {
-    return databaseService.repositories.qcbooklog.qcBookmarks.create(data);
+    return databaseService.repositories.talebook.qcBookmarks.create(data);
   },
 
   update(id, data) {
-    return databaseService.repositories.qcbooklog.qcBookmarks.update(id, data);
+    return databaseService.repositories.talebook.qcBookmarks.update(id, data);
   },
 
   delete(id) {
-    return databaseService.repositories.qcbooklog.qcBookmarks.delete(id);
+    return databaseService.repositories.talebook.qcBookmarks.delete(id);
   },
 
   search(keyword) {
-    return databaseService.repositories.qcbooklog.qcBookmarks.search(keyword);
+    return databaseService.repositories.talebook.qcBookmarks.search(keyword);
   },
 
   getAllTags() {
-    return databaseService.repositories.qcbooklog.qcBookmarks.getAllTags();
+    return databaseService.repositories.talebook.qcBookmarks.getAllTags();
   }
 };
 
@@ -210,23 +210,23 @@ const ReadingStateRepository = {
  */
 const BookDataRepository = {
   findByBookId(bookId) {
-    return databaseService.repositories.qcbooklog.qcBookdata.findByBookId(bookId);
+    return databaseService.repositories.qcBooklog.qcBookdata.findByBookId(bookId);
   },
 
   upsert(bookId, data) {
-    return databaseService.repositories.qcbooklog.qcBookdata.upsert(bookId, data);
+    return databaseService.repositories.qcBooklog.qcBookdata.upsert(bookId, data);
   },
 
   updateReadingProgress(bookId, readPages, duration = 0) {
-    return databaseService.repositories.qcbooklog.qcBookdata.updateReadingProgress(bookId, readPages, duration);
+    return databaseService.repositories.qcBooklog.qcBookdata.updateReadingProgress(bookId, readPages, duration);
   },
 
   getReadingStats() {
-    return databaseService.repositories.qcbooklog.qcBookdata.getReadingStats();
+    return databaseService.repositories.qcBooklog.qcBookdata.getReadingStats();
   },
 
   getRecentlyRead(limit = 10) {
-    return databaseService.repositories.qcbooklog.qcBookdata.getRecentlyRead(limit);
+    return databaseService.repositories.qcBooklog.qcBookdata.getRecentlyRead(limit);
   }
 };
 

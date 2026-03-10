@@ -7,7 +7,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: crpi-bpk9dy6331fn5ymt.cn-hangzhou.personal.cr.aliyuncs.com/unripora/qc-booklog-frontend:20260302
+    image: crpi-bpk9dy6331fn5ymt.cn-hangzhou.personal.cr.aliyuncs.com/unripora/qc-booklog-frontend:20260308P
     container_name: qc-booklog-frontend
     ports:
       - "${FRONTEND_PORT:-80}:80"
@@ -44,7 +44,7 @@ services:
     build:
       context: ./server
       dockerfile: Dockerfile
-    image: crpi-bpk9dy6331fn5ymt.cn-hangzhou.personal.cr.aliyuncs.com/unripora/qc-booklog-backend:20260302
+    image: crpi-bpk9dy6331fn5ymt.cn-hangzhou.personal.cr.aliyuncs.com/unripora/qc-booklog-backend:20260308P
     container_name: qc-booklog-backend
     user: root
     networks:

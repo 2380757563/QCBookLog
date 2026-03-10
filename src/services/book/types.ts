@@ -13,26 +13,32 @@ export interface Book {
   edge2?: number;
   book_type: number;
   coverUrl?: string;
+  localCoverData?: string;
   purchaseDate?: string;
   purchasePrice?: number;
   standardPrice?: number;
   readStatus: '未读' | '在读' | '已读';
   readCompleteDate?: string;
   rating?: number;
+  personal_rating?: number;
+  personal_rating_date?: string | null;
   tags: string[];
   groups: string[];
   series?: string;
-  calibreTags?: string[]; // Calibre数据库的标签名称数组
+  calibreTags?: string[];
   note?: string;
   description?: string;
   createTime: string;
   updateTime: string;
-  // 阅读追踪字段
-  total_reading_time?: number; // 总阅读时长（分钟）
-  read_pages?: number; // 已读页数
-  reading_count?: number; // 阅读次数
-  last_read_date?: string | null; // 最近阅读日期
-  last_read_duration?: number; // 最近一次阅读时长（分钟）
+  total_reading_time?: number;
+  read_pages?: number;
+  reading_count?: number;
+  last_read_date?: string | null;
+  last_read_duration?: number;
+  favorite?: number;
+  favorite_date?: string | null;
+  wants?: number;
+  wants_date?: string | null;
 }
 
 export interface BookGroup {
@@ -83,7 +89,7 @@ export interface ReadingState {
 export interface BookService {
   // 书籍管理
   addBook(book: Omit<Book, 'id' | 'createTime' | 'updateTime'>): Promise<Book>;
-  updateBook(book: Book): Promise<Book>;
+  updateBook(book: Book, readerId?: number): Promise<Book>;
   deleteBook(id: number): Promise<void>;
   getBookById(id: number): Promise<Book | undefined>;
   getBooks(params?: BookQueryParams): Promise<BookQueryResult>;
@@ -99,6 +105,7 @@ export interface BookService {
 
   // 标签管理
   getAllTags(): Promise<string[]>;
+  getTags(bookId: number): Promise<string[]>;
 
   // 阅读状态管理
   getReadingState(bookId: number, readerId?: number): Promise<ReadingState>;

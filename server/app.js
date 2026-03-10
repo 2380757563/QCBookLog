@@ -230,6 +230,8 @@ import readingTrackingRoutes from './routes/readingTracking.js';
 import wishlistRoutes from './routes/wishlist.js';
 import activitiesRoutes from './routes/activities.js';
 import readingStateSyncRoutes from './routes/readingStateSync.js';
+import userSettingsRoutes from './routes/userSettings.js';
+import userImagesRoutes from './routes/userImages.js';
 import dbrService from './services/dbrService.js';
 
 // 注册路由
@@ -251,6 +253,8 @@ app.use('/api/reading', readingTrackingRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/activities', activitiesRoutes);
 app.use('/api/reading-state-sync', readingStateSyncRoutes);
+app.use('/api/user-settings', userSettingsRoutes);
+app.use('/api/user-images', userImagesRoutes);
 
 // 探数图书API代理（解决CORS问题）
 app.get('/api/tanshu/isbn/:isbn', async (req, res) => {

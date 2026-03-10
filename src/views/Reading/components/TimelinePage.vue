@@ -77,21 +77,24 @@
               <div v-if="index < todayActivities.length - 1 || historicalActivitiesGrouped.length > 0" class="marker-line"></div>
             </div>
             <div class="timeline-content">
-              <div class="activity-type-badge" :class="getActivityTypeClass(record.type)">
-                {{ getActivityTypeLabel(record.type) }}
-              </div>
               <div v-if="record.bookTitle" class="record-cover">
                 <img 
                   v-if="record.bookCover" 
                   :src="record.bookCover" 
                   :alt="record.bookTitle"
                   loading="lazy"
+                  @load="handleCoverLoad($event)"
                   @error="handleCoverError($event, record)"
                 />
                 <div v-else class="cover-placeholder">{{ record.bookTitle ? record.bookTitle.charAt(0) : '' }}</div>
               </div>
               <div class="record-info">
-                <div v-if="record.bookTitle" class="record-title">{{ record.bookTitle }}</div>
+                <div class="record-header">
+                  <div class="activity-type-badge" :class="getActivityTypeClass(record.type)">
+                    {{ getActivityTypeLabel(record.type) }}
+                  </div>
+                  <div v-if="record.bookTitle" class="record-title">{{ record.bookTitle }}</div>
+                </div>
                 <div v-if="record.bookAuthor" class="record-author">{{ record.bookAuthor }} · {{ record.bookPublisher }}</div>
                 <div v-if="record.startTime && record.endTime" class="record-time-range">{{ formatTimeRange(record.startTime, record.endTime) }}</div>
                 <div v-if="record.duration" class="record-duration">阅读时长：{{ formatDuration(record.duration) }}</div>
@@ -133,21 +136,24 @@
                 <div v-if="index < group.activities.length - 1" class="marker-line"></div>
               </div>
               <div class="timeline-content">
-                <div class="activity-type-badge" :class="getActivityTypeClass(record.type)">
-                  {{ getActivityTypeLabel(record.type) }}
-                </div>
                 <div v-if="record.bookTitle" class="record-cover">
                   <img 
                     v-if="record.bookCover" 
                     :src="record.bookCover" 
                     :alt="record.bookTitle"
                     loading="lazy"
+                    @load="handleCoverLoad($event)"
                     @error="handleCoverError($event, record)"
                   />
                   <div v-else class="cover-placeholder">{{ record.bookTitle ? record.bookTitle.charAt(0) : '' }}</div>
                 </div>
                 <div class="record-info">
-                  <div v-if="record.bookTitle" class="record-title">{{ record.bookTitle }}</div>
+                  <div class="record-header">
+                    <div class="activity-type-badge" :class="getActivityTypeClass(record.type)">
+                      {{ getActivityTypeLabel(record.type) }}
+                    </div>
+                    <div v-if="record.bookTitle" class="record-title">{{ record.bookTitle }}</div>
+                  </div>
                   <div v-if="record.bookAuthor" class="record-author">{{ record.bookAuthor }} · {{ record.bookPublisher }}</div>
                   <div v-if="record.startTime && record.endTime" class="record-time-range">{{ formatTimeRange(record.startTime, record.endTime) }}</div>
                   <div v-if="record.duration" class="record-duration">阅读时长：{{ formatDuration(record.duration) }}</div>
@@ -181,21 +187,24 @@
               <div v-if="index < timelineDateDetails.length - 1" class="marker-line"></div>
             </div>
             <div class="timeline-content">
-              <div class="activity-type-badge" :class="getActivityTypeClass(record.type)">
-                {{ getActivityTypeLabel(record.type) }}
-              </div>
               <div v-if="record.bookTitle" class="record-cover">
                 <img 
                   v-if="record.bookCover" 
                   :src="record.bookCover" 
                   :alt="record.bookTitle"
                   loading="lazy"
+                  @load="handleCoverLoad($event)"
                   @error="handleCoverError($event, record)"
                 />
                 <div v-else class="cover-placeholder">{{ record.bookTitle ? record.bookTitle.charAt(0) : '' }}</div>
               </div>
               <div class="record-info">
-                <div v-if="record.bookTitle" class="record-title">{{ record.bookTitle }}</div>
+                <div class="record-header">
+                  <div class="activity-type-badge" :class="getActivityTypeClass(record.type)">
+                    {{ getActivityTypeLabel(record.type) }}
+                  </div>
+                  <div v-if="record.bookTitle" class="record-title">{{ record.bookTitle }}</div>
+                </div>
                 <div v-if="record.bookAuthor" class="record-author">{{ record.bookAuthor }} · {{ record.bookPublisher }}</div>
                 <div v-if="record.startTime && record.endTime" class="record-time-range">{{ formatTimeRange(record.startTime, record.endTime) }}</div>
                 <div v-if="record.duration" class="record-duration">阅读时长：{{ formatDuration(record.duration) }}</div>
@@ -225,9 +234,11 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { useRoute } from 'vue-router';
 import activityService from '@/services/activity';
 import { useEventBus } from '@/utils/eventBus';
 
+const route = useRoute();
 const currentYear = new Date().getFullYear();
 const currentMonth = new Date().getMonth();
 const timelineYear = ref(currentYear);
@@ -240,6 +251,29 @@ const showCalendarPicker = ref(false);
 const timelineCalendarDays = ref<any[]>([]);
 const loadingCalendarDays = ref(false);
 const eventBus = useEventBus();
+
+// 处理路由参数中的日期
+const handleRouteDate = async () => {
+  const dateParam = route.query.date as string;
+  if (dateParam) {
+    // 解析日期参数
+    const [year, month] = dateParam.split('-').map(Number);
+    if (year && month) {
+      timelineYear.value = year;
+      timelineMonth.value = month - 1; // 月份从0开始
+      
+      // 等待日历加载完成后选中对应日期
+      await loadCalendarDays();
+      await nextTick();
+      
+      // 查找并选中对应日期
+      const targetDay = timelineCalendarDays.value.find(d => d.fullDate === dateParam);
+      if (targetDay) {
+        await selectTimelineDate(targetDay);
+      }
+    }
+  }
+};
 
 const todayDateStr = computed(() => {
   const today = new Date();
@@ -472,14 +506,20 @@ const loadCalendarDays = async () => {
 onMounted(() => {
   loadCalendarDays();
   
-  setTimeout(() => {
-    const today = new Date();
-    const todayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    const todayDay = timelineCalendarDays.value.find(d => d.fullDate === todayDate);
-    if (todayDay) {
-      selectTimelineDate(todayDay);
-    }
-  }, 100);
+  // 处理路由参数中的日期
+  handleRouteDate();
+  
+  // 如果没有日期参数，默认选中今天
+  if (!route.query.date) {
+    setTimeout(() => {
+      const today = new Date();
+      const todayDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const todayDay = timelineCalendarDays.value.find(d => d.fullDate === todayDate);
+      if (todayDay) {
+        selectTimelineDate(todayDay);
+      }
+    }, 100);
+  }
   
   eventBus.on('heatmap-data-updated', (data: any) => {
 
@@ -487,6 +527,11 @@ onMounted(() => {
       selectTimelineDate(selectedTimelineDate.value);
     }
   });
+});
+
+// 监听路由参数变化
+watch(() => route.query.date, () => {
+  handleRouteDate();
 });
 
 const getTimelineDayClass = (date: any): string => {
@@ -599,14 +644,24 @@ const formatDuration = (minutes: number): string => {
   return `${mins}分钟`;
 };
 
+const handleCoverLoad = (event: Event) => {
+  const target = event.target as HTMLImageElement;
+  if (target) {
+    target.classList.add('loaded');
+  }
+};
+
 const handleCoverError = (event: Event, record: any) => {
   const target = event.target as HTMLImageElement;
   if (target) {
-    target.style.display = 'none';
-    const placeholder = document.createElement('div');
-    placeholder.className = 'cover-placeholder';
-    placeholder.textContent = record.bookTitle ? record.bookTitle.charAt(0) : '';
-    target.parentNode?.appendChild(placeholder);
+    target.classList.add('error');
+    const parent = target.parentNode as HTMLElement;
+    if (parent && !parent.querySelector('.cover-placeholder')) {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'cover-placeholder';
+      placeholder.textContent = record.bookTitle ? record.bookTitle.charAt(0) : '';
+      parent.appendChild(placeholder);
+    }
   }
 };
 
@@ -1162,11 +1217,25 @@ const getMetadataInfo = (record: any): string => {
     border-radius: var(--radius-md);
     overflow: hidden;
     background-color: var(--bg-tertiary);
+    position: relative;
 
     img {
       width: 100%;
       height: 100%;
       object-fit: cover;
+      transition: opacity 0.3s ease;
+      
+      &[loading] {
+        opacity: 0;
+      }
+      
+      &.loaded {
+        opacity: 1;
+      }
+      
+      &.error {
+        display: none;
+      }
     }
 
     .cover-placeholder {
@@ -1175,10 +1244,40 @@ const getMetadataInfo = (record: any): string => {
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 24px;
+      font-size: 20px;
       font-weight: 600;
-      color: var(--primary-color);
+      color: #fff;
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      position: absolute;
+      top: 0;
+      left: 0;
+    }
+    
+    .cover-loading {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: var(--bg-tertiary);
+      position: absolute;
+      top: 0;
+      left: 0;
+      
+      .loading-spinner {
+        width: 20px;
+        height: 20px;
+        border: 2px solid var(--border-light);
+        border-top-color: var(--primary-color);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+    }
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
     }
   }
 
@@ -1190,14 +1289,21 @@ const getMetadataInfo = (record: any): string => {
     overflow: hidden;
   }
 
+  .record-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
   .record-title {
     font-size: 15px;
     font-weight: 500;
     color: var(--text-primary);
-    margin-bottom: 4px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    flex: 1;
   }
 
   .record-author {

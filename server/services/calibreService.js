@@ -485,7 +485,11 @@ const getAllBooksFromCalibre = async (useCache = true, readerId = 0) => {
             return {
               ...book,
               readStatus: statusMap[readingState.read_state] || '未读',
-              readCompleteDate: readingState.read_date || undefined
+              readCompleteDate: readingState.read_date || undefined,
+              favorite: readingState.favorite || 0,
+              wants: readingState.wants || 0,
+              favorite_date: readingState.favorite_date || null,
+              wants_date: readingState.wants_date || null
             };
           } catch (error) {
             console.warn(`⚠️ 读取书籍 ${book.id} 的阅读状态失败:`, error.message);
@@ -574,7 +578,21 @@ const processAuthorDirectory = async (authorDir) => {
 /**
    * 根据ID获取Calibre书籍（优化版本：优先使用数据库，带缓存）
    */
-  const getBookFromCalibreById = async (bookId, useCache = true) => {
+  const getBookFromCalibreById = async (bookId, readerIdOrUseCache = true, useCacheParam = true) => {
+    // 兼容两种调用方式：
+    // 1. getBookFromCalibreById(bookId, readerId, useCache) - 新方式
+    // 2. getBookFromCalibreById(bookId, useCache) - 旧方式（向后兼容）
+    let readerId, useCache;
+    if (typeof readerIdOrUseCache === 'number') {
+      readerId = readerIdOrUseCache;
+      useCache = useCacheParam;
+    } else {
+      readerId = 0;
+      useCache = readerIdOrUseCache;
+    }
+    
+    console.log(`📖 getBookFromCalibreById - 书籍ID: ${bookId}, 读者ID: ${readerId}, 使用缓存: ${useCache}`);
+    
     const startTime = Date.now();
     perfMetrics.getBookById.count++;
 
@@ -695,7 +713,7 @@ const processAuthorDirectory = async (authorDir) => {
             // 从 Talebook 数据库获取阅读状态
             if (dbService && dbService.isTalebookAvailable && dbService.isTalebookAvailable()) {
               try {
-                const readingState = dbService.getReadingState(bookId, 0); // 默认使用 readerId=0
+                const readingState = dbService.getReadingState(bookId, readerId);
 
                 // 将 read_state 数字转换为中文状态
                 const statusMap = {
@@ -708,7 +726,14 @@ const processAuthorDirectory = async (authorDir) => {
                 if (readingState.read_date) {
                   book.readCompleteDate = readingState.read_date;
                 }
-                console.log(`✅ 已从 Talebook 数据库获取书籍 ${bookId} 的阅读状态: ${book.readStatus}`);
+                // 添加 favorite 和 wants 字段
+                book.favorite = readingState.favorite || 0;
+                book.wants = readingState.wants || 0;
+                book.favorite_date = readingState.favorite_date || null;
+                book.wants_date = readingState.wants_date || null;
+                book.personal_rating = readingState.personal_rating || 0;
+                book.personal_rating_date = readingState.personal_rating_date || null;
+                console.log(`✅ 已从 Talebook 数据库获取书籍 ${bookId} 的阅读状态: ${book.readStatus}, favorite: ${book.favorite}, wants: ${book.wants}, personal_rating: ${book.personal_rating}`);
               } catch (readingError) {
                 console.warn(`⚠️ 获取书籍 ${bookId} 的阅读状态失败:`, readingError.message);
                 // 如果获取失败，保持原有的 readStatus

@@ -101,14 +101,13 @@ const startDrag = (e: MouseEvent | TouchEvent) => {
 const handleDrag = (e: MouseEvent | TouchEvent) => {
   if (!isDragging.value || !trackRef.value) return;
   
-  const event = e as MouseEvent;
   const trackRect = trackRef.value.getBoundingClientRect();
   
   let clientX: number;
-  if (event.touches) {
-    clientX = event.touches[0].clientX;
+  if ('touches' in e && e.touches) {
+    clientX = e.touches[0].clientX;
   } else {
-    clientX = event.clientX;
+    clientX = (e as MouseEvent).clientX;
   }
   
   // 计算相对位置

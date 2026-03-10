@@ -232,12 +232,41 @@ class DatabaseConnectionManager {
         console.log('✅ Talebook 数据库连接成功:', this.config.talebookPath);
         
         this.ensureDefaultReader();
+        this.upgradeTalebookSchema();
       } catch (error) {
         console.error('❌ Talebook 数据库连接失败:', error.message);
         console.error('❌ 数据库路径:', this.config.talebookPath);
         this.talebookDb = null;
         this.talebookError = error.message;
       }
+    }
+  }
+
+  upgradeTalebookSchema() {
+    if (!this.talebookDb) return;
+    
+    try {
+      try {
+        this.talebookDb.exec(`ALTER TABLE reading_state ADD COLUMN personal_rating REAL DEFAULT 0`);
+        console.log('✅ 添加 personal_rating 列');
+      } catch (e) {
+        if (!e.message.includes('duplicate column')) {
+          console.warn('⚠️ 添加 personal_rating 列失败:', e.message);
+        }
+      }
+      
+      try {
+        this.talebookDb.exec(`ALTER TABLE reading_state ADD COLUMN personal_rating_date TEXT`);
+        console.log('✅ 添加 personal_rating_date 列');
+      } catch (e) {
+        if (!e.message.includes('duplicate column')) {
+          console.warn('⚠️ 添加 personal_rating_date 列失败:', e.message);
+        }
+      }
+      
+      console.log('✅ Talebook 数据库架构升级完成');
+    } catch (error) {
+      console.warn('⚠️ Talebook 数据库架构升级失败:', error.message);
     }
   }
 
@@ -554,6 +583,8 @@ class DatabaseConnectionManager {
           progress_percent INTEGER DEFAULT 0,
           notes TEXT,
           rating INTEGER DEFAULT 0,
+          personal_rating REAL DEFAULT 0,
+          personal_rating_date TEXT,
           favorite_date TEXT,
           wants_date TEXT,
           read_date TEXT,
@@ -731,6 +762,56 @@ class DatabaseConnectionManager {
         CREATE INDEX IF NOT EXISTS idx_activity_log_user_date ON qc_activity_log(user_id, created_at)
       `);
       console.log('  ✅ qc_activity_log 表创建成功');
+
+      console.log('📝 创建用户设置表 (qc_user_settings)...');
+      this.qcBooklogDb.exec(`
+        CREATE TABLE IF NOT EXISTS qc_user_settings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL DEFAULT 0,
+          setting_key TEXT NOT NULL,
+          setting_value TEXT NOT NULL,
+          setting_type TEXT NOT NULL DEFAULT 'string',
+          priority TEXT NOT NULL DEFAULT 'high',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(user_id, setting_key)
+        )
+      `);
+      this.qcBooklogDb.exec(`
+        CREATE INDEX IF NOT EXISTS idx_user_settings_user_id ON qc_user_settings(user_id)
+      `);
+      this.qcBooklogDb.exec(`
+        CREATE INDEX IF NOT EXISTS idx_user_settings_key ON qc_user_settings(setting_key)
+      `);
+      this.qcBooklogDb.exec(`
+        CREATE INDEX IF NOT EXISTS idx_user_settings_priority ON qc_user_settings(priority)
+      `);
+      console.log('  ✅ qc_user_settings 表创建成功');
+
+      console.log('📝 创建用户图片表 (qc_user_images)...');
+      this.qcBooklogDb.exec(`
+        CREATE TABLE IF NOT EXISTS qc_user_images (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL DEFAULT 0,
+          image_type TEXT NOT NULL,
+          image_data TEXT NOT NULL,
+          image_name TEXT,
+          image_size INTEGER DEFAULT 0,
+          sort_order INTEGER DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      this.qcBooklogDb.exec(`
+        CREATE INDEX IF NOT EXISTS idx_user_images_user_id ON qc_user_images(user_id)
+      `);
+      this.qcBooklogDb.exec(`
+        CREATE INDEX IF NOT EXISTS idx_user_images_type ON qc_user_images(image_type)
+      `);
+      this.qcBooklogDb.exec(`
+        CREATE INDEX IF NOT EXISTS idx_user_images_sort ON qc_user_images(user_id, image_type, sort_order)
+      `);
+      console.log('  ✅ qc_user_images 表创建成功');
 
       console.log('✅ QCBookLog 数据库表结构创建完成');
     } catch (error) {
@@ -915,6 +996,473 @@ class DatabaseConnectionManager {
     this.calibreError = null;
     this.talebookError = null;
     this.qcBooklogError = null;
+  }
+
+  async createNewCalibreDatabase(dbPath, libraryName = 'My Library') {
+    console.log('📝 开始创建新的 Calibre 数据库...');
+    console.log('  数据库路径:', dbPath);
+    console.log('  书库名称:', libraryName);
+
+    if (!Database) {
+      throw new Error('better-sqlite3 未安装，无法创建数据库');
+    }
+
+    const dbDir = path.dirname(dbPath);
+    if (!fsSync.existsSync(dbDir)) {
+      console.log('📂 创建数据库目录:', dbDir);
+      fsSync.mkdirSync(dbDir, { recursive: true });
+    }
+
+    if (fsSync.existsSync(dbPath)) {
+      throw new Error('数据库文件已存在: ' + dbPath);
+    }
+
+    let newDb = null;
+    try {
+      newDb = new Database(dbPath);
+      newDb.pragma('journal_mode = WAL');
+      newDb.pragma('foreign_keys = ON');
+
+      console.log('📋 创建 Calibre 标准表结构...');
+      this.createCalibreTables(newDb);
+
+      const libraryUuid = crypto.randomUUID();
+      console.log('🔑 生成 library_uuid:', libraryUuid);
+
+      this.insertLibraryUuid(newDb, libraryUuid);
+
+      this.insertDefaultPreferences(newDb, libraryName);
+
+      newDb.close();
+      newDb = null;
+
+      console.log('✅ 新 Calibre 数据库创建成功:', dbPath);
+
+      return {
+        success: true,
+        path: dbPath,
+        libraryUuid: libraryUuid,
+        message: 'Calibre 数据库创建成功'
+      };
+    } catch (error) {
+      console.error('❌ 创建 Calibre 数据库失败:', error.message);
+      if (newDb) {
+        try {
+          newDb.close();
+        } catch (e) {
+          // ignore
+        }
+      }
+      if (fsSync.existsSync(dbPath)) {
+        try {
+          fsSync.unlinkSync(dbPath);
+        } catch (e) {
+          // ignore
+        }
+      }
+      throw error;
+    }
+  }
+
+  createCalibreTables(db) {
+    console.log('  📝 创建 books 表...');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS books (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        sort TEXT,
+        timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+        pubdate TEXT,
+        series_index REAL DEFAULT 1.0,
+        author_sort TEXT,
+        isbn TEXT,
+        lccn TEXT,
+        path TEXT,
+        uuid TEXT,
+        has_cover INTEGER DEFAULT 0,
+        last_modified TEXT DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    console.log('  📝 创建 authors 表...');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS authors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE,
+        sort TEXT
+      )
+    `);
+
+    console.log('  📝 创建 books_authors_link 表...');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS books_authors_link (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        book INTEGER NOT NULL,
+        author INTEGER NOT NULL,
+        UNIQUE(book, author)
+      )
+    `);
+
+    console.log('  📝 创建 publishers 表...');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS publishers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE
+      )
+    `);
+
+    console.log('  📝 创建 books_publishers_link 表...');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS books_publishers_link (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        book INTEGER NOT NULL,
+        publisher INTEGER NOT NULL,
+        UNIQUE(book, publisher)
+      )
+    `);
+
+    console.log('  📝 创建 tags 表...');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS tags (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE
+      )
+    `);
+
+    console.log('  📝 创建 books_tags_link 表...');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS books_tags_link (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        book INTEGER NOT NULL,
+        tag INTEGER NOT NULL,
+        UNIQUE(book, tag)
+      )
+    `);
+
+    console.log('  📝 创建 series 表...');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS series (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE
+      )
+    `);
+
+    console.log('  📝 创建 books_series_link 表...');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS books_series_link (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        book INTEGER NOT NULL,
+        series INTEGER NOT NULL,
+        UNIQUE(book, series)
+      )
+    `);
+
+    console.log('  📝 创建 ratings 表...');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS ratings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        rating INTEGER NOT NULL CHECK(rating >= 0 AND rating <= 10)
+      )
+    `);
+
+    console.log('  📝 创建 books_ratings_link 表...');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS books_ratings_link (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        book INTEGER NOT NULL,
+        rating INTEGER NOT NULL,
+        UNIQUE(book, rating)
+      )
+    `);
+
+    console.log('  📝 创建 languages 表...');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS languages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        lang_code TEXT NOT NULL UNIQUE
+      )
+    `);
+
+    console.log('  📝 创建 books_languages_link 表...');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS books_languages_link (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        book INTEGER NOT NULL,
+        lang_code INTEGER NOT NULL,
+        item_order INTEGER DEFAULT 1,
+        UNIQUE(book, lang_code)
+      )
+    `);
+
+    console.log('  📝 创建 identifiers 表...');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS identifiers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        book INTEGER NOT NULL,
+        type TEXT NOT NULL,
+        val TEXT NOT NULL,
+        UNIQUE(book, type, val)
+      )
+    `);
+
+    console.log('  📝 创建 comments 表...');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS comments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        book INTEGER NOT NULL,
+        text TEXT
+      )
+    `);
+
+    console.log('  📝 创建 data 表...');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS data (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        book INTEGER NOT NULL,
+        format TEXT NOT NULL,
+        uncompressed_size INTEGER DEFAULT 0,
+        name TEXT NOT NULL,
+        UNIQUE(book, format)
+      )
+    `);
+
+    console.log('  📝 创建 library_id 表...');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS library_id (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        uuid TEXT NOT NULL UNIQUE
+      )
+    `);
+
+    console.log('  📝 创建 preferences 表...');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS preferences (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        key TEXT NOT NULL UNIQUE,
+        val TEXT
+      )
+    `);
+
+    console.log('  📝 创建 custom_columns 表...');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS custom_columns (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        label TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        datatype TEXT NOT NULL,
+        is_multiple INTEGER DEFAULT 0,
+        is_editable INTEGER DEFAULT 1,
+        display TEXT,
+        normalized INTEGER DEFAULT 0
+      )
+    `);
+
+    console.log('  📝 创建索引...');
+    db.exec(`CREATE INDEX IF NOT EXISTS books_authors_link_aidx ON books_authors_link (author)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS books_publishers_link_aidx ON books_publishers_link (publisher)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS books_ratings_link_aidx ON books_ratings_link (rating)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS books_series_link_aidx ON books_series_link (series)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS books_tags_link_aidx ON books_tags_link (tag)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS books_languages_link_aidx ON books_languages_link (lang_code)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS identifiers_idx ON identifiers (book)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS comments_idx ON comments (book)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS data_idx ON data (book)`);
+
+    console.log('  ✅ Calibre 表结构创建完成');
+  }
+
+  insertLibraryUuid(db, libraryUuid) {
+    try {
+      db.prepare(`INSERT INTO library_id (uuid) VALUES (?)`).run(libraryUuid);
+      console.log('  ✅ library_uuid 已插入到 library_id 表');
+    } catch (error) {
+      console.warn('  ⚠️ 插入 library_id 失败，尝试使用 preferences 表:', error.message);
+      try {
+        db.prepare(`INSERT INTO preferences (key, val) VALUES ('library_uuid', ?)`).run(libraryUuid);
+        console.log('  ✅ library_uuid 已插入到 preferences 表');
+      } catch (e) {
+        console.warn('  ⚠️ 插入 preferences 也失败:', e.message);
+      }
+    }
+  }
+
+  insertDefaultPreferences(db, libraryName) {
+    const defaultPreferences = [
+      ['library_uuid', crypto.randomUUID()],
+      ['installation_uuid', crypto.randomUUID()],
+      ['library_name', libraryName],
+      ['calibre_version', '7.0.0'],
+      ['default_language', 'zh'],
+      ['output_format', 'EPUB'],
+      ['input_format_order', 'EPUB, AZW3, MOBI, PDF'],
+      ['use_primary_find_in_search', 'True'],
+      ['limit_search_columns', 'True'],
+      ['use_virtual_library_on_search', 'True']
+    ];
+
+    const insertStmt = db.prepare(`INSERT OR IGNORE INTO preferences (key, val) VALUES (?, ?)`);
+    const insertMany = db.transaction((prefs) => {
+      for (const [key, val] of prefs) {
+        insertStmt.run(key, val);
+      }
+    });
+
+    try {
+      insertMany(defaultPreferences);
+      console.log('  ✅ 默认配置已插入');
+    } catch (error) {
+      console.warn('  ⚠️ 插入默认配置失败:', error.message);
+    }
+  }
+
+  async createNewTalebookDatabase(dbPath) {
+    console.log('📝 开始创建新的 Talebook 数据库...');
+    console.log('  数据库路径:', dbPath);
+
+    if (!Database) {
+      throw new Error('better-sqlite3 未安装，无法创建数据库');
+    }
+
+    const dbDir = path.dirname(dbPath);
+    if (!fsSync.existsSync(dbDir)) {
+      console.log('📂 创建数据库目录:', dbDir);
+      fsSync.mkdirSync(dbDir, { recursive: true });
+    }
+
+    if (fsSync.existsSync(dbPath)) {
+      throw new Error('数据库文件已存在: ' + dbPath);
+    }
+
+    let newDb = null;
+    try {
+      newDb = new Database(dbPath);
+      newDb.pragma('journal_mode = WAL');
+      newDb.pragma('foreign_keys = ON');
+
+      console.log('📋 创建 Talebook 标准表结构...');
+      this.createTalebookTables(newDb);
+
+      newDb.close();
+      newDb = null;
+
+      console.log('✅ 新 Talebook 数据库创建成功:', dbPath);
+
+      return {
+        success: true,
+        path: dbPath,
+        message: 'Talebook 数据库创建成功'
+      };
+    } catch (error) {
+      console.error('❌ 创建 Talebook 数据库失败:', error.message);
+      if (newDb) {
+        try {
+          newDb.close();
+        } catch (e) {
+          // ignore
+        }
+      }
+      if (fsSync.existsSync(dbPath)) {
+        try {
+          fsSync.unlinkSync(dbPath);
+        } catch (e) {
+          // ignore
+        }
+      }
+      throw error;
+    }
+  }
+
+  createTalebookTables(db) {
+    console.log('  📝 创建 readers 表...');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS readers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username VARCHAR(256),
+        password VARCHAR(256),
+        salt VARCHAR(256),
+        name VARCHAR(256),
+        email VARCHAR(256),
+        admin BOOLEAN DEFAULT 0,
+        active BOOLEAN DEFAULT 1,
+        permission TEXT,
+        extra_data TEXT,
+        create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+        update_time DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    console.log('  📝 创建 items 表...');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS items (
+        book_id INTEGER NOT NULL PRIMARY KEY,
+        count_guest INTEGER NOT NULL DEFAULT 0,
+        count_visit INTEGER NOT NULL DEFAULT 0,
+        count_download INTEGER NOT NULL DEFAULT 0,
+        website VARCHAR(255) NOT NULL DEFAULT '',
+        collector_id INTEGER,
+        sole BOOLEAN NOT NULL DEFAULT 0,
+        book_type INTEGER NOT NULL DEFAULT 1,
+        book_count INTEGER NOT NULL DEFAULT 0,
+        create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    console.log('  📝 创建 reading_state 表...');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS reading_state (
+        book_id INTEGER NOT NULL,
+        reader_id INTEGER NOT NULL DEFAULT 0,
+        favorite INTEGER DEFAULT 0,
+        favorite_date TEXT,
+        wants INTEGER DEFAULT 0,
+        wants_date TEXT,
+        read_state INTEGER DEFAULT 0,
+        read_date TEXT,
+        online_read INTEGER DEFAULT 0,
+        download INTEGER DEFAULT 0,
+        PRIMARY KEY (book_id, reader_id)
+      )
+    `);
+
+    console.log('  📝 创建 qc_bookdata 表...');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS qc_bookdata (
+        book_id INTEGER PRIMARY KEY,
+        page_count INTEGER DEFAULT 0,
+        standard_price REAL DEFAULT 0,
+        purchase_price REAL DEFAULT 0,
+        purchase_date TEXT,
+        binding1 INTEGER DEFAULT 0,
+        binding2 INTEGER DEFAULT 0,
+        paper1 INTEGER DEFAULT 0,
+        edge1 INTEGER DEFAULT 0,
+        edge2 INTEGER DEFAULT 0,
+        note TEXT,
+        book_type INTEGER DEFAULT 1,
+        total_reading_time INTEGER DEFAULT 0,
+        read_pages INTEGER DEFAULT 0,
+        reading_count INTEGER DEFAULT 0,
+        last_read_date DATE DEFAULT NULL,
+        last_read_duration INTEGER DEFAULT 0
+      )
+    `);
+
+    console.log('  📝 创建索引...');
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_reading_state_book ON reading_state(book_id)`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_reading_state_reader ON reading_state(reader_id)`);
+
+    console.log('  📝 插入默认读者...');
+    try {
+      db.prepare(`
+        INSERT INTO readers (id, username, password, salt, name, email, admin, active, permission, create_time, update_time)
+        VALUES (0, 'default', '', '', 'Default Reader', '', 0, 1, '', datetime('now'), datetime('now'))
+      `).run();
+      console.log('  ✅ 默认读者已创建 (id=0)');
+    } catch (error) {
+      console.warn('  ⚠️ 创建默认读者失败:', error.message);
+    }
+
+    console.log('  ✅ Talebook 表结构创建完成');
   }
 }
 

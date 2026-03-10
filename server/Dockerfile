@@ -1,5 +1,5 @@
 # 后端Dockerfile - 生产环境优化版本
-FROM node:20
+FROM docker.1ms.run/node:20
 
 LABEL maintainer="QC-Booklog"
 LABEL version="2.0.0"
@@ -7,8 +7,14 @@ LABEL description="QC Booklog 后端服务 - 数据本地化存储"
 
 WORKDIR /app
 
-# 安装必要的系统依赖
-RUN apt-get update && apt-get install -y sqlite3 curl && rm -rf /var/lib/apt/lists/*
+# 安装必要的系统依赖（包含编译工具用于 better-sqlite3）
+RUN apt-get update && apt-get install -y \
+    sqlite3 \
+    curl \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
 
 # 创建非root用户运行应用（安全最佳实践）
 RUN groupadd -g 1001 nodejs && \

@@ -184,8 +184,8 @@ const filteredBooks = computed(() => {
   if (!bookSearchQuery.value) return bookStore.allBooks;
   const query = bookSearchQuery.value.toLowerCase();
   return bookStore.allBooks.filter(b => 
-    b.title.toLowerCase().includes(query) || 
-    b.author.toLowerCase().includes(query)
+    (b.title && b.title.toLowerCase().includes(query)) || 
+    (b.author && b.author.toLowerCase().includes(query))
   );
 });
 
@@ -381,7 +381,7 @@ onMounted(async () => {
         form.bookId = numericBookId;
         form.content = bookmark.content || '';
         form.note = bookmark.note || '';
-        form.pageNum = bookmark.pageNum;
+        form.pageNum = bookmark.pageNum ?? null;
         form.tags = bookmark.tags || [];
         form.importSource = bookmark.importSource || 'manual';
 

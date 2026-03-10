@@ -567,9 +567,10 @@ const scrollHeatmapRightStep = () => {
 
 // 处理热力图卷轴单元格点击
 const handleScrollHeatmapCellClick = async (day: any) => {
+  // 跳转到时间线页面并传递日期参数
   router.push({
-    path: '/calendar',
-    query: { date: day.date }
+    path: '/reading',
+    query: { tab: 'timeline', date: day.date }
   });
 };
 
@@ -585,7 +586,7 @@ const initHeatmapScrollToToday = () => {
   let todayColumn = -1;
   for (let colIndex = 0; colIndex < columns.length; colIndex++) {
     const column = columns[colIndex];
-    const todayCell = column.find(d => d.isToday);
+    const todayCell = column.find((d: any) => d.isToday);
     if (todayCell) {
       todayColumn = colIndex;
       break;

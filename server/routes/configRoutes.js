@@ -6,10 +6,9 @@ import express from 'express';
 import databaseService, { initPromise } from '../services/database/index.js';
 import calibreService from '../services/calibreService.js';
 import syncService from '../services/syncService.js';
-import ConfigController from './config/controllers/config-controller.js';
+import configController from './config/controllers/config-controller.js';
 
 const router = express.Router();
-const configController = new ConfigController();
 
 // 中间件：确保数据库服务已初始化
 router.use(async (req, res, next) => {
@@ -91,6 +90,20 @@ router.post('/set-default', (req, res) => {
  */
 router.get('/sync-status', (req, res) => {
   configController.getSyncStatus(req, res);
+});
+
+/**
+ * 获取第三方设置配置
+ */
+router.get('/third-party', (req, res) => {
+  configController.getThirdPartyConfig(req, res);
+});
+
+/**
+ * 保存第三方设置配置
+ */
+router.post('/third-party', (req, res) => {
+  configController.saveThirdPartyConfig(req, res);
 });
 
 export default router;

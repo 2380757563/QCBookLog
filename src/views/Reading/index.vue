@@ -27,7 +27,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import { useBookStore } from '@/store/book';
 import { useBookmarkStore } from '@/store/bookmark';
 import { bookService } from '@/services/book';
@@ -38,11 +39,19 @@ import ReadingBooksList from './components/ReadingBooksList.vue';
 import ReadingHeatmap from './components/ReadingHeatmap.vue';
 import TimelinePage from './components/TimelinePage.vue';
 import StatsPage from './components/StatsPage.vue';
+const route = useRoute();
 const bookStore = useBookStore();
 const bookmarkStore = useBookmarkStore();
 
 const activeTab = ref('reading');
 const goalCardRef = ref<InstanceType<typeof ReadingGoalCard> | null>(null);
+
+// 监听路由参数变化，处理热力图点击跳转
+watch(() => route.query, (query) => {
+  if (query.tab === 'timeline') {
+    activeTab.value = 'timeline';
+  }
+}, { immediate: true });
 
 const readingStats = computed(() => {
   const books = bookStore.allBooks;

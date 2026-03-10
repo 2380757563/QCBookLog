@@ -89,15 +89,14 @@ const testSearch = async () => {
       result.value = bestResult;
       
       // 单独测试图片下载
-        if (bestResult.coverUrl) {
+        if (bestResult.coverUrl && bestResult.isbn) {
           log('info', `测试单独下载图片: ${bestResult.coverUrl}`);
           // 使用ISBN作为图片存储的key（转换为数字）
-          const isbnKey = parseInt(bestResult.isbn, 10);
-          const base64 = await downloadBookCover(isbnKey, bestResult.coverUrl);
-          if (base64) {
-            log('success', `图片下载成功，数据长度: ${(base64 as any).length} 字节`);
-            result.value.localCoverData = base64;
-          } else {
+          const isbnKey = Number(bestResult.isbn || '0');
+          try {
+            await downloadBookCover(isbnKey, bestResult.coverUrl || '');
+            log('success', '图片下载成功');
+          } catch (error) {
             log('error', '图片下载失败');
           }
         }

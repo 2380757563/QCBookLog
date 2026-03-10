@@ -291,7 +291,7 @@ const updateCurrentPreset = () => {
   const isHighPreset = ws === 0.53 && ts === 7.11 && tf === 0.92 && tmv === 0.45;
   
   if (isVeryLowPreset) {
-    currentPreset.value = 'very-low';
+    currentPreset.value = 'veryLow';
   } else if (isLowPreset) {
     currentPreset.value = 'low';
   } else if (isMediumPreset) {
@@ -360,7 +360,7 @@ const loadSettings = () => {
       
       // 根据加载的值确定预设
       if (wheelSensitivity.value <= 0.1) {
-        currentPreset.value = 'very-low';
+        currentPreset.value = 'veryLow';
       } else if (wheelSensitivity.value <= 0.2) {
         currentPreset.value = 'low';
       } else if (wheelSensitivity.value <= 0.35) {

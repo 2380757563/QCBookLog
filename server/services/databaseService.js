@@ -3304,17 +3304,15 @@ class DatabaseService {
         throw new Error('Talebook 数据库服务不可用');
       }
 
-      // 验证阅读状态值
-      const validReadStates = [0, 1, 2]; // 0:未读, 1:在读, 2:已读完
-      if (!validReadStates.includes(readingState.read_state)) {
+      const validReadStates = [0, 1, 2];
+      const readState = readingState.read_state !== undefined ? readingState.read_state : 0;
+      if (!validReadStates.includes(readState)) {
         throw new Error('无效的阅读状态值');
       }
 
-      // 检查书籍是否在items表中存在，如果不存在则创建
       const existingItem = this.talebookDb.prepare('SELECT book_id FROM items WHERE book_id = ?').get(bookId);
       if (!existingItem) {
         console.log(`📝 书籍 ${bookId} 不在 items 表中，创建记录...`);
-        // 创建items记录（items表只存储统计信息）
         this.talebookDb.prepare(`
           INSERT INTO items (book_id, count_guest, count_visit, count_download, website, sole, book_type, create_time)
           VALUES (?, 0, 0, 0, '', 0, 1, ?)
@@ -3324,12 +3322,11 @@ class DatabaseService {
 
       const now = new Date().toISOString();
 
-      // 使用 upsert 语法更新或插入阅读状态
       this.talebookDb.prepare(`
         INSERT INTO reading_state (
           book_id, reader_id, favorite, favorite_date, wants, wants_date,
-          read_state, read_date, online_read, download
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          read_state, read_date, online_read, download, personal_rating, personal_rating_date
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (book_id, reader_id) DO UPDATE SET
           favorite = excluded.favorite,
           favorite_date = excluded.favorite_date,
@@ -3338,19 +3335,25 @@ class DatabaseService {
           read_state = excluded.read_state,
           read_date = excluded.read_date,
           online_read = excluded.online_read,
-          download = excluded.download
+          download = excluded.download,
+          personal_rating = excluded.personal_rating,
+          personal_rating_date = excluded.personal_rating_date
       `).run(
         bookId,
         readerId,
         readingState.favorite || 0,
-        readingState.favorite === 1 ? now : null,
+        readingState.favorite === 1 ? (readingState.favorite_date || now) : null,
         readingState.wants || 0,
-        readingState.wants === 1 ? now : null,
-        readingState.read_state || 0,
+        readingState.wants === 1 ? (readingState.wants_date || now) : null,
+        readState,
         now,
         readingState.online_read || 0,
-        readingState.download || 0
+        readingState.download || 0,
+        readingState.personal_rating || 0,
+        readingState.personal_rating ? (readingState.personal_rating_date || now) : null
       );
+
+      console.log(`✅ 阅读状态已更新: book_id=${bookId}, favorite=${readingState.favorite}, wants=${readingState.wants}, personal_rating=${readingState.personal_rating}`);
 
       return this.getReadingState(bookId, readerId);
     } catch (error) {

@@ -20,7 +20,11 @@ router.post('/talebook-path', configController.setTalebookPath.bind(configContro
 router.post('/validate-talebook', configController.validateTalebook.bind(configController));
 
 router.get('/check-databases', configController.checkDatabases.bind(configController));
+router.post('/create-database', configController.createDatabase.bind(configController));
+router.post('/set-default', configController.setDefault.bind(configController));
 router.get('/system-status', configController.getSystemStatus.bind(configController));
 router.get('/sync-status', configController.getSyncStatus.bind(configController));
+router.get('/third-party', configController.getThirdPartyConfig.bind(configController));
+router.post('/third-party', configController.saveThirdPartyConfig.bind(configController));
 
 export default router;

@@ -93,7 +93,7 @@
             <div v-if="currentSource.data.rating" class="detail-item">
               <label>评分:</label>
               <div class="rating-display">
-                <span class="stars">{{ '★'.repeat(Math.floor(currentSource.data.rating)) }}{{ '☆'.repeat(5 - Math.floor(currentSource.data.rating)) }}</span>
+                <span class="stars">{{ '★'.repeat(Math.max(0, Math.min(5, Math.round(currentSource.data.rating / 2)))) }}{{ '☆'.repeat(Math.max(0, 5 - Math.max(0, Math.min(5, Math.round(currentSource.data.rating / 2))))) }}</span>
                 <span class="rating-value">{{ currentSource.data.rating.toFixed(1) }}</span>
               </div>
             </div>
@@ -434,8 +434,8 @@ const useBookInfo = () => {
         title: sourceData.title,
         author: sourceData.author,
         publisher: sourceData.publisher || '',
-        publishYear: sourceData.publishYear ? parseInt(sourceData.publishYear) : undefined,
-        pages: sourceData.pages !== undefined && sourceData.pages !== null && !isNaN(parseInt(String(sourceData.pages))) ? parseInt(String(sourceData.pages)) : undefined,
+        publishYear: sourceData.publishYear,
+        pages: sourceData.pages !== undefined && sourceData.pages !== null && !isNaN(Number(sourceData.pages)) ? Number(sourceData.pages) : undefined,
         binding1: binding1,
         binding2: binding2,
         book_type: binding1 === 0 ? 0 : 1,

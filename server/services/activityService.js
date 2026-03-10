@@ -314,6 +314,8 @@ class ActivityService {
           .filter(r => r.bookId)
           .map(r => r.bookId);
         
+        console.log(`📚 时间线: 需要查询封面的书籍ID: ${JSON.stringify(bookIds)}`);
+        
         if (bookIds.length > 0) {
           const uniqueBookIds = [...new Set(bookIds)];
           const bookIdsStr = uniqueBookIds.join(',');
@@ -332,6 +334,8 @@ class ActivityService {
               GROUP BY b.id
             `).all();
             
+            console.log(`📚 时间线: 从Calibre查询到 ${books.length} 本书籍信息`);
+            
             const bookMap = books.reduce((acc, book) => {
               acc[book.id] = book;
               return acc;
@@ -342,13 +346,18 @@ class ActivityService {
                 const book = bookMap[row.bookId];
                 if (!row.bookTitle) row.bookTitle = book.title || '';
                 if (!row.bookAuthor) row.bookAuthor = book.author || '';
-                row.bookCover = book.has_cover ? `/api/book/${row.bookId}/cover` : '';
+                row.bookCover = `/api/static/calibre/${encodeURIComponent(book.path)}/cover.jpg`;
+                console.log(`📚 时间线: 书籍 ${book.title} 封面路径: ${row.bookCover}`);
+              } else if (row.bookId) {
+                console.log(`⚠️ 时间线: 书籍ID ${row.bookId} 在Calibre中未找到`);
               }
             });
           } catch (error) {
             console.error('❌ 获取书籍信息失败:', error);
           }
         }
+      } else {
+        console.log(`⚠️ 时间线: calibreDb=${!!calibreDb}, rows.length=${rows.length}`);
       }
       
       console.log(`✅ 获取操作记录成功，共 ${rows.length} 条`);
@@ -538,6 +547,8 @@ class ActivityService {
           .filter(r => r.bookId)
           .map(r => r.bookId);
         
+        console.log(`📚 时间线(按日期): 需要查询封面的书籍ID: ${JSON.stringify(bookIds)}`);
+        
         if (bookIds.length > 0) {
           const uniqueBookIds = [...new Set(bookIds)];
           const bookIdsStr = uniqueBookIds.join(',');
@@ -556,6 +567,8 @@ class ActivityService {
               GROUP BY b.id
             `).all();
             
+            console.log(`📚 时间线(按日期): 从Calibre查询到 ${books.length} 本书籍信息`);
+            
             const bookMap = books.reduce((acc, book) => {
               acc[book.id] = book;
               return acc;
@@ -566,13 +579,18 @@ class ActivityService {
                 const book = bookMap[row.bookId];
                 if (!row.bookTitle) row.bookTitle = book.title || '';
                 if (!row.bookAuthor) row.bookAuthor = book.author || '';
-                row.bookCover = book.has_cover ? `/api/book/${row.bookId}/cover` : '';
+                row.bookCover = `/api/static/calibre/${encodeURIComponent(book.path)}/cover.jpg`;
+                console.log(`📚 时间线(按日期): 书籍 ${book.title} 封面路径: ${row.bookCover}`);
+              } else if (row.bookId) {
+                console.log(`⚠️ 时间线(按日期): 书籍ID ${row.bookId} 在Calibre中未找到`);
               }
             });
           } catch (error) {
             console.error('❌ 获取书籍信息失败:', error);
           }
         }
+      } else {
+        console.log(`⚠️ 时间线(按日期): calibreDb=${!!calibreDb}, allRows.length=${allRows.length}`);
       }
       
       console.log(`✅ 获取 ${date} 的操作记录成功，共 ${allRows.length} 条`);

@@ -53,14 +53,27 @@
             <div class="option-icon">🖼️</div>
             <div class="option-content">
               <h3 class="option-title">自定义图片</h3>
-              <p class="option-desc">上传自定义图片作为背景</p>
+              <p class="option-desc">上传自定义图片作为背景（最多6张）</p>
               <div class="option-preview">
-                <div class="preview-custom" v-if="customBackground">
-                  <img :src="customBackground" alt="自定义背景" />
+                <div v-if="loadingImages" class="preview-loading">
+                  <div class="loading-spinner"></div>
+                  <span>加载中...</span>
+                </div>
+                <div class="preview-images-grid" v-else-if="customBackgrounds.length > 0">
+                  <div
+                    v-for="(image, index) in customBackgrounds"
+                    :key="image.id"
+                    :class="['preview-image-item', { active: selectedImageIndex === index }]"
+                    @click.stop="selectImage(index)"
+                  >
+                    <img :src="image.imageData" alt="自定义背景" />
+                    <div v-if="selectedImageIndex === index" class="preview-image-check">✓</div>
+                  </div>
                 </div>
                 <div class="preview-custom preview-custom--empty" v-else>
                   <span>+</span>
                 </div>
+                <span class="preview-count">{{ customBackgrounds.length }}/6</span>
               </div>
             </div>
             <div v-if="backgroundMode === 'custom'" class="check-icon">✓</div>
@@ -130,23 +143,47 @@
 
       <div v-if="backgroundMode === 'custom'" class="settings-section">
         <h2 class="section-title">自定义背景</h2>
-        <p class="section-desc">上传一张图片作为卡片背景</p>
+        <p class="section-desc">上传图片作为卡片背景（最多6张）</p>
         
-        <div class="upload-area" @click="triggerUpload" @dragover.prevent @drop.prevent="handleDrop">
-          <input
-            ref="fileInput"
-            type="file"
-            accept="image/*"
-            @change="handleFileSelect"
-            style="display: none"
-          />
-          <div v-if="customBackground" class="upload-preview">
-            <img :src="customBackground" alt="自定义背景预览" />
-            <button class="remove-btn" @click.stop="removeCustomBackground">✕</button>
+        <div class="image-upload-container">
+          <div class="upload-area" @click="triggerUpload" @dragover.prevent @drop.prevent="handleDrop">
+            <input
+              ref="fileInput"
+              type="file"
+              accept="image/*"
+              @change="handleFileSelect"
+              style="display: none"
+              :disabled="customBackgrounds.length >= 6"
+            />
+            <div class="upload-placeholder">
+              <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+              <span>{{ customBackgrounds.length >= 6 ? '已达到上限' : '点击或拖拽上传图片' }}</span>
+              <span class="upload-count">{{ customBackgrounds.length }}/6</span>
+            </div>
           </div>
-          <div v-else class="upload-placeholder">
-            <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-            <span>点击或拖拽上传图片</span>
+
+          <div class="images-grid">
+            <div
+              v-for="(image, index) in customBackgrounds"
+              :key="image.id"
+              class="image-item"
+              :class="{ active: selectedImageIndex === index }"
+              @click="selectImage(index)"
+            >
+              <img :src="image.imageData" alt="自定义背景" />
+              <div class="image-actions">
+                <button class="action-btn move-left" @click.stop="moveImage(index, -1)" :disabled="index === 0">
+                  ←
+                </button>
+                <button class="action-btn move-right" @click.stop="moveImage(index, 1)" :disabled="index === customBackgrounds.length - 1">
+                  →
+                </button>
+                <button class="action-btn delete-btn" @click.stop="deleteImage(index)">
+                  ✕
+                </button>
+              </div>
+              <div v-if="selectedImageIndex === index" class="image-check">✓</div>
+            </div>
           </div>
         </div>
 
@@ -226,6 +263,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import userImagesService from '../../services/userImages';
+import userSettingsService from '../../services/userSettings';
 
 const router = useRouter();
 const fileInput = ref<HTMLInputElement | null>(null);
@@ -233,6 +272,12 @@ const fileInput = ref<HTMLInputElement | null>(null);
 interface GradientOption {
   name: string;
   value: string;
+}
+
+interface CustomBackground {
+  id: number;
+  imageData: string;
+  sortOrder: number;
 }
 
 const gradients: GradientOption[] = [
@@ -254,10 +299,12 @@ const backgroundMode = ref<'color' | 'cover' | 'custom'>('color');
 const selectedColorIndex = ref(0);
 const coverOpacity = ref(0.3);
 const coverBlur = ref(8);
-const customBackground = ref('');
+const customBackgrounds = ref<CustomBackground[]>([]);
+const selectedImageIndex = ref(0);
 const customOpacity = ref(0.5);
 const customBlur = ref(5);
 const showSuccessToast = ref(false);
+const loadingImages = ref(true);
 
 const selectedGradient = computed(() => gradients[selectedColorIndex.value]?.value || gradients[0].value);
 
@@ -273,9 +320,10 @@ const previewStyle = computed(() => {
     return {
       background: `linear-gradient(135deg, #667eea 0%, #764ba2 100%)`,
     };
-  } else if (backgroundMode.value === 'custom' && customBackground.value) {
+  } else if (backgroundMode.value === 'custom' && customBackgrounds.value.length > 0) {
+    const selectedImage = customBackgrounds.value[selectedImageIndex.value];
     return {
-      backgroundImage: `url(${customBackground.value})`,
+      backgroundImage: `url(${selectedImage.imageData})`,
       backgroundSize: 'cover',
       backgroundPosition: 'center',
     };
@@ -289,7 +337,7 @@ const previewOverlayStyle = computed(() => {
       background: `rgba(0, 0, 0, ${coverOpacity.value})`,
       backdropFilter: `blur(${coverBlur.value}px)`,
     };
-  } else if (backgroundMode.value === 'custom' && customBackground.value) {
+  } else if (backgroundMode.value === 'custom' && customBackgrounds.value.length > 0) {
     return {
       background: `rgba(0, 0, 0, ${customOpacity.value})`,
       backdropFilter: `blur(${customBlur.value}px)`,
@@ -312,58 +360,122 @@ const selectColor = (index: number) => {
   saveSettings();
 };
 
-const triggerUpload = () => {
-  fileInput.value?.click();
-};
-
-const handleFileSelect = (event: Event) => {
-  const target = event.target as HTMLInputElement;
-  const file = target.files?.[0];
-  if (file) {
-    processFile(file);
-  }
-};
-
-const handleDrop = (event: DragEvent) => {
-  const file = event.dataTransfer?.files[0];
-  if (file && file.type.startsWith('image/')) {
-    processFile(file);
-  }
-};
-
-const processFile = (file: File) => {
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    customBackground.value = e.target?.result as string;
-    saveSettings();
-  };
-  reader.readAsDataURL(file);
-};
-
-const removeCustomBackground = () => {
-  customBackground.value = '';
+const selectImage = (index: number) => {
+  selectedImageIndex.value = index;
   saveSettings();
 };
 
-const saveSettings = () => {
+const triggerUpload = async () => {
+  if (customBackgrounds.value.length >= 6) {
+    return;
+  }
+  fileInput.value?.click();
+};
+
+const handleFileSelect = async (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+  if (file && customBackgrounds.value.length < 6) {
+    await processFile(file);
+  }
+  target.value = '';
+};
+
+const handleDrop = async (event: DragEvent) => {
+  const file = event.dataTransfer?.files[0];
+  if (file && file.type.startsWith('image/') && customBackgrounds.value.length < 6) {
+    await processFile(file);
+  }
+};
+
+const processFile = async (file: File) => {
+  try {
+    const result = await userImagesService.uploadImage(file, 'bookmark_background');
+    customBackgrounds.value.push({
+      id: result.id,
+      imageData: result.imageData,
+      sortOrder: result.sortOrder
+    });
+    saveSettings();
+  } catch (error) {
+    console.error('上传图片失败:', error);
+  }
+};
+
+const moveImage = async (index: number, direction: number) => {
+  const newIndex = index + direction;
+  if (newIndex < 0 || newIndex >= customBackgrounds.value.length) {
+    return;
+  }
+
+  const temp = customBackgrounds.value[index];
+  customBackgrounds.value[index] = customBackgrounds.value[newIndex];
+  customBackgrounds.value[newIndex] = temp;
+
+  const imageIds = customBackgrounds.value.map(img => img.id);
+  await userImagesService.reorderImages(imageIds, 'bookmark_background');
+
+  saveSettings();
+};
+
+const deleteImage = async (index: number) => {
+  const image = customBackgrounds.value[index];
+  try {
+    await userImagesService.deleteImage(image.id, 'bookmark_background');
+    customBackgrounds.value.splice(index, 1);
+    
+    if (selectedImageIndex.value >= customBackgrounds.value.length) {
+      selectedImageIndex.value = Math.max(0, customBackgrounds.value.length - 1);
+    }
+    
+    saveSettings();
+  } catch (error) {
+    console.error('删除图片失败:', error);
+  }
+};
+
+const saveSettings = async () => {
+  const selectedImage = customBackgrounds.value[selectedImageIndex.value];
   const settings = {
     backgroundMode: backgroundMode.value,
     selectedColorIndex: selectedColorIndex.value,
     coverOpacity: coverOpacity.value,
     coverBlur: coverBlur.value,
-    customBackground: customBackground.value,
+    selectedImageIndex: selectedImageIndex.value,
+    customBackground: selectedImage?.imageData || '',
     customOpacity: customOpacity.value,
     customBlur: customBlur.value,
   };
-  localStorage.setItem('bookmarkSettings', JSON.stringify(settings));
   
-  showSuccessToast.value = true;
-  setTimeout(() => {
-    showSuccessToast.value = false;
-  }, 2000);
+  try {
+    await userSettingsService.saveSettings(settings, 'high');
+    localStorage.setItem('bookmarkSettings', JSON.stringify(settings));
+    
+    showSuccessToast.value = true;
+    setTimeout(() => {
+      showSuccessToast.value = false;
+    }, 2000);
+  } catch (error) {
+    console.error('保存设置失败:', error);
+    localStorage.setItem('bookmarkSettings', JSON.stringify(settings));
+  }
 };
 
-const loadSettings = () => {
+const loadSettings = async () => {
+  loadingImages.value = true;
+  try {
+    const images = await userImagesService.getImages('bookmark_background');
+    customBackgrounds.value = images.map(img => ({
+      id: img.id,
+      imageData: img.imageData,
+      sortOrder: img.sortOrder
+    }));
+  } catch (error) {
+    console.error('加载图片失败:', error);
+  } finally {
+    loadingImages.value = false;
+  }
+
   const saved = localStorage.getItem('bookmarkSettings');
   if (saved) {
     try {
@@ -372,7 +484,7 @@ const loadSettings = () => {
       selectedColorIndex.value = settings.selectedColorIndex || 0;
       coverOpacity.value = settings.coverOpacity ?? 0.3;
       coverBlur.value = settings.coverBlur ?? 8;
-      customBackground.value = settings.customBackground || '';
+      selectedImageIndex.value = settings.selectedImageIndex || 0;
       customOpacity.value = settings.customOpacity ?? 0.5;
       customBlur.value = settings.customBlur ?? 5;
     } catch (error) {
@@ -542,6 +654,101 @@ onMounted(() => {
   background-color: var(--bg-hover, #f0f0f0);
 }
 
+.preview-images-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  width: 100%;
+}
+
+@media (min-width: 480px) {
+  .preview-images-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}
+
+.preview-image-item {
+  position: relative;
+  width: 40px;
+  height: 30px;
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.preview-image-item:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.preview-image-item.active {
+  border-color: var(--primary-color, #ff6b35);
+}
+
+.preview-image-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.preview-image-check {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 12px;
+  height: 12px;
+  background-color: var(--primary-color, #ff6b35);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: bold;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.preview-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 30px;
+  background-color: var(--bg-hover, #f0f0f0);
+  border-radius: 4px;
+  font-size: 10px;
+  color: var(--text-hint, #999);
+  font-weight: 500;
+}
+
+.preview-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  color: var(--text-hint, #999);
+  font-size: 12px;
+}
+
+.loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-color, #ddd);
+  border-top-color: var(--primary-color, #ff6b35);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .preview-custom img {
   width: 100%;
   height: 100%;
@@ -672,9 +879,148 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
-.upload-area:hover {
+.upload-area:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.upload-area:hover:not(:disabled) {
   border-color: var(--primary-color, #ff6b35);
   background-color: rgba(255, 107, 53, 0.02);
+}
+
+.image-upload-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.images-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  gap: 12px;
+}
+
+.image-item {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 3px solid transparent;
+  transition: all 0.2s;
+}
+
+.image-item:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.image-item.active {
+  border-color: var(--primary-color, #ff6b35);
+  box-shadow: 0 0 0 2px rgba(255, 107, 53, 0.3);
+}
+
+.image-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.image-actions {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.image-item:hover .image-actions {
+  opacity: 1;
+}
+
+.action-btn {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.9);
+  color: var(--text-primary, #333);
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.action-btn:hover:not(:disabled) {
+  background-color: var(--primary-color, #ff6b35);
+  color: white;
+}
+
+.action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.delete-btn {
+  background-color: rgba(244, 67, 54, 0.9);
+  color: white;
+}
+
+.delete-btn:hover:not(:disabled) {
+  background-color: #d32f2f;
+}
+
+.image-check {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  background-color: var(--primary-color, #ff6b35);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.upload-count {
+  font-size: 12px;
+  color: var(--text-hint, #999);
+  margin-top: 4px;
+}
+
+.preview-count {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+}
+
+@media (max-width: 480px) {
+  .images-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  .image-item {
+    aspect-ratio: 1;
+  }
 }
 
 .upload-preview {
