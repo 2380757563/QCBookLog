@@ -185,15 +185,29 @@
         <div class="form-row">
           <div class="form-item">
             <label class="form-label">评分（豆瓣）</label>
-            <div class="rating-input">
-              <span
-                v-for="i in 5"
-                :key="i"
-                class="rating-star"
-                :class="{ active: i <= Math.round((form.rating || 0) / 2) }"
-                @click="form.rating = i * 2"
-              >★</span>
-              <span class="rating-value">{{ form.rating || 0 }}</span>
+            <div class="rating-container">
+              <div class="rating-stars-half">
+                <span
+                  v-for="i in 5"
+                  :key="i"
+                  class="rating-star-half"
+                  :class="{
+                    'full': (form.rating || 0) >= i * 2,
+                    'half': (form.rating || 0) >= i * 2 - 1 && (form.rating || 0) < i * 2
+                  }"
+                  @click="handleDoubanRatingClick($event, i)"
+                >★</span>
+              </div>
+              <input 
+                type="number" 
+                v-model.number="doubanRatingInput" 
+                class="form-input douban-rating-input"
+                min="0" 
+                max="10" 
+                step="0.5"
+                placeholder="0-10"
+                @input="handleDoubanRatingInput"
+              />
             </div>
           </div>
         </div>
@@ -202,25 +216,28 @@
           <div class="form-item">
             <label class="form-label">个人评分</label>
             <div class="personal-rating-container">
+              <div class="rating-stars-half">
+                <span
+                  v-for="i in 5"
+                  :key="i"
+                  class="rating-star-half personal"
+                  :class="{
+                    'full': (form.personal_rating || 0) >= i * 2,
+                    'half': (form.personal_rating || 0) >= i * 2 - 1 && (form.personal_rating || 0) < i * 2
+                  }"
+                  @click="handlePersonalRatingClick($event, i)"
+                >★</span>
+              </div>
               <input 
                 type="number" 
                 v-model.number="personalRatingInput" 
                 class="form-input personal-rating-input"
                 min="0.1" 
                 max="10.0" 
-                step="0.1"
+                step="0.5"
                 placeholder="0.1-10.0"
                 @input="handlePersonalRatingInput"
               />
-              <div class="personal-rating-stars">
-                <span
-                  v-for="i in 10"
-                  :key="i"
-                  class="rating-star-small"
-                  :class="{ active: i <= (form.personal_rating || 0) }"
-                  @click="setPersonalRatingFromStars(i)"
-                >★</span>
-              </div>
             </div>
           </div>
         </div>
@@ -678,6 +695,33 @@ const toggleWants = () => {
   }
 };
 
+const doubanRatingInput = ref<number | undefined>(undefined);
+
+const handleDoubanRatingInput = () => {
+  let value = doubanRatingInput.value;
+  if (value !== undefined) {
+    if (value < 0) value = 0;
+    if (value > 10) value = 10;
+    value = Math.round(value * 2) / 2;
+    form.rating = value;
+    doubanRatingInput.value = value;
+  }
+};
+
+const handleDoubanRatingClick = (event: MouseEvent, starIndex: number) => {
+  const target = event.currentTarget as HTMLElement;
+  const rect = target.getBoundingClientRect();
+  const clickX = event.clientX - rect.left;
+  const isHalf = clickX < rect.width / 2;
+  
+  if (isHalf) {
+    form.rating = starIndex * 2 - 1;
+  } else {
+    form.rating = starIndex * 2;
+  }
+  doubanRatingInput.value = form.rating;
+};
+
 const personalRatingInput = ref<number | undefined>(undefined);
 
 const handlePersonalRatingInput = () => {
@@ -685,22 +729,37 @@ const handlePersonalRatingInput = () => {
   if (value !== undefined) {
     if (value < 0.1) value = 0.1;
     if (value > 10.0) value = 10.0;
-    value = Math.round(value * 10) / 10;
+    value = Math.round(value * 2) / 2;
     form.personal_rating = value;
     personalRatingInput.value = value;
     form.personal_rating_date = new Date().toISOString();
   }
 };
 
-const setPersonalRatingFromStars = (starCount: number) => {
-  form.personal_rating = starCount;
-  personalRatingInput.value = starCount;
+const handlePersonalRatingClick = (event: MouseEvent, starIndex: number) => {
+  const target = event.currentTarget as HTMLElement;
+  const rect = target.getBoundingClientRect();
+  const clickX = event.clientX - rect.left;
+  const isHalf = clickX < rect.width / 2;
+  
+  if (isHalf) {
+    form.personal_rating = starIndex * 2 - 1;
+  } else {
+    form.personal_rating = starIndex * 2;
+  }
+  personalRatingInput.value = form.personal_rating;
   form.personal_rating_date = new Date().toISOString();
 };
 
 watch(() => form.personal_rating, (newVal) => {
   if (newVal !== undefined && newVal !== null) {
     personalRatingInput.value = newVal;
+  }
+});
+
+watch(() => form.rating, (newVal) => {
+  if (newVal !== undefined && newVal !== null) {
+    doubanRatingInput.value = newVal;
   }
 });
 
@@ -898,6 +957,7 @@ const validateForm = (): { valid: boolean; errors: string[] } => {
         note: saveData.note,
         purchaseDate: saveData.purchaseDate,
         publishYear: saveData.publishYear,
+        rating: saveData.rating,
         groups: saveData.groups || [],
         favorite: saveData.favorite || 0,
         favorite_date: saveData.favorite_date || null,
@@ -990,7 +1050,8 @@ const validateForm = (): { valid: boolean; errors: string[] } => {
 
         const updatedProgress = await bookService.updateReadingProgress(
           parseInt(savedBook.id.toString(), 10),
-          readPages
+          readPages,
+          readerStore.currentReaderId
         );
 
         // 更新本地书籍对象的阅读进度
@@ -1042,6 +1103,10 @@ const loadBookData = async () => {
       personal_rating: book.personal_rating ?? 0,
       personal_rating_date: book.personal_rating_date ?? null
     });
+
+    if (book.rating !== undefined && book.rating !== null) {
+      doubanRatingInput.value = book.rating;
+    }
 
     if (book.personal_rating) {
       personalRatingInput.value = book.personal_rating;
@@ -1391,6 +1456,60 @@ onMounted(async () => {
 }
 
 /* 评分 */
+.rating-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.rating-stars-half {
+  display: flex;
+  gap: 4px;
+}
+
+.rating-star-half {
+  font-size: 24px;
+  color: #ddd;
+  cursor: pointer;
+  transition: color 0.2s;
+  position: relative;
+}
+
+.rating-star-half.full {
+  color: #ffc107;
+}
+
+.rating-star-half.half {
+  background: linear-gradient(90deg, #ffc107 50%, #ddd 50%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.rating-star-half:hover {
+  color: #ffc107;
+}
+
+.rating-star-half.personal.full {
+  color: #ff9800;
+}
+
+.rating-star-half.personal.half {
+  background: linear-gradient(90deg, #ff9800 50%, #ddd 50%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.rating-star-half.personal:hover {
+  color: #ff9800;
+}
+
+.douban-rating-input {
+  width: 80px;
+  text-align: center;
+}
+
 .rating-input {
   display: flex;
   align-items: center;
@@ -1420,12 +1539,12 @@ onMounted(async () => {
 
 .personal-rating-container {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  gap: 12px;
 }
 
 .personal-rating-input {
-  width: 120px;
+  width: 80px;
   text-align: center;
 }
 

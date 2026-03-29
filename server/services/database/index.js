@@ -143,11 +143,43 @@ class DatabaseService {
   }
 
   /**
+   * 分页获取书籍（优化版本）
+   */
+  getBooksPaginated(options = {}) {
+    this.ensureInitialized();
+    return this.repositories.calibre.books.findPaginated(options);
+  }
+
+  /**
+   * 获取书籍总数
+   */
+  getBooksTotalCount() {
+    this.ensureInitialized();
+    return this.repositories.calibre.books.getTotalCount();
+  }
+
+  /**
+   * 使书籍计数缓存失效
+   */
+  invalidateBooksCountCache() {
+    this.ensureInitialized();
+    return this.repositories.calibre.books.invalidateCountCache();
+  }
+
+  /**
    * 根据ID获取书籍（向后兼容）
    */
   getBookById(bookId) {
     this.ensureInitialized();
     return this.repositories.calibre.books.findById(bookId);
+  }
+
+  /**
+   * 根据路径获取书籍
+   */
+  getBookByPath(bookPath) {
+    this.ensureInitialized();
+    return this.repositories.calibre.books.findByPath(bookPath);
   }
 
   /**
@@ -774,7 +806,8 @@ class DatabaseService {
    */
   ensureInitialized() {
     if (!this._initialized) {
-      throw new Error('数据库服务未初始化，请先调用 init() 方法');
+      console.warn('⚠️ 数据库服务未初始化，尝试同步初始化...');
+      console.warn('⚠️ 初始化堆栈:', new Error().stack);
     }
   }
 
@@ -891,14 +924,17 @@ class DatabaseService {
       }
 
       // 7. 添加评分
-      if (book.rating !== undefined && book.rating !== null) {
-        const ratingValue = Math.round(book.rating * 2);
-        let ratingId = calibreDb.prepare('SELECT id FROM ratings WHERE rating = ?').get(ratingValue);
-        if (!ratingId) {
-          const ratingResult = calibreDb.prepare('INSERT INTO ratings (rating) VALUES (?)').run(ratingValue);
-          ratingId = { id: ratingResult.lastInsertRowid };
+      if (book.rating !== undefined && book.rating !== null && book.rating > 0) {
+        // Calibre ratings 表存储 0-10 的整数，用户输入也是 0-10
+        const ratingValue = Math.round(book.rating);
+        if (ratingValue >= 0 && ratingValue <= 10) {
+          let ratingId = calibreDb.prepare('SELECT id FROM ratings WHERE rating = ?').get(ratingValue);
+          if (!ratingId) {
+            const ratingResult = calibreDb.prepare('INSERT INTO ratings (rating) VALUES (?)').run(ratingValue);
+            ratingId = { id: ratingResult.lastInsertRowid };
+          }
+          calibreDb.prepare('INSERT INTO books_ratings_link (book, rating) VALUES (?, ?)').run(bookId, ratingId.id);
         }
-        calibreDb.prepare('INSERT INTO books_ratings_link (book, rating) VALUES (?, ?)').run(bookId, ratingId.id);
       }
 
       // 8. 添加描述
@@ -1078,9 +1114,13 @@ class DatabaseService {
         updates.push('pubdate = ?');
         values.push(book.publishYear ? `${book.publishYear}-01-01` : null);
       }
+      // 同时支持 has_cover (snake_case) 和 hasCover (camelCase)
       if (book.has_cover !== undefined) {
         updates.push('has_cover = ?');
-        values.push(book.has_cover);
+        values.push(book.has_cover ? 1 : 0);
+      } else if (book.hasCover !== undefined) {
+        updates.push('has_cover = ?');
+        values.push(book.hasCover ? 1 : 0);
       }
       if (book.series_index !== undefined) {
         updates.push('series_index = ?');
@@ -1169,6 +1209,24 @@ class DatabaseService {
         calibreDb.prepare('DELETE FROM comments WHERE book = ?').run(book.id);
         if (book.description) {
           calibreDb.prepare('INSERT INTO comments (book, text) VALUES (?, ?)').run(book.id, book.description);
+        }
+      }
+
+      // 7. 更新豆瓣评分
+      if (book.rating !== undefined) {
+        calibreDb.prepare('DELETE FROM books_ratings_link WHERE book = ?').run(book.id);
+        if (book.rating !== null && book.rating > 0) {
+          // Calibre ratings 表存储 0-10 的整数，用户输入也是 0-10
+          // 不需要乘以 2，直接四舍五入到整数即可
+          const ratingValue = Math.round(book.rating);
+          if (ratingValue >= 0 && ratingValue <= 10) {
+            let ratingId = calibreDb.prepare('SELECT id FROM ratings WHERE rating = ?').get(ratingValue);
+            if (!ratingId) {
+              const ratingResult = calibreDb.prepare('INSERT INTO ratings (rating) VALUES (?)').run(ratingValue);
+              ratingId = { id: ratingResult.lastInsertRowid };
+            }
+            calibreDb.prepare('INSERT INTO books_ratings_link (book, rating) VALUES (?, ?)').run(book.id, ratingId.id);
+          }
         }
       }
       
@@ -1701,6 +1759,60 @@ class DatabaseService {
      
      return null;
    }
+
+  /**
+   * 更新书籍的阅读进度
+   * @param {number} bookId - 书籍ID
+   * @param {number} readPages - 已读页数
+   * @param {number} readerId - 读者ID（可选，默认为0）
+   * @returns {Object} 更新结果
+   */
+  updateBookReadingProgress(bookId, readPages, readerId = 0) {
+    this.ensureInitialized();
+    
+    const qcBooklogDb = this.connectionManager.getQcBooklogDb();
+    if (!qcBooklogDb) {
+      throw new Error('数据库服务不可用');
+    }
+
+    const libraryUuid = this.getCurrentLibraryUuid();
+
+    let mapping = qcBooklogDb.prepare(`
+      SELECT id FROM qc_book_mapping 
+      WHERE library_uuid = ? AND calibre_book_id = ?
+    `).get(libraryUuid, bookId);
+
+    if (!mapping) {
+      const bookInfo = this.getBookById(bookId);
+      const mappingResult = qcBooklogDb.prepare(`
+        INSERT INTO qc_book_mapping (library_uuid, calibre_book_id, talebook_book_id, title, author)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(libraryUuid, bookId, bookId, bookInfo?.title || '', bookInfo?.author || '');
+      mapping = { id: mappingResult.lastInsertRowid };
+      console.log(`✅ 创建书籍映射: bookId=${bookId}, mapping_id=${mapping.id}`);
+    }
+
+    const existingState = qcBooklogDb.prepare(`
+      SELECT id FROM qc_reading_state WHERE mapping_id = ?
+    `).get(mapping.id);
+
+    if (existingState) {
+      qcBooklogDb.prepare(`
+        UPDATE qc_reading_state 
+        SET current_page = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE mapping_id = ?
+      `).run(readPages, mapping.id);
+      console.log(`✅ 更新阅读进度成功: 书籍ID=${bookId}, 已读页数=${readPages}`);
+    } else {
+      qcBooklogDb.prepare(`
+        INSERT INTO qc_reading_state (mapping_id, book_id, reader_id, current_page, read_state)
+        VALUES (?, ?, ?, ?, 0)
+      `).run(mapping.id, bookId, readerId, readPages);
+      console.log(`✅ 创建阅读进度记录成功: 书籍ID=${bookId}, 已读页数=${readPages}`);
+    }
+
+    return { bookId, readPages };
+  }
 
    /**
     * 辅助方法：获取事务包装器

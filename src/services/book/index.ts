@@ -204,6 +204,28 @@ class BookServiceImpl implements BookService {
     return bookApi.getAll(readerId);
   }
 
+  async getBooksPaginated(options: {
+    page?: number;
+    pageSize?: number;
+    readerId?: number;
+    sortBy?: string;
+    sortOrder?: string;
+  } = {}): Promise<{
+    list: Book[];
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+    hasMore: boolean;
+  }> {
+    return bookApi.getPaginated(options);
+  }
+
+  async getBooksCount(): Promise<number> {
+    const result = await bookApi.getCount();
+    return result.count;
+  }
+
   async batchAddBooks(books: Omit<Book, 'id' | 'createTime' | 'updateTime'>[]): Promise<Book[]> {
     const progressStore = useProgressStore();
     const addedBooks: Book[] = [];
@@ -298,6 +320,11 @@ class BookServiceImpl implements BookService {
     return groupApi.getAll();
   }
 
+  async getGroupBooks(groupId: string): Promise<number[]> {
+    const result = await groupApi.getBooks(groupId);
+    return result.bookIds;
+  }
+
   // 标签管理
   async getAllTags(): Promise<string[]> {
     return tagApi.getAll();
@@ -316,8 +343,8 @@ class BookServiceImpl implements BookService {
     return bookApi.updateReadingState(bookId, readingState, readerId);
   }
 
-  async updateReadingProgress(bookId: number, readPages: number): Promise<{ bookId: number; readPages: number }> {
-    return bookApi.updateReadingProgress(bookId, readPages);
+  async updateReadingProgress(bookId: number, readPages: number, readerId?: number): Promise<{ bookId: number; readPages: number }> {
+    return bookApi.updateReadingProgress(bookId, readPages, readerId);
   }
 }
 

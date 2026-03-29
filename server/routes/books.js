@@ -68,6 +68,168 @@ router.get('/', async (req, res) => {
 });
 
 /**
+ * 分页获取书籍（性能优化版本）
+ */
+router.get('/paginated', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 25;
+    const readerId = parseInt(req.query.readerId) || 0;
+    const sortBy = req.query.sortBy || 'last_modified';
+    const sortOrder = req.query.sortOrder || 'DESC';
+
+    console.log(`📄 分页请求: page=${page}, pageSize=${pageSize}, readerId=${readerId}`);
+
+    const result = await calibreService.getBooksPaginated({
+      page,
+      pageSize,
+      readerId,
+      sortBy,
+      sortOrder
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('⚠️ 分页获取书籍失败:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * 获取书籍总数
+ */
+router.get('/count', async (req, res) => {
+  try {
+    const count = await calibreService.getBooksTotalCount();
+    res.json({ count });
+  } catch (error) {
+    console.error('⚠️ 获取书籍总数失败:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * 获取书籍的阅读状态
+ * 注意：此路由必须在 /:id 之前定义，否则会被 /:id 匹配
+ */
+router.get('/:id/reading-state', async (req, res) => {
+  try {
+    const bookId = parseInt(req.params.id);
+    if (isNaN(bookId)) {
+      return res.status(400).json({ error: 'Invalid book ID' });
+    }
+
+    // 从查询参数获取readerId，默认为0
+    const readerId = parseInt(req.query.readerId) || 0;
+
+    const readingState = databaseService.getReadingState(bookId, readerId);
+    res.json(readingState);
+  } catch (error) {
+    console.error('❌ 获取阅读状态失败:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * 更新书籍的阅读状态
+ * 注意：此路由必须在 /:id 之前定义，否则会被 /:id 匹配
+ */
+router.put('/:id/reading-state', async (req, res) => {
+  try {
+    const bookId = parseInt(req.params.id);
+    if (isNaN(bookId)) {
+      return res.status(400).json({ error: 'Invalid book ID' });
+    }
+
+    // 从查询参数获取readerId，默认为0
+    const readerId = parseInt(req.query.readerId) || 0;
+
+    const readingState = req.body;
+
+    // 验证必需字段
+    if (readingState.read_state === undefined) {
+      return res.status(400).json({ error: 'read_state is required' });
+    }
+
+    // 获取书籍信息用于活动日志
+    let bookInfo = null;
+    try {
+      bookInfo = await calibreService.getBookFromCalibreById(bookId);
+    } catch (e) {
+      console.warn('⚠️ 获取书籍信息失败:', e.message);
+    }
+
+    const updatedState = databaseService.updateReadingState(bookId, readingState, readerId);
+
+    // 记录活动日志
+    try {
+      const stateMap = { 0: '未读', 1: '在读', 2: '已读' };
+      activityService.logActivity({
+        type: 'reading_state_changed',
+        userId: readerId,
+        readerId: readerId,
+        bookId: bookId,
+        bookTitle: bookInfo?.title || null,
+        bookAuthor: bookInfo?.author || null,
+        bookCover: bookInfo?.hasCover ? `/api/book/${bookId}/cover` : null,
+        metadata: {
+          read_state: readingState.read_state,
+          read_state_label: stateMap[readingState.read_state] || '未知',
+          favorite: readingState.favorite,
+          wants: readingState.wants
+        }
+      });
+    } catch (logError) {
+      console.warn('⚠️ 记录活动日志失败:', logError.message);
+    }
+
+    // 清除缓存，确保下次获取时能看到最新的阅读状态
+    calibreService.clearBookCache();
+    calibreService.clearBooksListCache();
+    console.log(`🗑️ 已清除书籍 ${bookId} 的缓存`);
+
+    res.json(updatedState);
+  } catch (error) {
+    console.error('❌ 更新阅读状态失败:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * 更新书籍的阅读进度
+ * PUT /api/books/:id/reading-progress
+ * 注意：此路由必须在 /:id 之前定义，否则会被 /:id 匹配
+ */
+router.put('/:id/reading-progress', async (req, res) => {
+  try {
+    const bookId = parseInt(req.params.id);
+    if (isNaN(bookId)) {
+      return res.status(400).json({ error: 'Invalid book ID' });
+    }
+
+    const { readPages } = req.body;
+    const readerId = parseInt(req.query.readerId) || 0;
+
+    // 验证必需字段
+    if (readPages === undefined || readPages === null) {
+      return res.status(400).json({ error: 'readPages is required' });
+    }
+
+    const result = databaseService.updateBookReadingProgress(bookId, readPages, readerId);
+
+    // 清除缓存，确保下次获取时能看到最新的阅读进度
+    calibreService.clearBookCache();
+    calibreService.clearBooksListCache();
+    console.log(`🗑️ 已清除书籍 ${bookId} 的缓存`);
+
+    res.json(result);
+  } catch (error) {
+    console.error('❌ 更新阅读进度失败:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * 根据ID获取书籍
  */
 router.get('/:id', async (req, res) => {
@@ -908,123 +1070,6 @@ router.get('/export', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="books_${new Date().toISOString().split('T')[0]}.json"`);
     res.json(books);
   } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-/**
- * 获取书籍的阅读状态
- */
-router.get('/:id/reading-state', async (req, res) => {
-  try {
-    const bookId = parseInt(req.params.id);
-    if (isNaN(bookId)) {
-      return res.status(400).json({ error: 'Invalid book ID' });
-    }
-
-    // 从查询参数获取readerId，默认为0
-    const readerId = parseInt(req.query.readerId) || 0;
-
-    const readingState = databaseService.getReadingState(bookId, readerId);
-    res.json(readingState);
-  } catch (error) {
-    console.error('❌ 获取阅读状态失败:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-/**
- * 更新书籍的阅读状态
- */
-router.put('/:id/reading-state', async (req, res) => {
-  try {
-    const bookId = parseInt(req.params.id);
-    if (isNaN(bookId)) {
-      return res.status(400).json({ error: 'Invalid book ID' });
-    }
-
-    // 从查询参数获取readerId，默认为0
-    const readerId = parseInt(req.query.readerId) || 0;
-
-    const readingState = req.body;
-
-    // 验证必需字段
-    if (readingState.read_state === undefined) {
-      return res.status(400).json({ error: 'read_state is required' });
-    }
-
-    // 获取书籍信息用于活动日志
-    let bookInfo = null;
-    try {
-      bookInfo = await calibreService.getBookFromCalibreById(bookId);
-    } catch (e) {
-      console.warn('⚠️ 获取书籍信息失败:', e.message);
-    }
-
-    const updatedState = databaseService.updateReadingState(bookId, readingState, readerId);
-
-    // 记录活动日志
-    try {
-      const stateMap = { 0: '未读', 1: '在读', 2: '已读' };
-      activityService.logActivity({
-        type: 'reading_state_changed',
-        userId: readerId,
-        readerId: readerId,
-        bookId: bookId,
-        bookTitle: bookInfo?.title || null,
-        bookAuthor: bookInfo?.author || null,
-        bookCover: bookInfo?.hasCover ? `/api/book/${bookId}/cover` : null,
-        metadata: {
-          read_state: readingState.read_state,
-          read_state_label: stateMap[readingState.read_state] || '未知',
-          favorite: readingState.favorite,
-          wants: readingState.wants
-        }
-      });
-    } catch (logError) {
-      console.warn('⚠️ 记录活动日志失败:', logError.message);
-    }
-
-    // 清除缓存，确保下次获取时能看到最新的阅读状态
-    calibreService.clearBookCache();
-    calibreService.clearBooksListCache();
-    console.log(`🗑️ 已清除书籍 ${bookId} 的缓存`);
-
-    res.json(updatedState);
-  } catch (error) {
-    console.error('❌ 更新阅读状态失败:', error.message);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-/**
- * 更新书籍的阅读进度
- * PUT /api/books/:id/reading-progress
- */
-router.put('/:id/reading-progress', async (req, res) => {
-  try {
-    const bookId = parseInt(req.params.id);
-    if (isNaN(bookId)) {
-      return res.status(400).json({ error: 'Invalid book ID' });
-    }
-
-    const { readPages } = req.body;
-
-    // 验证必需字段
-    if (readPages === undefined || readPages === null) {
-      return res.status(400).json({ error: 'readPages is required' });
-    }
-
-    const result = databaseService.updateBookReadingProgress(bookId, readPages);
-
-    // 清除缓存，确保下次获取时能看到最新的阅读进度
-    calibreService.clearBookCache();
-    calibreService.clearBooksListCache();
-    console.log(`🗑️ 已清除书籍 ${bookId} 的缓存`);
-
-    res.json(result);
-  } catch (error) {
-    console.error('❌ 更新阅读进度失败:', error.message);
     res.status(500).json({ error: error.message });
   }
 });
