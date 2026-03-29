@@ -2,7 +2,7 @@
 
 NAMESPACE="unripora"
 REGISTRY="crpi-bpk9dy6331fn5ymt.cn-hangzhou.personal.cr.aliyuncs.com"
-TAG="20260304P"
+TAG="20260329"
 
 echo "Tagging backend image..."
 docker tag qc-booklog-backend:latest $REGISTRY/$NAMESPACE/qc-booklog-backend:$TAG
