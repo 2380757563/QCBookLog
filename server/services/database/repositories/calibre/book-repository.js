@@ -1,18 +1,20 @@
 /**
  * Calibre 书籍仓储
  * 处理书籍相关的数据库操作
+ * 优化版本：支持分页查询、索引优化
  */
 
 import BaseRepository from '../base-repository.js';
 
-/**
- * Calibre 书籍仓储类
- */
+const DEFAULT_PAGE_SIZE = 25;
+const MAX_PAGE_SIZE = 100;
+
 class BookRepository extends BaseRepository {
   constructor(db, talebookDb = null, qcBooklogDb = null) {
     super(db);
     this.talebookDb = talebookDb;
     this.qcBooklogDb = qcBooklogDb;
+    this._totalBooksCount = null;
   }
 
   setTalebookDb(talebookDb) {
@@ -21,6 +23,113 @@ class BookRepository extends BaseRepository {
 
   setQcBooklogDb(qcBooklogDb) {
     this.qcBooklogDb = qcBooklogDb;
+  }
+
+  getTotalCount() {
+    if (this._totalBooksCount !== null) {
+      return this._totalBooksCount;
+    }
+    try {
+      const result = this.queryOne('SELECT COUNT(*) as count FROM books');
+      this._totalBooksCount = result?.count || 0;
+      return this._totalBooksCount;
+    } catch (error) {
+      console.error('获取书籍总数失败:', error.message);
+      return 0;
+    }
+  }
+
+  invalidateCountCache() {
+    this._totalBooksCount = null;
+  }
+
+  findPaginated(options = {}) {
+    const {
+      readerId = 0,
+      page = 1,
+      pageSize = DEFAULT_PAGE_SIZE,
+      sortBy = 'last_modified',
+      sortOrder = 'DESC',
+      filters = {}
+    } = options;
+
+    const validPageSize = Math.min(Math.max(1, pageSize), MAX_PAGE_SIZE);
+    const validPage = Math.max(1, page);
+    const offset = (validPage - 1) * validPageSize;
+
+    console.log(`📄 分页查询: page=${validPage}, pageSize=${validPageSize}, offset=${offset}`);
+
+    if (!this.db) {
+      throw new Error('Calibre 数据库服务不可用');
+    }
+
+    this.db.pragma('wal_checkpoint(PASSIVE)');
+
+    const validSortFields = {
+      'last_modified': 'b.last_modified',
+      'timestamp': 'b.timestamp',
+      'title': 'b.title',
+      'pubdate': 'b.pubdate',
+      'id': 'b.id'
+    };
+    const sortField = validSortFields[sortBy] || 'b.last_modified';
+    const order = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
+    const query = `
+      SELECT
+        b.id,
+        b.title,
+        b.timestamp,
+        b.pubdate,
+        b.path,
+        b.uuid,
+        b.has_cover,
+        b.series_index,
+        b.last_modified,
+        (
+          SELECT GROUP_CONCAT(a.name, ' & ')
+          FROM authors a
+          JOIN books_authors_link bal ON a.id = bal.author
+          WHERE bal.book = b.id
+        ) as author,
+        (SELECT i.val FROM identifiers i WHERE i.book = b.id AND i.type = 'isbn') as isbn,
+        (SELECT r.rating FROM ratings r JOIN books_ratings_link brl ON r.id = brl.rating WHERE brl.book = b.id) as rating,
+        (SELECT c.text FROM comments c WHERE c.book = b.id) as description,
+        (SELECT p.name FROM publishers p WHERE p.id IN (SELECT publisher FROM books_publishers_link WHERE book = b.id)) as publisher,
+        (SELECT l.lang_code FROM languages l WHERE l.id IN (SELECT lang_code FROM books_languages_link WHERE book = b.id)) as language,
+        (SELECT s.name FROM series s WHERE s.id IN (SELECT bsl.series FROM books_series_link bsl WHERE bsl.book = b.id)) as series,
+        (
+          SELECT '[' || GROUP_CONCAT('"' || t.name || '"', ',') || ']'
+          FROM tags t
+          JOIN books_tags_link btl ON t.id = btl.tag
+          WHERE btl.book = b.id
+        ) as tags,
+        (
+          SELECT '[' || GROUP_CONCAT('"' || d.format || '"', ',') || ']'
+          FROM data d
+          WHERE d.book = b.id
+        ) as formats
+      FROM books b
+      ORDER BY ${sortField} ${order}
+      LIMIT ? OFFSET ?
+    `;
+
+    const books = this.queryAll(query, [validPageSize, offset]);
+    console.log(`✅ 分页查询到 ${books.length} 本书籍`);
+
+    const enrichedBooks = this.enrichBooks(books, readerId);
+
+    const total = this.getTotalCount();
+    const totalPages = Math.ceil(total / validPageSize);
+
+    return {
+      list: enrichedBooks,
+      total,
+      page: validPage,
+      pageSize: validPageSize,
+      totalPages,
+      hasMore: validPage < totalPages
+    };
   }
 
   /**
@@ -73,11 +182,9 @@ class BookRepository extends BaseRepository {
             WHERE btl.book = b.id
           ) as tags,
           (
-            SELECT CASE 
-              WHEN (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='data') = 0 THEN '[]'
-              WHEN (SELECT COUNT(*) FROM data WHERE book = b.id) = 0 THEN '[]'
-              ELSE (SELECT '[' || GROUP_CONCAT('"' || d.format || '"', ',') || ']' FROM data d WHERE d.book = b.id)
-            END
+            SELECT '[' || GROUP_CONCAT('"' || d.format || '"', ',') || ']'
+            FROM data d
+            WHERE d.book = b.id
           ) as formats
         FROM books b
         ORDER BY b.last_modified DESC
@@ -129,11 +236,9 @@ class BookRepository extends BaseRepository {
             WHERE btl.book = b.id
           ) as tags,
           (
-            SELECT CASE 
-              WHEN (SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='data') = 0 THEN '[]'
-              WHEN (SELECT COUNT(*) FROM data WHERE book = b.id) = 0 THEN '[]'
-              ELSE (SELECT '[' || GROUP_CONCAT('"' || d.format || '"', ',') || ']' FROM data d WHERE d.book = b.id)
-            END
+            SELECT '[' || GROUP_CONCAT('"' || d.format || '"', ',') || ']'
+            FROM data d
+            WHERE d.book = b.id
           ) as formats
         FROM books b
         WHERE b.id = ?
@@ -148,6 +253,62 @@ class BookRepository extends BaseRepository {
       return null;
     } catch (error) {
       console.error(`❌ 查找书籍 ID=${id} 失败:`, error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 根据路径查找书籍
+   */
+  findByPath(bookPath) {
+    try {
+      const query = `
+        SELECT
+          b.id,
+          b.title,
+          b.timestamp,
+          b.pubdate,
+          b.path,
+          b.uuid,
+          b.has_cover,
+          b.series_index,
+          b.last_modified,
+          (
+            SELECT GROUP_CONCAT(a.name, ' & ')
+            FROM authors a
+            JOIN books_authors_link bal ON a.id = bal.author
+            WHERE bal.book = b.id
+          ) as author,
+          (SELECT i.val FROM identifiers i WHERE i.book = b.id AND i.type = 'isbn') as isbn,
+          (SELECT r.rating FROM ratings r JOIN books_ratings_link brl ON r.id = brl.rating WHERE brl.book = b.id) as rating,
+          (SELECT c.text FROM comments c WHERE c.book = b.id) as description,
+          (SELECT p.name FROM publishers p WHERE p.id IN (SELECT publisher FROM books_publishers_link WHERE book = b.id)) as publisher,
+          (SELECT l.lang_code FROM languages l WHERE l.id IN (SELECT lang_code FROM books_languages_link WHERE book = b.id)) as language,
+          (SELECT s.name FROM series s WHERE s.id IN (SELECT bsl.series FROM books_series_link bsl WHERE bsl.book = b.id)) as series,
+          (
+            SELECT '[' || GROUP_CONCAT('"' || t.name || '"', ',') || ']'
+            FROM tags t
+            JOIN books_tags_link btl ON t.id = btl.tag
+            WHERE btl.book = b.id
+          ) as tags,
+          (
+            SELECT '[' || GROUP_CONCAT('"' || d.format || '"', ',') || ']'
+            FROM data d
+            WHERE d.book = b.id
+          ) as formats
+        FROM books b
+        WHERE b.path = ?
+      `;
+
+      const book = this.queryOne(query, [bookPath]);
+      
+      if (book) {
+        return this.enrichBook(book);
+      }
+
+      return null;
+    } catch (error) {
+      console.error(`❌ 查找书籍 path=${bookPath} 失败:`, error.message);
       throw error;
     }
   }
@@ -396,7 +557,7 @@ class BookRepository extends BaseRepository {
       try {
         const currentLibraryUuid = this.getCurrentLibraryUuid ? this.getCurrentLibraryUuid() : null;
         const readingStateQuery = `
-          SELECT m.calibre_book_id as book_id, rs.favorite, rs.wants, rs.read_state
+          SELECT m.calibre_book_id as book_id, rs.favorite, rs.wants, rs.read_state, rs.personal_rating, rs.personal_rating_date
           FROM qc_reading_state rs
           JOIN qc_book_mapping m ON rs.mapping_id = m.id
           WHERE m.calibre_book_id IN (${placeholders}) AND m.library_uuid = ? AND rs.reader_id = ?
@@ -513,7 +674,9 @@ class BookRepository extends BaseRepository {
         last_read_duration: bookData.last_read_duration || 0,
         favorite: readingStateMap.get(book.id)?.favorite || 0,
         wants: readingStateMap.get(book.id)?.wants || 0,
-        read_state: readingStateMap.get(book.id)?.read_state || 0
+        read_state: readingStateMap.get(book.id)?.read_state || 0,
+        personal_rating: readingStateMap.get(book.id)?.personal_rating || 0,
+        personal_rating_date: readingStateMap.get(book.id)?.personal_rating_date || null
       };
 
       try {
@@ -523,6 +686,9 @@ class BookRepository extends BaseRepository {
         enriched.tags = [];
         enriched.formats = [];
       }
+
+      const statusMap = { 0: '未读', 1: '在读', 2: '已读' };
+      enriched.readStatus = statusMap[enriched.read_state] || '未读';
 
       return enriched;
     });
@@ -672,13 +838,15 @@ class BookRepository extends BaseRepository {
       book_type: bookType,
       favorite: 0,
       wants: 0,
-      read_state: 0
+      read_state: 0,
+      personal_rating: 0,
+      personal_rating_date: null
     };
 
     if (this.talebookDb) {
       try {
         const readingState = this.talebookDb.prepare(`
-          SELECT favorite, wants, read_state
+          SELECT favorite, wants, read_state, personal_rating, personal_rating_date
           FROM reading_state
           WHERE book_id = ? AND reader_id = ?
         `).get(book.id, readerId);
@@ -687,6 +855,8 @@ class BookRepository extends BaseRepository {
           enriched.favorite = readingState.favorite || 0;
           enriched.wants = readingState.wants || 0;
           enriched.read_state = readingState.read_state || 0;
+          enriched.personal_rating = readingState.personal_rating || 0;
+          enriched.personal_rating_date = readingState.personal_rating_date || null;
         }
       } catch (error) {
         console.warn(`⚠️ 从 Talebook 获取书籍 ${book.id} 阅读状态失败:`, error.message);
@@ -695,7 +865,7 @@ class BookRepository extends BaseRepository {
       try {
         const currentLibraryUuid = this.getCurrentLibraryUuid ? this.getCurrentLibraryUuid() : null;
         const readingState = this.qcBooklogDb.prepare(`
-          SELECT rs.favorite, rs.wants, rs.read_state
+          SELECT rs.favorite, rs.wants, rs.read_state, rs.personal_rating, rs.personal_rating_date
           FROM qc_reading_state rs
           JOIN qc_book_mapping m ON rs.mapping_id = m.id
           WHERE m.calibre_book_id = ? AND m.library_uuid = ? AND rs.reader_id = ?
@@ -705,6 +875,8 @@ class BookRepository extends BaseRepository {
           enriched.favorite = readingState.favorite || 0;
           enriched.wants = readingState.wants || 0;
           enriched.read_state = readingState.read_state || 0;
+          enriched.personal_rating = readingState.personal_rating || 0;
+          enriched.personal_rating_date = readingState.personal_rating_date || null;
         }
       } catch (error) {
         console.warn(`⚠️ 从 QCBookLog 获取书籍 ${book.id} 阅读状态失败:`, error.message);
@@ -717,6 +889,18 @@ class BookRepository extends BaseRepository {
     } catch (e) {
       enriched.tags = [];
       enriched.formats = [];
+    }
+
+    const statusMap = { 0: '未读', 1: '在读', 2: '已读' };
+    enriched.readStatus = statusMap[enriched.read_state] || '未读';
+
+    const hasCover = !!enriched.has_cover;
+    console.log(`📖 [enrichBook] 书籍ID=${enriched.id}, has_cover=${enriched.has_cover}, hasCover=${hasCover}, path=${enriched.path}`);
+    if (hasCover && enriched.path) {
+      enriched.coverUrl = `/api/static/calibre/${encodeURIComponent(enriched.path)}/cover.jpg`;
+      console.log(`📖 [enrichBook] 生成封面URL: ${enriched.coverUrl}`);
+    } else {
+      console.log(`📖 [enrichBook] 未生成封面URL, hasCover=${hasCover}, path=${enriched.path || 'undefined'}`);
     }
 
     return enriched;

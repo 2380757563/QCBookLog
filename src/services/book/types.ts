@@ -12,8 +12,11 @@ export interface Book {
   edge1?: number;
   edge2?: number;
   book_type: number;
+  has_cover?: number | boolean;
+  hasCover?: boolean;
   coverUrl?: string;
   localCoverData?: string;
+  path?: string;
   purchaseDate?: string;
   purchasePrice?: number;
   standardPrice?: number;
@@ -110,5 +113,5 @@ export interface BookService {
   // 阅读状态管理
   getReadingState(bookId: number, readerId?: number): Promise<ReadingState>;
   updateReadingState(bookId: number, readingState: Partial<ReadingState>, readerId?: number): Promise<ReadingState>;
-  updateReadingProgress(bookId: number, readPages: number): Promise<{ bookId: number; readPages: number }>;
+  updateReadingProgress(bookId: number, readPages: number, readerId?: number): Promise<{ bookId: number; readPages: number }>;
 }

@@ -248,7 +248,7 @@
       </div>
 
       <div class="version-info">
-        <p>青橙读书记录 v1.0.0</p>
+        <p>青橙读书记录 v0.9.84</p>
         <p>Made with ❤️ for readers</p>
       </div>
     </div>

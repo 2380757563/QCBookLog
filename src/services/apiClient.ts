@@ -113,6 +113,34 @@ export const bookApi = {
   },
 
   /**
+   * 分页获取书籍
+   * @param options 分页选项
+   */
+  getPaginated: (options: {
+    page?: number;
+    pageSize?: number;
+    readerId?: number;
+    sortBy?: string;
+    sortOrder?: string;
+  } = {}) => {
+    const params = new URLSearchParams();
+    if (options.page) params.append('page', String(options.page));
+    if (options.pageSize) params.append('pageSize', String(options.pageSize));
+    if (options.readerId) params.append('readerId', String(options.readerId));
+    if (options.sortBy) params.append('sortBy', options.sortBy);
+    if (options.sortOrder) params.append('sortOrder', options.sortOrder);
+    const queryString = params.toString();
+    return apiRequest(`/books${queryString ? '?' + queryString : ''}`);
+  },
+
+  /**
+   * 获取书籍总数
+   */
+  getCount: () => {
+    return apiRequest('/books/count');
+  },
+
+  /**
    * 根据ID获取书籍
    * @param id 书籍ID
    * @param readerId 读者ID（可选，默认为0）
@@ -232,9 +260,11 @@ export const bookApi = {
    * 更新书籍的阅读进度
    * @param id 书籍ID
    * @param readPages 已读页数
+   * @param readerId 读者ID（可选，默认为0）
    */
-  updateReadingProgress: (id: number, readPages: number) => {
-    return apiRequest(`/books/${id}/reading-progress`, {
+  updateReadingProgress: (id: number, readPages: number, readerId?: number) => {
+    const queryString = readerId ? `?readerId=${readerId}` : '';
+    return apiRequest(`/books/${id}/reading-progress${queryString}`, {
       method: 'PUT',
       body: JSON.stringify({ readPages })
     });
@@ -314,7 +344,13 @@ export const groupApi = {
    */
   export: () => apiRequest('/groups/export', {
     method: 'GET'
-  }, 'blob')
+  }, 'blob'),
+  
+  /**
+   * 获取分组内的书籍ID列表
+   * @param id 分组ID
+   */
+  getBooks: (id: string) => apiRequest(`/groups/${id}/books`)
 };
 
 /**
