@@ -22,6 +22,19 @@ router.get('/', (req, res) => {
 });
 
 /**
+ * 获取分组内的书籍ID列表
+ */
+router.get('/:id/books', (req, res) => {
+  try {
+    const bookIds = qcDataService.getGroupBooks(parseInt(req.params.id));
+    res.json({ bookIds });
+  } catch (error) {
+    console.error('获取分组书籍失败:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * 根据ID获取分组
  */
 router.get('/:id', (req, res) => {

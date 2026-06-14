@@ -1,226 +1,483 @@
-# QC Booklog
+# 青橙阅读记录
 
-一个基于 Vue 3 + Express + SQLite 的书籍管理系统，采用 Repository 模式重构后端架构。
-
-## 功能特性
-
-- 📚 书籍管理：添加、编辑、删除书籍
-- 📝 书摘管理：记录阅读笔记和摘录
-- 🏷️ 标签分类：自定义标签分组
-- 📖 阅读追踪：记录阅读进度和时间
-- 📊 数据统计：阅读热力图、统计报表
-- 🐳 Docker 部署：支持一键部署
-
-## 技术栈
-
-### 前端
-- **框架**：Vue 3 + Vite + TypeScript
-- **状态管理**：Pinia
-- **路由**：Vue Router
-- **UI 组件**：自定义组件库
-
-### 后端
-- **框架**：Express.js
-- **数据库**：SQLite + better-sqlite3
-- **架构模式**：Repository 模式
-- **服务层**：分层架构（Controller → Service → Repository）
-
-### 部署
-- **容器化**：Docker + Docker Compose
-- **反向代理**：Nginx
-
-## 项目结构
-
-```
-QC-booklog/
-├── src/                          # 前端源代码
-│   ├── components/                # Vue 组件
-│   │   ├── base/                 # 基础组件
-│   │   ├── business/             # 业务组件
-│   │   └── ErrorBoundary/        # 错误边界
-│   ├── router/                   # 路由配置
-│   ├── services/                 # API 服务
-│   ├── store/                    # Pinia 状态管理
-│   ├── utils/                    # 工具函数
-│   └── views/                   # 页面组件
-├── server/                       # 后端源代码
-│   ├── migrations/               # 数据库迁移
-│   ├── routes/                   # 路由定义
-│   │   ├── books/               # 书籍相关路由
-│   │   │   ├── controllers/     # 控制器层
-│   │   │   ├── middleware/      # 中间件
-│   │   │   ├── services/        # 服务层
-│   │   │   └── validators/      # 验证器
-│   │   └── config/              # 配置相关路由
-│   ├── services/                 # 业务服务层
-│   │   ├── database/            # 数据库服务
-│   │   │   ├── repositories/    # 数据访问层
-│   │   │   │   ├── calibre/    # Calibre 数据库
-│   │   │   │   └── talebook/   # Talebook 数据库
-│   │   │   └── validators/      # 数据验证
-│   │   └── ...                  # 其他服务
-│   ├── utils/                    # 工具函数
-│   ├── app.js                   # Express 应用入口
-│   └── package.json             # 后端依赖
-├── docs/                        # 项目文档
-├── Dockerfile                   # Docker 配置
-├── docker-compose.yml           # Docker Compose 配置
-├── nginx.conf                  # Nginx 配置
-└── .gitignore                 # Git 忽略规则
-```
-
-## 后端架构说明
-
-### Repository 模式
-
-后端采用 Repository 模式，实现了数据访问层的抽象：
-
-```
-Controller → Service → Repository → Database
-```
-
-#### 目录结构
-
-- **routes/**: 路由定义
-  - **controllers/**: 控制器层，处理 HTTP 请求
-  - **services/**: 服务层，业务逻辑
-  - **validators/**: 验证器，数据验证
-  - **middleware/**: 中间件
-
-- **services/**: 业务服务
-  - **database/**: 数据库服务
-    - **repositories/**: 数据访问层
-      - **calibre/**: Calibre 数据库仓库
-        - `author-repository.js`
-        - `book-repository.js`
-        - `publisher-repository.js`
-        - `tag-repository.js`
-      - **talebook/**: Talebook 数据库仓库
-        - `items-repository.js`
-        - `qc-bookdata-repository.js`
-        - `qc-bookmarks-repository.js`
-        - `reading-state-repository.js`
-      - `base-repository.js`: 基础仓库类
-    - **validators/**: 数据验证
-    - `connection-manager.js`: 数据库连接管理
-
-#### 优势
-
-1. **分层清晰**：Controller → Service → Repository，职责分明
-2. **易于测试**：可以 mock Repository 层进行单元测试
-3. **易于扩展**：新增数据源只需实现 Repository 接口
-4. **代码复用**：Base Repository 提供通用 CRUD 操作
-
-## 快速开始
-
-### Docker 部署（推荐）
-
-```bash
-docker-compose up -d
-```
-
-### 本地开发
-
-#### 方式一：使用 CMD 脚本（推荐）
-
-```bash
-# 启动所有服务
-双击 start-all.bat
-
-# 停止所有服务
-双击 stop-all.bat
-```
-
-#### 方式二：使用 PowerShell 脚本
-
-```powershell
-# 启动所有服务
-右键点击 start-all.ps1 → 使用 PowerShell 运行
-
-# 停止所有服务
-右键点击 stop-all.ps1 → 使用 PowerShell 运行
-```
-
-#### 方式三：手动启动
-
-```bash
-# 安装所有依赖
-npm run install:all
-
-# 启动前端（端口 5173）
-npm run dev
-
-# 启动后端（端口 7401）
-cd server && npm run dev
-```
-
-## 数据库
-
-项目使用 SQLite 数据库，首次运行时会自动创建：
-
-- **Calibre 数据库**：`data/book/metadata.db`
-- **Talebook 数据库**：`data/calibre-webserver.db`
-
-数据库会自动初始化所有必要的表结构，无需手动创建。
-
-## 端口说明
-
-- **前端**：http://localhost:5173
-- **后端**：http://localhost:7401
-- **Docker 前端**：http://localhost:80
-- **Docker 后端**：http://localhost:7401
-
-## 开发环境要求
-
-- Node.js >= 18.0.0
-- npm >= 9.0.0
-- Docker >= 20.10.0（可选）
-
-## API 文档
-
-### 书籍管理
-
-- `GET /api/books` - 获取书籍列表
-- `GET /api/books/:id` - 获取书籍详情
-- `POST /api/books` - 添加书籍
-- `PUT /api/books/:id` - 更新书籍
-- `DELETE /api/books/:id` - 删除书籍
-
-### 书摘管理
-
-- `GET /api/bookmarks` - 获取书摘列表
-- `GET /api/bookmarks/:id` - 获取书摘详情
-- `POST /api/bookmarks` - 添加书摘
-- `PUT /api/bookmarks/:id` - 更新书摘
-- `DELETE /api/bookmarks/:id` - 删除书摘
-
-### 阅读追踪
-
-- `GET /api/reading/records` - 获取阅读记录
-- `POST /api/reading/records` - 添加阅读记录
-- `GET /api/reading/heatmap` - 获取阅读热力图数据
-- `GET /api/reading/stats` - 获取阅读统计数据
-
-## 测试文件说明
-
-项目包含大量测试和调试文件，用于开发和调试：
-
-- `test-*.js` - 功能测试文件
-- `check-*.js` - 数据检查文件
-- `analyze*.js` - 数据分析文件
-- `verify-*.js` - 数据验证文件
-- `migrate-*.js` - 数据迁移文件
-
-这些文件保留在项目中，方便后续开发和调试。
-
-## 许可证
-
-MIT License
-
-## 贡献
-
-欢迎提交 Issue 和 Pull Request！
+> 一日之计在于晨，一年之计在于春，一生之计无定序，朝暮皆可赴新程。
 
 ---
 
-**注意**：首次运行时，系统会自动创建数据库文件并初始化表结构。
+## 📖 系统简介
+
+**青橙阅读记录（QC Booklog）** 是一款简洁优雅的个人书籍管理系统，帮助您记录阅读历程、管理书籍收藏、追踪阅读进度，让阅读更有仪式感。
+
+无论您是阅读爱好者、学习者还是知识管理者，青橙阅读记录都能帮助您：
+- 📚 建立个人书籍数据库
+- 📝 记录阅读笔记和精彩摘录
+- 📊 追踪阅读习惯和进度
+- 🏷️ 分类管理书籍和标签
+
+---
+
+## ✨ 核心功能
+
+### 📚 书籍管理
+
+**功能描述**：全方位管理您的书籍收藏
+
+**主要特性**：
+- 添加书籍：手动录入或通过 ISBN 自动获取书籍信息
+- 编辑书籍：修改书籍详情、封面、简介等
+- 删除书籍：移除不需要的书籍记录
+- 书籍搜索：快速查找您的书籍
+- 批量操作：批量导入、批量编辑
+
+**使用场景**：
+- 新书入库时快速添加书籍信息
+- 整理个人图书馆藏书
+- 管理电子书和实体书
+
+### 📝 书摘管理
+
+**功能描述**：记录阅读过程中的精彩片段和个人感悟
+
+**主要特性**：
+- 添加书摘：记录精彩段落、个人感悟
+- 书摘分类：按章节、主题分类
+- 书摘搜索：快速查找特定内容
+- 书摘导出：导出为 Markdown 或文本格式
+
+**使用场景**：
+- 记录阅读过程中的精彩句子
+- 整理读书笔记和心得体会
+- 准备读书分享材料
+
+### 🏷️ 标签与分组
+
+**功能描述**：灵活的分类系统，让书籍井井有条
+
+**主要特性**：
+- 自定义标签：创建个性化标签
+- 分组管理：按主题、类型分组
+- 多标签支持：一本书可以有多个标签
+- 标签统计：查看各标签下的书籍数量
+
+**使用场景**：
+- 按阅读状态分类（在读、已读、想读）
+- 按书籍类型分类（小说、技术、历史等）
+- 按主题分类（个人成长、职业发展等）
+
+### 📖 阅读追踪
+
+**功能描述**：记录阅读进度，养成良好阅读习惯
+
+**主要特性**：
+- 阅读进度：记录当前阅读页码
+- 阅读时间：统计每日阅读时长
+- 阅读目标：设定并追踪阅读目标
+- 阅读提醒：定时提醒阅读
+
+**使用场景**：
+- 追踪多本书的阅读进度
+- 培养每日阅读习惯
+- 完成年度阅读计划
+
+### 📊 数据统计
+
+**功能描述**：可视化展示您的阅读数据
+
+**主要特性**：
+- 阅读热力图：展示阅读活跃度
+- 统计报表：阅读数量、时间统计
+- 趋势分析：阅读习惯变化趋势
+- 数据导出：导出统计数据
+
+**使用场景**：
+- 年度阅读总结
+- 分析阅读习惯
+- 分享阅读成果
+
+### 🔗 第三方集成
+
+**功能描述**：与 Calibre、Talebook 等工具无缝集成
+
+**主要特性**：
+- Calibre 集成：同步 Calibre 书库
+- Talebook 集成：连接 Talebook 服务
+- 数据导入：从其他平台导入数据
+- 数据同步：多平台数据同步
+
+**使用场景**：
+- 同步现有电子书库
+- 跨平台管理书籍
+- 数据备份与迁移
+
+---
+
+## 🚀 快速开始
+
+### 系统要求
+
+在开始安装前，请确保您的系统满足以下要求：
+
+#### Docker 部署（推荐）
+
+- **操作系统**：Windows 10/11、macOS 10.15+、Linux
+- **Docker**：版本 20.10.0 或更高
+- **Docker Compose**：版本 2.0.0 或更高
+- **内存**：至少 2GB 可用内存
+- **磁盘空间**：至少 1GB 可用空间
+
+#### 本地开发
+
+- **Node.js**：版本 18.0.0 或更高
+- **npm**：版本 9.0.0 或更高
+- **内存**：至少 1GB 可用内存
+- **磁盘空间**：至少 500MB 可用空间
+
+### 安装步骤
+
+#### 方式一：Docker 部署（推荐）
+
+**适合人群**：希望快速部署、无需配置开发环境的用户
+
+**步骤**：
+
+1. **安装 Docker**
+   - Windows/Mac：下载并安装 [Docker Desktop](https://www.docker.com/products/docker-desktop)
+   - Linux：参考 [Docker 官方文档](https://docs.docker.com/engine/install/)
+
+2. **获取项目**
+   ```bash
+   git clone https://github.com/your-username/qc-booklog.git
+   cd qc-booklog
+   ```
+
+3. **启动服务**
+   ```bash
+   docker-compose up -d
+   ```
+
+4. **访问应用**
+   - 前端：http://localhost
+   - 后端：http://localhost:7401
+
+**首次启动说明**：
+- 系统会自动创建数据库并初始化表结构
+- 首次启动可能需要 1-2 分钟，请耐心等待
+- 看到 "Healthy" 状态表示服务已就绪
+
+#### 方式二：本地运行
+
+**适合人群**：开发者或希望自定义配置的用户
+
+**步骤**：
+
+1. **安装 Node.js**
+   - 下载并安装 [Node.js](https://nodejs.org/)（推荐 LTS 版本）
+
+2. **获取项目**
+   ```bash
+   git clone https://github.com/your-username/qc-booklog.git
+   cd qc-booklog
+   ```
+
+3. **安装依赖**
+   ```bash
+   npm run install:all
+   ```
+
+4. **启动服务**
+   
+   **方式 A：使用脚本（推荐）**
+   - Windows：双击 `start-all.bat`
+   - PowerShell：右键 `start-all.ps1` → 使用 PowerShell 运行
+   
+   **方式 B：手动启动**
+   ```bash
+   # 终端1：启动前端
+   npm run dev
+   
+   # 终端2：启动后端
+   cd server
+   npm run dev
+   ```
+
+5. **访问应用**
+   - 前端：http://localhost:5173
+   - 后端：http://localhost:7401
+
+### 配置参数说明
+
+#### 环境变量配置
+
+创建 `.env` 文件（可选）：
+
+```env
+# 前端端口
+FRONTEND_PORT=80
+
+# 后端端口
+BACKEND_PORT=7401
+
+# 日志级别
+LOG_LEVEL=info
+
+# 文件上传大小限制（MB）
+MAX_FILE_SIZE=20
+
+# 同步间隔（毫秒）
+SYNC_INTERVAL=300000
+```
+
+#### 数据库配置
+
+系统使用 SQLite 数据库，默认存储位置：
+
+- **Calibre 数据库**：`./moni/book/metadata.db`
+- **Talebook 数据库**：`./moni/calibre-webserver.db`
+- **QC Booklog 数据库**：Docker 卷 `qc-booklog-data`
+
+**修改数据库路径**（Docker 部署）：
+
+编辑 `docker-compose.yml`：
+
+```yaml
+volumes:
+  - ./your-path/book:/app/calibre
+  - ./your-path:/app/talebook
+```
+
+#### 第三方服务配置
+
+**Talebook 集成**：
+
+1. 进入"个人中心" → "第三方设置"
+2. 启用 Talebook
+3. 配置内网/外网地址和端口
+4. 保存设置
+
+**Calibre 集成**：
+
+1. 确保 Calibre 数据库文件存在
+2. 配置数据库路径（见上文）
+3. 重启服务
+
+---
+
+## 📱 用户操作流程
+
+### 基本使用流程
+
+```
+注册/登录 → 添加书籍 → 记录阅读 → 添加书摘 → 查看统计
+```
+
+### 详细操作指南
+
+#### 1. 添加书籍
+
+**方式 A：手动添加**
+1. 点击"添加书籍"按钮
+2. 填写书籍信息（书名、作者、ISBN 等）
+3. 上传封面图片（可选）
+4. 点击"保存"
+
+**方式 B：ISBN 自动获取**
+1. 点击"ISBN 搜索"
+2. 输入 ISBN 号码
+3. 系统自动获取书籍信息
+4. 确认并保存
+
+#### 2. 记录阅读
+
+1. 进入书籍详情页
+2. 点击"开始阅读"
+3. 系统自动记录阅读时间
+4. 阅读结束后点击"结束阅读"
+5. 系统自动统计阅读时长
+
+#### 3. 添加书摘
+
+1. 在书籍详情页点击"添加书摘"
+2. 输入摘录内容或个人感悟
+3. 选择章节位置（可选）
+4. 添加标签（可选）
+5. 保存书摘
+
+#### 4. 管理标签
+
+1. 进入"标签管理"
+2. 创建新标签
+3. 为书籍分配标签
+4. 按标签筛选书籍
+
+#### 5. 查看统计
+
+1. 进入"数据中心"
+2. 查看阅读热力图
+3. 查看统计数据
+4. 导出报告（可选）
+
+---
+
+## ❓ 常见问题（FAQ）
+
+### 安装与部署
+
+**Q1：Docker 启动失败怎么办？**
+
+A：请检查：
+- Docker 是否正确安装并运行
+- 端口 80 和 7401 是否被占用
+- 查看日志：`docker-compose logs`
+
+**Q2：如何更新到最新版本？**
+
+A：
+```bash
+# 拉取最新代码
+git pull
+
+# 重新构建并启动
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+```
+
+**Q3：数据会丢失吗？**
+
+A：不会。Docker 部署使用数据卷持久化存储，即使删除容器，数据也不会丢失。
+
+### 使用问题
+
+**Q4：如何备份我的数据？**
+
+A：
+- **Docker 部署**：备份 Docker 数据卷
+  ```bash
+  docker run --rm -v qc-booklog-data:/data -v $(pwd):/backup alpine tar czf /backup/backup.tar.gz /data
+  ```
+- **本地运行**：备份 `data` 目录
+
+**Q5：支持哪些书籍信息来源？**
+
+A：目前支持：
+- 手动录入
+- ISBN 搜索（通过豆瓣、ISBNdb 等 API）
+- Calibre 导入
+- Talebook 同步
+
+**Q6：如何导入已有的书籍数据？**
+
+A：
+1. 如果使用 Calibre，配置 Calibre 数据库路径即可自动同步
+2. 如果使用 Talebook，配置 Talebook 服务地址
+3. 其他格式：暂时需要手动录入
+
+**Q7：可以在手机上使用吗？**
+
+A：可以！青橙阅读记录采用响应式设计，支持：
+- 手机浏览器访问
+- 平板浏览器访问
+- 桌面浏览器访问
+
+### 功能问题
+
+**Q8：阅读热力图如何工作？**
+
+A：系统会自动记录您每天的阅读活动，并以热力图形式展示：
+- 颜色越深表示阅读时间越长
+- 可以查看历史阅读记录
+- 支持按月、按年查看
+
+**Q9：如何设置阅读目标？**
+
+A：
+1. 进入"个人中心" → "阅读目标"
+2. 设置年度阅读数量目标
+3. 系统会自动追踪进度
+4. 在首页显示进度条
+
+**Q10：书摘可以导出吗？**
+
+A：可以！支持导出格式：
+- Markdown 格式
+- 纯文本格式
+- JSON 格式（开发者）
+
+### 技术问题
+
+**Q11：如何修改端口？**
+
+A：编辑 `docker-compose.yml` 或 `.env` 文件：
+```yaml
+ports:
+  - "8080:80"  # 前端端口
+  - "7402:7401"  # 后端端口
+```
+
+**Q12：如何查看日志？**
+
+A：
+- **Docker 部署**：`docker-compose logs -f`
+- **本地运行**：查看 `server/data/logs` 目录
+
+**Q13：数据库文件在哪里？**
+
+A：
+- **Docker 部署**：Docker 数据卷 `qc-booklog-data`
+- **本地运行**：`data/qc-booklog.db`
+
+---
+
+## 🎯 使用技巧
+
+### 提高效率的小技巧
+
+1. **使用 ISBN 快速添加**：扫描书籍封底的 ISBN 条码，快速获取书籍信息
+2. **定期整理标签**：保持标签体系清晰，方便查找
+3. **善用搜索功能**：支持书名、作者、标签多维度搜索
+4. **设置阅读提醒**：养成每日阅读习惯
+5. **定期备份数据**：避免数据丢失
+
+### 最佳实践
+
+1. **建立分类体系**：先规划好标签和分组结构
+2. **及时记录**：阅读时随时记录书摘和感悟
+3. **定期回顾**：每周/每月回顾阅读统计
+4. **分享交流**：导出书摘，与朋友分享阅读心得
+
+---
+
+## 📞 获取帮助
+
+### 文档资源
+
+- **用户手册**：本文档
+- **开发者文档**：[developer.md](developer.md)
+- **更新日志**：[CHANGELOG.md](CHANGELOG.md)
+
+### 社区支持
+
+- **GitHub Issues**：提交 Bug 报告或功能建议
+- **讨论区**：交流使用心得
+
+### 联系方式
+
+如有问题或建议，欢迎通过以下方式联系：
+- 提交 GitHub Issue
+- 发送邮件至项目维护者
+
+---
+
+## 📄 许可证
+
+本项目采用 MIT 许可证，详见 [LICENSE](LICENSE) 文件。
+
+---
+
+## 🙏 致谢
+
+感谢所有为这个项目做出贡献的开发者和用户！
+
+---
+
+**开始您的阅读之旅吧！** 📚✨

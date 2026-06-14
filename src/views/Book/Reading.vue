@@ -262,7 +262,7 @@ onMounted(async () => {
   readingStore.setInReadingPage(true);
 
   // 获取书籍信息（总是从API获取最新数据）
-  book.value = await bookService.getBookById(bookId) || null;
+  book.value = await bookService.getBookById(bookId, readerStore.currentReaderId) || null;
 
   // 如果已经在阅读中，使用当前页码
   if (readingStore.isReading && readingStore.currentBookId === bookId) {

@@ -107,6 +107,20 @@ class DatabaseConnectionManager {
     if (!this.calibreDb) {
       this.calibreError = null;
       try {
+        // 检查数据库文件是否存在
+        console.log('🔍 检查 Calibre 数据库文件:', this.config.calibrePath);
+        if (!fsSync.existsSync(this.config.calibrePath)) {
+          throw new Error(`数据库文件不存在: ${this.config.calibrePath}`);
+        }
+        
+        // 检查文件权限
+        try {
+          fsSync.accessSync(this.config.calibrePath, fsSync.constants.R_OK);
+          console.log('✅ 数据库文件可读');
+        } catch (accessErr) {
+          throw new Error(`数据库文件不可读: ${this.config.calibrePath}`);
+        }
+        
         this.calibreDb = new Database(this.config.calibrePath);
         this.calibreDb.pragma('journal_mode = WAL');
         this.calibreDb.pragma('busy_timeout = 10000');
@@ -119,6 +133,20 @@ class DatabaseConnectionManager {
       } catch (error) {
         console.error('❌ Calibre 数据库连接失败:', error.message);
         console.error('❌ 数据库路径:', this.config.calibrePath);
+        
+        // 列出目录内容帮助诊断
+        const dbDir = path.dirname(this.config.calibrePath);
+        try {
+          if (fsSync.existsSync(dbDir)) {
+            const files = fsSync.readdirSync(dbDir);
+            console.log(`📁 目录 ${dbDir} 内容:`, files.slice(0, 10).join(', '), files.length > 10 ? `... 共${files.length}个文件` : '');
+          } else {
+            console.log(`❌ 目录不存在: ${dbDir}`);
+          }
+        } catch (e) {
+          console.log(`❌ 无法读取目录: ${dbDir}`, e.message);
+        }
+        
         this.calibreDb = null;
         this.calibreError = error.message;
       }
@@ -274,11 +302,22 @@ class DatabaseConnectionManager {
     if (!this.talebookDb) return;
     
     try {
+      // 确保 readers 表有 extra 字段
+      try {
+        this.talebookDb.exec(`ALTER TABLE readers ADD COLUMN extra TEXT DEFAULT '{}'`);
+        console.log('✅ 已添加 readers.extra 字段');
+      } catch (e) {
+        // 字段已存在，忽略错误
+      }
+      
+      // 修复现有读者的 extra 字段为空 JSON 对象
+      this.talebookDb.prepare(`UPDATE readers SET extra = '{}' WHERE extra IS NULL OR extra = ''`).run();
+      
       const existing = this.talebookDb.prepare('SELECT id FROM readers WHERE id = 0').get();
       if (!existing) {
         this.talebookDb.prepare(`
-          INSERT INTO readers (id, username, password, salt, name, email, admin, active, permission, create_time, update_time)
-          VALUES (0, 'default', '', '', 'Default Reader', '', 0, 1, '', datetime('now'), datetime('now'))
+          INSERT INTO readers (id, username, password, salt, name, email, admin, active, permission, extra, create_time, update_time)
+          VALUES (0, 'default', '', '', 'Default Reader', '', 0, 1, '', '{}', datetime('now'), datetime('now'))
         `).run();
         console.log('✅ 已创建默认读者 (id=0)');
       }
@@ -606,6 +645,8 @@ class DatabaseConnectionManager {
         CREATE INDEX IF NOT EXISTS idx_qc_reading_state_mapping_id ON qc_reading_state(mapping_id);
         CREATE INDEX IF NOT EXISTS idx_qc_reading_state_user_id ON qc_reading_state(user_id);
         CREATE INDEX IF NOT EXISTS idx_qc_reading_state_read_status ON qc_reading_state(read_status);
+        CREATE INDEX IF NOT EXISTS idx_qc_reading_state_reader_id ON qc_reading_state(reader_id);
+        CREATE INDEX IF NOT EXISTS idx_qc_reading_state_book_reader ON qc_reading_state(book_id, reader_id);
       `);
       console.log('  ✅ qc_reading_state 表索引创建成功');
 
@@ -1385,6 +1426,7 @@ class DatabaseConnectionManager {
         admin BOOLEAN DEFAULT 0,
         active BOOLEAN DEFAULT 1,
         permission TEXT,
+        extra TEXT DEFAULT '{}',
         extra_data TEXT,
         create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
         update_time DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -1454,8 +1496,8 @@ class DatabaseConnectionManager {
     console.log('  📝 插入默认读者...');
     try {
       db.prepare(`
-        INSERT INTO readers (id, username, password, salt, name, email, admin, active, permission, create_time, update_time)
-        VALUES (0, 'default', '', '', 'Default Reader', '', 0, 1, '', datetime('now'), datetime('now'))
+        INSERT INTO readers (id, username, password, salt, name, email, admin, active, permission, extra, create_time, update_time)
+        VALUES (0, 'default', '', '', 'Default Reader', '', 0, 1, '', '{}', datetime('now'), datetime('now'))
       `).run();
       console.log('  ✅ 默认读者已创建 (id=0)');
     } catch (error) {

@@ -1083,7 +1083,7 @@ const loadBookData = async () => {
   if (!isEdit.value) return;
   
   const bookId = route.params.id as string;
-  const book = await bookService.getBookById(parseInt(bookId));
+  const book = await bookService.getBookById(parseInt(bookId), readerStore.currentReaderId);
   if (book) {
     Object.assign(form, {
       ...book,

@@ -8,25 +8,91 @@ import activityService from '../../../services/activityService.js';
 import databaseService from '../../../services/database/index.js';
 import syncService from '../../../services/syncService.js';
 import coverService from '../services/cover-service.js';
+import tagService from '../../../services/tagService.js';
 import { updateVersionInfo } from '../../../services/dataService.js';
+import axios from 'axios';
+import fs from 'fs/promises';
+import path from 'path';
+
+async function downloadRemoteCover(coverUrl, bookPath) {
+  try {
+    if (!coverUrl || !coverUrl.startsWith('http')) {
+      console.log(`📖 [downloadRemoteCover] 不是有效的远程URL: ${coverUrl}`);
+      return false;
+    }
+
+    console.log(`📖 [downloadRemoteCover] 开始下载远程封面: ${coverUrl}`);
+    
+    const response = await axios.get(coverUrl, {
+      responseType: 'arraybuffer',
+      timeout: 15000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Referer': coverUrl
+      }
+    });
+
+    if (response.status === 200 && response.data) {
+      const bookDir = calibreService.getBookDir();
+      const fullPath = path.join(bookDir, bookPath);
+      const coverPath = path.join(fullPath, 'cover.jpg');
+      
+      await fs.mkdir(fullPath, { recursive: true });
+      await fs.writeFile(coverPath, Buffer.from(response.data));
+      
+      console.log(`✅ [downloadRemoteCover] 封面下载成功: ${coverPath}`);
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    console.error(`❌ [downloadRemoteCover] 封面下载失败: ${error.message}`);
+    return false;
+  }
+}
 
 /**
- * 获取所有书籍
+ * 获取所有书籍（支持分页）
  */
 async function getAllBooks(req, res) {
   try {
-    // 支持通过查询参数 noCache=true 来强制不使用缓存
     const useCache = req.query.noCache !== 'true';
-    // 获取 readerId 参数（从查询参数），默认为 0
     const readerId = parseInt(req.query.readerId) || 0;
 
-    const books = await calibreService.getAllBooksFromCalibre(useCache, readerId);
-    res.json(books);
+    const page = parseInt(req.query.page) || 1;
+    const pageSize = parseInt(req.query.pageSize) || 0;
+    const sortBy = req.query.sortBy || 'last_modified';
+    const sortOrder = req.query.sortOrder || 'DESC';
+
+    if (pageSize > 0) {
+      const result = await calibreService.getBooksPaginated({
+        page,
+        pageSize,
+        readerId,
+        sortBy,
+        sortOrder
+      });
+      res.json(result);
+    } else {
+      const books = await calibreService.getAllBooksFromCalibre(useCache, readerId);
+      res.json(books);
+    }
   } catch (error) {
     console.error('⚠️ 获取书籍列表失败，返回空数组:', error.message);
-    // 当 Calibre 不可用时，返回空数组而不是 500 错误
-    // 这样书摘页面等依赖书籍列表的页面可以正常加载
     res.json([]);
+  }
+}
+
+/**
+ * 获取书籍总数
+ */
+async function getBooksCount(req, res) {
+  try {
+    const count = calibreService.getBooksTotalCount();
+    res.json({ count });
+  } catch (error) {
+    console.error('获取书籍总数失败:', error.message);
+    res.json({ count: 0 });
   }
 }
 
@@ -119,6 +185,26 @@ async function createBook(req, res) {
     // 2. 保存到 Calibre 文件系统格式
     await calibreService.saveBookToCalibre(newBook);
     console.log('✅ 书籍保存到文件系统成功');
+
+    // 3. 如果有远程封面URL，下载并保存
+    const remoteCoverUrl = req.body.coverUrl;
+    if (remoteCoverUrl && remoteCoverUrl.startsWith('http')) {
+      console.log(`📖 [createBook] 检测到远程封面URL，开始下载: ${remoteCoverUrl}`);
+      const coverDownloaded = await downloadRemoteCover(remoteCoverUrl, newBook.path);
+      
+      if (coverDownloaded) {
+        newBook.hasCover = true;
+        // 更新数据库中的 has_cover 字段
+        try {
+          if (databaseService.isCalibreAvailable()) {
+            databaseService.updateBookInDB({ id: newBook.id, hasCover: true });
+            console.log('✅ [createBook] 数据库 has_cover 字段更新为 1');
+          }
+        } catch (dbError) {
+          console.warn('⚠️ [createBook] 更新数据库 has_cover 字段失败:', dbError.message);
+        }
+      }
+    }
 
     // 清除所有缓存
     calibreService.clearBooksListCache();
@@ -554,8 +640,49 @@ async function updateReadingState(req, res) {
   }
 }
 
+async function updateReadingProgress(req, res) {
+  try {
+    const bookId = parseInt(req.params.id);
+    if (isNaN(bookId)) {
+      return res.status(400).json({ error: 'Invalid book ID' });
+    }
+
+    const { readPages } = req.body;
+
+    if (readPages === undefined || readPages === null) {
+      return res.status(400).json({ error: 'readPages is required' });
+    }
+
+    console.log(`📖 更新阅读进度: 书籍ID=${bookId}, 已读页数=${readPages}`);
+    const result = databaseService.updateBookReadingProgress(bookId, readPages);
+
+    calibreService.clearBookCache();
+    calibreService.clearBooksListCache();
+    console.log(`🗑️ 已清除书籍 ${bookId} 的缓存`);
+
+    res.json(result);
+  } catch (error) {
+    console.error('❌ 更新阅读进度失败:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+async function getBookTags(req, res) {
+  try {
+    const bookId = parseInt(req.params.id);
+    console.log('🏷️ GET /:id/tags - 书籍ID:', bookId);
+    
+    const tags = tagService.getBookTags(bookId);
+    res.json(tags);
+  } catch (error) {
+    console.error('获取书籍标签失败:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+}
+
 export default {
   getAllBooks,
+  getBooksCount,
   getBookById,
   createBook,
   updateBook,
@@ -564,5 +691,7 @@ export default {
   uploadBookCover,
   deleteBookCover,
   getReadingState,
-  updateReadingState
+  updateReadingState,
+  updateReadingProgress,
+  getBookTags
 };

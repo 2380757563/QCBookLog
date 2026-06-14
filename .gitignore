@@ -65,8 +65,29 @@ server/data/backup/
 # 临时数据库文件
 下载*.db
 
+# 临时文件夹（包含诊断脚本、部署工具、文档报告等非必要文件）
+temp/
+
 # 临时配置文件
 README_START.md
 REQUIRE_ERROR_FIX.md
 CLEANUP_SUMMARY.md
 API_FIX_SUMMARY.md
+
+# 1panel部署工具
+1panel-*/
+
+# 压缩包
+*.tar.gz
+*.zip
+
+# Python缓存
+__pycache__/
+*.pyc
+
+# 书籍数据文件（PDF等大文件，不应纳入版本控制）
+moni/book/**/*.pdf
+moni/book/**/*.epub
+
+# 备份文件
+*.bak

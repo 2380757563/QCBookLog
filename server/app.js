@@ -52,21 +52,45 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // 动态静态文件服务 - 支持任意深度的路径
-app.use('/api/static/calibre/*', async (req, res, next) => {
+app.get('/api/static/calibre/:path(*)', async (req, res, next) => {
   try {
     // 确保使用最新的书库目录
     calibreService.updateBookDir();
     const bookDir = calibreService.getBookDir();
 
-    // 提取通配符后的路径部分
-    const wildcardPath = req.params[0];
-    const filePath = path.join(bookDir, decodeURIComponent(wildcardPath));
-
-    console.log(`📂 请求Calibre静态文件: ${filePath}`);
+    // 提取路径参数
+    const requestPath = req.params.path;
+    const filePath = path.join(bookDir, decodeURIComponent(requestPath));
 
     // 检查文件是否存在
     try {
-      await fs.access(filePath);
+      const stats = await fs.stat(filePath);
+      
+      // 生成ETag（基于文件修改时间和大小）
+      const etag = `"${stats.size}-${stats.mtime.getTime()}"`;
+      const lastModified = stats.mtime.toUTCString();
+      
+      // 检查客户端缓存是否有效
+      const clientETag = req.headers['if-none-match'];
+      const clientLastModified = req.headers['if-modified-since'];
+      
+      // 如果ETag匹配，返回304
+      if (clientETag === etag) {
+        return res.status(304).end();
+      }
+      
+      // 如果Last-Modified匹配，返回304
+      if (clientLastModified && new Date(clientLastModified) >= stats.mtime) {
+        return res.status(304).end();
+      }
+      
+      // 设置缓存头
+      res.setHeader('ETag', etag);
+      res.setHeader('Last-Modified', lastModified);
+      res.setHeader('Cache-Control', 'public, max-age=31536000'); // 缓存1年
+      res.setHeader('Expires', new Date(Date.now() + 31536000000).toUTCString());
+      
+      // 发送文件
       res.sendFile(filePath);
     } catch (err) {
       console.error(`❌ 文件不存在: ${filePath}`);
@@ -419,45 +443,55 @@ app.use((err, req, res, next) => {
 });
 
 // 启动服务器
-app.listen(PORT, '0.0.0.0', () => {
-  logger.info(`Server is running on port ${PORT}`);
-  console.log(`Server is running on http://0.0.0.0:${PORT}`);
+const startServer = async () => {
+  try {
+    console.log('🔄 正在初始化数据库服务...');
+    await databaseService.init();
+    console.log('✅ 数据库服务初始化成功');
 
-  // 显示数据库服务状态
-  console.log(`\n📊 数据库服务状态:`);
-  console.log(`   - 初始化状态: ${databaseService._initialized ? '✅ 已初始化' : '❌ 未初始化'}`);
-  console.log(`   - Calibre数据库: ${databaseService.connectionManager?.calibreDb ? '✅ 已连接' : '❌ 未连接'}`);
-  console.log(`   - Talebook数据库: ${databaseService.connectionManager?.talebookDb ? '✅ 已连接' : '❌ 未连接'}`);
-  console.log(`   - QCBookLog数据库: ${databaseService.connectionManager?.qcBooklogDb ? '✅ 已连接' : '❌ 未连接'}`);
-  console.log(`   - Calibre路径: ${databaseService.connectionManager?.config?.calibrePath || '未配置'}`);
-  console.log(`   - Talebook路径: ${databaseService.connectionManager?.config?.talebookPath || '未配置'}`);
-  console.log(`   - QCBookLog路径: ${databaseService.connectionManager?.config?.qcBooklogPath || '未配置'}`);
-  
-  if (databaseService.connectionManager?.calibreError) {
-    console.log(`   ⚠️ Calibre连接错误: ${databaseService.connectionManager.calibreError}`);
-  }
-  if (databaseService.connectionManager?.talebookError) {
-    console.log(`   ⚠️ Talebook连接错误: ${databaseService.connectionManager.talebookError}`);
-  }
-  if (databaseService.connectionManager?.qcBooklogError) {
-    console.log(`   ⚠️ QCBookLog连接错误: ${databaseService.connectionManager.qcBooklogError}`);
-  }
+    app.listen(PORT, '0.0.0.0', () => {
+      logger.info(`Server is running on port ${PORT}`);
+      console.log(`Server is running on http://0.0.0.0:${PORT}`);
 
-  // 显示当前配置的数据库路径
-  const currentDbPath = calibreService.getBookDir();
-  console.log(`\n📚 当前 Calibre 书库目录: ${currentDbPath}`);
-  console.log(`✅ 如果需要切换书库，请访问: http://localhost:${PORT}/config`);
-  console.log('');
+      // 显示数据库服务状态
+      console.log(`\n📊 数据库服务状态:`);
+      console.log(`   - 初始化状态: ${databaseService._initialized ? '✅ 已初始化' : '❌ 未初始化'}`);
+      console.log(`   - Calibre数据库: ${databaseService.connectionManager?.calibreDb ? '✅ 已连接' : '❌ 未连接'}`);
+      console.log(`   - Talebook数据库: ${databaseService.connectionManager?.talebookDb ? '✅ 已连接' : '❌ 未连接'}`);
+      console.log(`   - QCBookLog数据库: ${databaseService.connectionManager?.qcBooklogDb ? '✅ 已连接' : '❌ 未连接'}`);
+      console.log(`   - Calibre路径: ${databaseService.connectionManager?.config?.calibrePath || '未配置'}`);
+      console.log(`   - Talebook路径: ${databaseService.connectionManager?.config?.talebookPath || '未配置'}`);
+      console.log(`   - QCBookLog路径: ${databaseService.connectionManager?.config?.qcBooklogPath || '未配置'}`);
 
-  // 启动同步调度器
-  if (databaseService.connectionManager?.isQcBooklogAvailable()) {
-    console.log(`🔄 启动阅读状态同步调度器...`);
-    syncScheduler.start();
-    console.log(`✅ 阅读状态同步调度器已启动`);
-  } else {
-    console.log(`⚠️ QCBookLog 数据库不可用，跳过启动同步调度器`);
+      if (databaseService.connectionManager?.calibreError) {
+        console.log(`   ⚠️ Calibre连接错误: ${databaseService.connectionManager.calibreError}`);
+      }
+      if (databaseService.connectionManager?.talebookError) {
+        console.log(`   ⚠️ Talebook连接错误: ${databaseService.connectionManager.talebookError}`);
+      }
+      if (databaseService.connectionManager?.qcBooklogError) {
+        console.log(`   ⚠️ QCBookLog连接错误: ${databaseService.connectionManager.qcBooklogError}`);
+      }
+
+      // 显示当前配置的数据库路径
+      const currentDbPath = calibreService.getBookDir();
+      console.log(`\n📚 当前 Calibre 书库目录: ${currentDbPath}`);
+      console.log(`✅ 如果需要切换书库，请访问: http://localhost:${PORT}/config`);
+      console.log('');
+
+      // 启动同步调度器
+      if (databaseService.connectionManager?.isQcBooklogAvailable()) {
+        console.log(`🔄 启动阅读状态同步调度器...`);
+        syncScheduler.start();
+        console.log(`✅ 阅读状态同步调度器已启动`);
+      } else {
+        console.log(`⚠️ QCBookLog 数据库不可用，跳过启动同步调度器`);
+      }
+    });
+  } catch (error) {
+    console.error('❌ 服务器启动失败:', error);
+    process.exit(1);
   }
-});
+};
 
-// 导出app和logger
-// export { app, logger };
+startServer();

@@ -429,7 +429,7 @@
       <!-- 书库页面 -->
       <div v-if="activeTab === 'library'" class="tab-content">
         <!-- 分组区域 -->
-        <div v-if="sortedGroups.length > 0" class="groups-section">
+        <div v-if="isLoadingGroups || loadGroupsError || sortedGroups.length > 0" class="groups-section">
           <h3 v-if="!isOrganizeMode" class="section-title section-title--collapsible" @click="toggleGroupsCollapse">
             <svg :class="['collapse-icon', { 'collapse-icon--collapsed': isGroupsCollapsed }]" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
               <path fill="currentColor" d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6 1.41-1.41z"/>
@@ -437,7 +437,19 @@
             分组
           </h3>
           <div :class="['section-content', { 'section-content--collapsed': isGroupsCollapsed }]">
-          <div :class="['groups-grid', `grid-cols-${gridColumns}`, { 'groups-grid--organize': isOrganizeMode }]">
+          <!-- 分组加载状态 -->
+          <div v-if="isLoadingGroups" class="groups-loading">
+            <div class="loading-spinner-small"></div>
+            <span>加载分组中...</span>
+          </div>
+          <!-- 分组加载错误 -->
+          <div v-else-if="loadGroupsError" class="groups-error">
+            <span class="error-icon">⚠️</span>
+            <span>{{ loadGroupsError }}</span>
+            <button class="btn-retry btn-retry--small" @click="retryLoadGroups">重试</button>
+          </div>
+          <!-- 分组列表 -->
+          <div v-else :class="['groups-grid', `grid-cols-${gridColumns}`, { 'groups-grid--organize': isOrganizeMode }]">
             <BookGroupCard
               v-for="group in sortedGroups"
               :key="group.id"
@@ -477,63 +489,98 @@
             <p>加载中...</p>
           </div>
           
-          <div v-else-if="filteredBooks.length > 0" :class="['book-grid', `book-grid--${layout}`, layout === 'grid' ? `grid-cols-${gridColumns}` : '']">
-          <div
-            v-for="book in filteredBooks"
-            :key="book.id"
-            :class="['book-card', `book-card--${layout}`, { 'book-card--selected': selectedBookIds.includes(book.id), 'book-card--organize': isOrganizeMode }]"
-            @click="isOrganizeMode ? toggleBookSelection(book.id) : goToBookDetail(String(book.id))"
-            :title="book.title"
-          >
-            <!-- 整理模式下的选择复选框 -->
-            <div v-if="isOrganizeMode" class="book-select-checkbox">
-              <svg v-if="selectedBookIds.includes(book.id)" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path fill="currentColor" d="M18 7H6c-1.1 0-2 .9-2 2v6c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2zm-9 9H6v-2h3v2zm0-3H6v-2h3v2zm0-3H6V8h3v2zm7 6h-5v-2h5v2zm0-3h-5v-2h5v2zm0-3h-5V8h5v2z"/>
-              </svg>
-              <svg v-else viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path fill="currentColor" d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>
-              </svg>
-            </div>
-            <div class="book-card-inner" :style="getBookBorderStyle(book)">
-              <div class="book-cover">
-                <img v-if="book.coverUrl" :src="book.coverUrl" :alt="book.title" loading="lazy" @error="handleImgError" />
-                <div v-else class="cover-placeholder">
-                  <span>{{ book.title ? book.title.charAt(0) : '?' }}</span>
-                </div>
-                <div v-if="readingStore.progressDisplayMode === 'label'" :class="['read-status', `read-status--${book.readStatus}`]">{{ book.readStatus }}</div>
+          <!-- 错误状态 -->
+          <div v-else-if="loadError" class="error-state">
+            <span class="error-icon">⚠️</span>
+            <p>{{ loadError }}</p>
+            <button class="btn-retry" @click="retryLoad">重试</button>
+          </div>
+          
+          <template v-else>
+            <div v-if="filteredBooks.length > 0" :class="['book-grid', `book-grid--${layout}`, layout === 'grid' ? `grid-cols-${gridColumns}` : '']">
+            <div
+              v-for="book in filteredBooks"
+              :key="book.id"
+              :class="['book-card', `book-card--${layout}`, { 'book-card--selected': selectedBookIds.includes(book.id), 'book-card--organize': isOrganizeMode }]"
+              @click="isOrganizeMode ? toggleBookSelection(book.id) : goToBookDetail(String(book.id))"
+              :title="book.title"
+            >
+              <!-- 整理模式下的选择复选框 -->
+              <div v-if="isOrganizeMode" class="book-select-checkbox">
+                <svg v-if="selectedBookIds.includes(book.id)" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path fill="currentColor" d="M18 7H6c-1.1 0-2 .9-2 2v6c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V9c0-1.1-.9-2-2-2zm-9 9H6v-2h3v2zm0-3H6v-2h3v2zm0-3H6V8h3v2zm7 6h-5v-2h5v2zm0-3h-5v-2h5v2zm0-3h-5V8h5v2z"/>
+                </svg>
+                <svg v-else viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path fill="currentColor" d="M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/>
+                </svg>
               </div>
-              <div class="book-info">
-                <h3 class="book-title">{{ book.title || '未知书名' }}</h3>
-                <p class="book-author">{{ book.author || '未知作者' }}</p>
-                <ReadingProgressBarList v-if="readingStore.progressDisplayMode === 'progress' && book.read_pages && book.pages" :book="book" :show-duration="true" />
-                <div v-if="book.rating" class="book-rating">
-                  <span class="rating-stars">{{ '★'.repeat(Math.max(0, Math.min(5, Math.round(book.rating / 2)))) }}{{ '☆'.repeat(Math.max(0, 5 - Math.max(0, Math.min(5, Math.round(book.rating / 2))))) }}</span>
-                  <span class="rating-value">{{ book.rating.toFixed(1) }}</span>
+              <div class="book-card-inner" :style="getBookBorderStyle(book)">
+                <div class="book-cover">
+                  <img 
+                    v-if="book.coverUrl || book.path" 
+                    :src="book.coverUrl || getBookCoverUrl(book)" 
+                    :alt="book.title" 
+                    loading="lazy" 
+                    decoding="async"
+                    @load="handleImgLoad"
+                    @error="handleImgError" 
+                  />
+                  <div v-else class="cover-placeholder">
+                    <span>{{ book.title ? book.title.charAt(0) : '?' }}</span>
+                  </div>
+                  <div v-if="readingStore.progressDisplayMode === 'label'" :class="['read-status', `read-status--${book.readStatus}`]">{{ book.readStatus }}</div>
+                </div>
+                <div class="book-info">
+                  <h3 class="book-title">{{ book.title || '未知书名' }}</h3>
+                  <p class="book-author">{{ book.author || '未知作者' }}</p>
+                  <ReadingProgressBarList v-if="readingStore.progressDisplayMode === 'progress' && book.read_pages && book.pages" :book="book" :show-duration="true" />
+                  <div v-if="book.rating" class="book-rating">
+                    <span class="rating-stars">{{ '★'.repeat(Math.max(0, Math.min(5, Math.round(book.rating / 2)))) }}{{ '☆'.repeat(Math.max(0, 5 - Math.max(0, Math.min(5, Math.round(book.rating / 2))))) }}</span>
+                    <span class="rating-value">{{ book.rating.toFixed(1) }}</span>
+                  </div>
                 </div>
               </div>
-            </div>
-            <!-- 装帧包边 - 仅右下角 -->
-            <BindingBorder
-              :binding1="getBinding1(book)"
-              :binding2="getBinding2(book)"
-              :params="getBindingBorderParams(book)"
-            />
-            <div v-if="isOrganizeMode" class="book-actions">
-              <button class="action-btn-sm" @click.stop="handleEdit(book.id)" title="编辑">
-                <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-              </button>
-              <button class="action-btn-sm" @click.stop="handleDelete(book.id)" title="删除">
-                <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-              </button>
+              <!-- 装帧包边 - 仅右下角 -->
+              <BindingBorder
+                :binding1="getBinding1(book)"
+                :binding2="getBinding2(book)"
+                :params="getBindingBorderParams(book)"
+              />
+              <div v-if="isOrganizeMode" class="book-actions">
+                <button class="action-btn-sm" @click.stop="handleEdit(book.id)" title="编辑">
+                  <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                </button>
+                <button class="action-btn-sm" @click.stop="handleDelete(book.id)" title="删除">
+                  <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-        <div v-else class="empty-state">
-          <span class="empty-icon">📚</span>
-          <p>暂无书籍</p>
-          <button class="btn-primary" @click="goToAddBook">添加第一本书</button>
-        </div>
+          
+          <!-- 加载更多指示器 -->
+          <div v-if="isLoadingMore" class="loading-more">
+            <div class="loading-spinner-small"></div>
+            <span>加载更多...</span>
           </div>
+          
+          <!-- 加载更多失败 -->
+          <div v-else-if="loadMoreError" class="load-more-error">
+            <span>{{ loadMoreError }}</span>
+            <button class="btn-retry-small" @click="retryLoadMore">重试</button>
+          </div>
+          
+          <!-- 没有更多数据提示 -->
+          <div v-else-if="!hasMoreBooks && usePagination && filteredBooks.length > 0" class="no-more-data">
+            已加载全部 {{ filteredBooks.length }} 本书籍
+          </div>
+          </template>
+          
+          <div v-if="!isLoading && !loadError && filteredBooks.length === 0" class="empty-state">
+            <span class="empty-icon">📚</span>
+            <p>暂无书籍</p>
+            <button class="btn-primary" @click="goToAddBook">添加第一本书</button>
+          </div>
+        </div>
         </div>
       </div>
 
@@ -774,10 +821,166 @@ const bindingBorderStore = useBindingBorderStore();
 const { books: storeBooks } = storeToRefs(bookStore);
 
 const isLoading = ref(true);
+const isLoadingMore = ref(false);
+const hasMoreBooks = ref(true);
+const currentPage = ref(1);
+const pageSize = ref(50);
+const totalBooksCount = ref(0);
+const displayBooks = ref<Book[]>([]);
+const loadError = ref<string | null>(null);
+const loadMoreError = ref<string | null>(null);
+
+const usePagination = computed(() => totalBooksCount.value > 100);
+
+const loadBooksCount = async () => {
+  try {
+    totalBooksCount.value = await bookService.getBooksCount();
+  } catch (error) {
+    console.error('获取书籍总数失败:', error);
+    totalBooksCount.value = bookStore.allBooks.length;
+  }
+};
+
+const loadGroups = async () => {
+  if (isLoadingGroups.value) return;
+  
+  isLoadingGroups.value = true;
+  loadGroupsError.value = null;
+  
+  try {
+    const groupsData = await bookService.getAllGroups();
+    groups.value = groupsData || [];
+  } catch (error) {
+    console.error('加载分组失败:', error);
+    loadGroupsError.value = '加载分组失败';
+    groups.value = [];
+  } finally {
+    isLoadingGroups.value = false;
+  }
+};
+
+const retryLoadGroups = () => {
+  loadGroupsError.value = null;
+  loadGroups();
+};
+
+const loadBooksFirstPage = async () => {
+  if (!usePagination.value) {
+    try {
+      const books = await bookService.getAllBooks(readerStore.currentReaderId);
+      bookStore.setBooks(books);
+      displayBooks.value = books;
+      hasMoreBooks.value = false;
+      loadError.value = null;
+    } catch (error) {
+      console.error('加载书籍失败:', error);
+      loadError.value = '加载书籍失败，请重试';
+    }
+    return;
+  }
+
+  currentPage.value = 1;
+  displayBooks.value = [];
+  isLoading.value = true;
+  loadError.value = null;
+
+  try {
+    const result = await bookService.getBooksPaginated({
+      page: 1,
+      pageSize: pageSize.value,
+      readerId: readerStore.currentReaderId
+    });
+    
+    displayBooks.value = result.list;
+    totalBooksCount.value = result.total;
+    hasMoreBooks.value = result.hasMore;
+    currentPage.value = result.page;
+
+    bookStore.setBooks(result.list);
+  } catch (error) {
+    console.error('加载书籍失败:', error);
+    loadError.value = '加载书籍失败，请点击重试';
+  } finally {
+    isLoading.value = false;
+  }
+};
+
+const loadMoreBooks = async () => {
+  if (isLoadingMore.value || !hasMoreBooks.value) return;
+
+  isLoadingMore.value = true;
+  loadMoreError.value = null;
+
+  try {
+    // 分组模式下的分页（前端分页）
+    if (currentGroupId.value) {
+      const groupBooks = bookStore.allBooks.filter(b => b.groups && b.groups.includes(currentGroupId.value));
+      const nextPage = currentPage.value + 1;
+      const start = currentPage.value * pageSize.value;
+      const end = start + pageSize.value;
+      const moreBooks = groupBooks.slice(start, end);
+      
+      if (moreBooks.length > 0) {
+        displayBooks.value = [...displayBooks.value, ...moreBooks];
+        currentPage.value = nextPage;
+        hasMoreBooks.value = end < groupBooks.length;
+      } else {
+        hasMoreBooks.value = false;
+      }
+    } else {
+      // 普通分页模式（后端分页）
+      const result = await bookService.getBooksPaginated({
+        page: currentPage.value + 1,
+        pageSize: pageSize.value,
+        readerId: readerStore.currentReaderId
+      });
+
+      displayBooks.value = [...displayBooks.value, ...result.list];
+      hasMoreBooks.value = result.hasMore;
+      currentPage.value = result.page;
+
+      const allBooksMap = new Map(bookStore.allBooks.map(b => [b.id, b]));
+      result.list.forEach(book => {
+        if (!allBooksMap.has(book.id)) {
+          allBooksMap.set(book.id, book);
+        }
+      });
+      bookStore.setBooks(Array.from(allBooksMap.values()));
+    }
+  } catch (error) {
+    console.error('加载更多书籍失败:', error);
+    loadMoreError.value = '加载失败，请重试';
+  } finally {
+    isLoadingMore.value = false;
+  }
+};
+
+const retryLoad = () => {
+  loadError.value = null;
+  loadBooksFirstPage();
+};
+
+const retryLoadMore = () => {
+  loadMoreError.value = null;
+  loadMoreBooks();
+};
+
+const handleInfiniteScroll = () => {
+  if (isLoadingMore.value || !hasMoreBooks.value || !usePagination.value) return;
+
+  const scrollTop = window.scrollY;
+  const scrollHeight = document.documentElement.scrollHeight;
+  const clientHeight = window.innerHeight;
+
+  // 提前触发加载，距离底部500px时就开始加载
+  if (scrollTop + clientHeight >= scrollHeight - 500) {
+    loadMoreBooks();
+  }
+};
 
 // Tab配置
 const tabs = computed(() => [
-  { key: 'library', label: '书库', count: bookStore.allBooks.length },
+  { key: 'library', label: '书库', count: usePagination.value ? totalBooksCount.value : bookStore.allBooks.length },
   { key: 'wishlist', label: '书单' }
 ]);
 const activeTab = ref('library');
@@ -893,6 +1096,8 @@ const handleClickOutside = (event: MouseEvent) => {
 
 // 分组数据
 const groups = ref<BookGroup[]>([]);
+const isLoadingGroups = ref(false);
+const loadGroupsError = ref<string | null>(null);
 const showAddGroup = ref(false);
 const showGroupSelector = ref(false);
 const selectedGroupId = ref('');
@@ -973,10 +1178,37 @@ const saveGroupName = async (groupId: string) => {
 
 // 筛选后的书籍列表
 const filteredBooks = computed(() => {
-  let books = [...bookStore.allBooks];
+  const hasGroupFilter = currentGroupId.value;
+  const hasAdvancedFilters = 
+    filterConditions.value.tags.length > 0 ||
+    filterConditions.value.book_type !== null ||
+    filterConditions.value.binding1 !== null ||
+    filterConditions.value.binding2 !== null ||
+    filterConditions.value.paper1 !== null ||
+    filterConditions.value.edge1 !== null ||
+    filterConditions.value.edge2 !== null ||
+    filterConditions.value.publisher.trim() !== '' ||
+    filterConditions.value.author.trim() !== '';
+  
+  const needsFullData = hasGroupFilter || hasAdvancedFilters;
+  
+  // 在分组模式下，使用 displayBooks（已经过滤了分组书籍）
+  // 在普通分页模式下，使用 displayBooks
+  // 在全量加载或高级筛选模式下，使用 bookStore.allBooks
+  let books: Book[];
+  if (currentGroupId.value && usePagination.value) {
+    // 分组模式 + 分页：使用已过滤的 displayBooks
+    books = [...displayBooks.value];
+  } else if (usePagination.value && !needsFullData) {
+    // 普通分页模式
+    books = [...displayBooks.value];
+  } else {
+    // 全量加载或高级筛选模式
+    books = [...bookStore.allBooks];
+  }
 
-  // 如果当前在查看某个分组，只显示该分组的书籍
-  if (currentGroupId.value) {
+  // 如果当前在查看某个分组，只显示该分组的书籍（仅在全量模式下需要再次筛选）
+  if (currentGroupId.value && !usePagination.value) {
     books = books.filter(b => b.groups && b.groups.includes(currentGroupId.value));
   }
 
@@ -1075,17 +1307,30 @@ const sortedGroups = computed(() => {
 });
 
 // 优化：使用 computed 缓存分组书籍映射，避免每次渲染都遍历所有书籍
+// 在分页模式下，需要从后端获取分组书籍ID，然后从已加载的书籍中匹配
 const groupBooksMap = computed(() => {
   const map = new Map<string, Book[]>();
   groups.value.forEach(group => {
-    map.set(group.id, bookStore.allBooks.filter(book => book.groups && book.groups.includes(group.id)));
+    const groupBookList = bookStore.allBooks.filter(book => book.groups && book.groups.includes(group.id));
+    map.set(group.id, groupBookList);
   });
   return map;
 });
 
-// 获取分组中的书籍（使用缓存的映射）
+// 分组缩略图书籍映射（用于分组卡片显示）
+// 在分页模式下，优先使用已加载的书籍，不足时显示占位符
+const groupThumbnailBooksMap = computed(() => {
+  const map = new Map<string, Book[]>();
+  groups.value.forEach(group => {
+    const groupBookList = bookStore.allBooks.filter(book => book.groups && book.groups.includes(group.id));
+    map.set(group.id, groupBookList);
+  });
+  return map;
+});
+
+// 获取分组中的书籍（用于分组卡片缩略图显示）
 const groupBooks = (groupId: string): Book[] => {
-  return groupBooksMap.value.get(groupId) || [];
+  return groupThumbnailBooksMap.value.get(groupId) || [];
 };
 
 const getBookStatus = (book: Book): BookStatus => {
@@ -1426,8 +1671,46 @@ const handleUpdateGroupName = async (groupId: string, newName: string) => {
 };
 
 // 分组管理
-const handleGroupClick = (groupId: string) => {
+const handleGroupClick = async (groupId: string) => {
   currentGroupId.value = groupId;
+  
+  // 如果使用分页模式，需要检查是否需要加载分组内的书籍
+  if (usePagination.value) {
+    const group = groups.value.find(g => g.id === groupId);
+    if (group && group.bookCount > 0) {
+      // 检查已加载的书籍中是否有该分组的书籍
+      const loadedGroupBooks = bookStore.allBooks.filter(b => b.groups && b.groups.includes(groupId));
+      
+      // 如果已加载的分组书籍数量小于分组实际书籍数量，需要加载分组书籍
+      if (loadedGroupBooks.length < group.bookCount) {
+        isLoading.value = true;
+        try {
+          // 加载全量书籍数据（因为分组筛选需要从全量数据中过滤）
+          const allBooks = await bookService.getAllBooks(readerStore.currentReaderId);
+          bookStore.setBooks(allBooks);
+          
+          // 设置显示的书籍为分组书籍的第一页
+          const groupBooks = allBooks.filter(b => b.groups && b.groups.includes(groupId));
+          displayBooks.value = groupBooks.slice(0, pageSize.value);
+          
+          // 根据分组书籍数量决定是否启用分页
+          // 注意：分组模式下，我们使用虚拟分页（前端分页）
+          hasMoreBooks.value = groupBooks.length > pageSize.value;
+          currentPage.value = 1;
+        } catch (error) {
+          console.error('加载分组书籍失败:', error);
+        } finally {
+          isLoading.value = false;
+        }
+      } else {
+        // 已有全量数据，只需更新显示
+        const groupBooks = bookStore.allBooks.filter(b => b.groups && b.groups.includes(groupId));
+        displayBooks.value = groupBooks.slice(0, pageSize.value);
+        hasMoreBooks.value = groupBooks.length > pageSize.value;
+        currentPage.value = 1;
+      }
+    }
+  }
 };
 
 const editGroup = (group: BookGroup) => {
@@ -1458,6 +1741,8 @@ const saveGroup = async () => {
     showAddGroup.value = false;
     groupName.value = '';
     editingGroup.value = null;
+    
+    await loadGroups();
   } catch (error) {
     console.error('保存分组失败:', error);
   }
@@ -1473,8 +1758,27 @@ const deleteGroup = async (id: string) => {
 };
 
 // 返回全部书籍
-const backToAllBooks = () => {
+const backToAllBooks = async () => {
   currentGroupId.value = '';
+  
+  // 在分页模式下，需要重新加载全部书籍的第一页
+  if (usePagination.value) {
+    isLoading.value = true;
+    try {
+      const result = await bookService.getBooksPaginated({
+        page: 1,
+        pageSize: pageSize.value,
+        readerId: readerStore.currentReaderId
+      });
+      displayBooks.value = result.list;
+      hasMoreBooks.value = result.hasMore;
+      currentPage.value = result.page;
+    } catch (error) {
+      console.error('加载书籍失败:', error);
+    } finally {
+      isLoading.value = false;
+    }
+  }
 };
 
 // 整理模式下的分组功能
@@ -1580,6 +1884,22 @@ const addToWishlist = async (isbn: string, title: string, author?: string) => {
   }
 };
 
+// 图片加载成功处理
+const handleImgLoad = (event: Event) => {
+  const imgElement = event.target as HTMLImageElement;
+  imgElement.classList.add('loaded');
+};
+
+// 获取书籍封面URL
+const getBookCoverUrl = (book: Book): string | undefined => {
+  if (book.coverUrl) return book.coverUrl;
+  // 始终尝试根据 path 加载封面，不依赖 has_cover 字段
+  if (book.path) {
+    return `/api/static/calibre/${encodeURIComponent(book.path)}/cover.jpg`;
+  }
+  return undefined;
+};
+
 // 图片加载错误处理
 const handleImgError = async (event: Event) => {
   const imgElement = event.target as HTMLImageElement;
@@ -1636,26 +1956,61 @@ const loadData = async () => {
       selectedGroupIds.value = [];
     }
 
-    // 定义加载书籍和分组的函数
-    const loadBooks = async () => {
-      // 加载书籍
+    // 加载书籍总数
+    await loadBooksCount();
+
+    // 先加载分组数据（需要知道是否有分组）
+    await loadGroups();
+
+    // 检查是否需要加载全部数据（分组或高级筛选）
+    const hasGroupFilter = currentGroupId.value;
+    const hasAdvancedFilters = 
+      filterConditions.value.tags.length > 0 ||
+      filterConditions.value.book_type !== null ||
+      filterConditions.value.binding1 !== null ||
+      filterConditions.value.binding2 !== null ||
+      filterConditions.value.paper1 !== null ||
+      filterConditions.value.edge1 !== null ||
+      filterConditions.value.edge2 !== null ||
+      filterConditions.value.publisher.trim() !== '' ||
+      filterConditions.value.author.trim() !== '';
+    
+    const needsFullData = hasGroupFilter || hasAdvancedFilters;
+
+    // 在分页模式下，如果有分组，需要加载分组书籍用于缩略图显示
+    const hasGroups = groups.value.length > 0;
+
+    if (usePagination.value && !needsFullData) {
+      // 分页模式
+      if (hasGroups) {
+        // 有分组时，需要加载全量书籍数据以正确显示分组缩略图
+        // 因为分组缩略图需要从所有书籍中筛选
+        try {
+          const allBooks = await bookService.getAllBooks(readerStore.currentReaderId);
+          bookStore.setBooks(allBooks);
+          displayBooks.value = allBooks.slice(0, pageSize.value);
+          hasMoreBooks.value = allBooks.length > pageSize.value;
+          currentPage.value = 1;
+        } catch (error) {
+          console.error('加载书籍失败:', error);
+          // 降级为普通分页加载
+          await loadBooksFirstPage();
+        }
+      } else {
+        // 无分组时，使用普通分页加载
+        await loadBooksFirstPage();
+      }
+    } else {
+      // 全量加载模式
       try {
         const books = await bookService.getAllBooks(readerStore.currentReaderId);
         bookStore.setBooks(books);
+        displayBooks.value = books;
+        hasMoreBooks.value = false;
       } catch (error) {
         console.error('加载书籍失败:', error);
       }
-
-      // 加载分组
-      try {
-        groups.value = await bookService.getAllGroups();
-      } catch (error) {
-        console.error('加载分组失败:', error);
-      }
-    };
-
-    // 加载书籍数据
-    await loadBooks();
+    }
 
     // 加载书单
     try {
@@ -1688,8 +2043,9 @@ onMounted(async () => {
   // 添加点击外部关闭菜单的事件监听
   document.addEventListener('click', handleClickOutside);
 
-  // 添加滚动监听
+  // 添加滚动监听（返回顶部 + 无限滚动）
   window.addEventListener('scroll', handleScroll, { passive: true });
+  window.addEventListener('scroll', handleInfiniteScroll, { passive: true });
 });
 
 onActivated(async () => {
@@ -1712,6 +2068,7 @@ onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside);
   // 移除滚动监听
   window.removeEventListener('scroll', handleScroll);
+  window.removeEventListener('scroll', handleInfiniteScroll);
 });
 
 // 整理模式方法
@@ -2205,6 +2562,97 @@ watch(
   font-size: 16px;
 }
 
+/* 加载更多指示器 */
+.loading-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  color: #666;
+  font-size: 14px;
+}
+
+.loading-spinner-small {
+  width: 20px;
+  height: 20px;
+  border: 3px solid #e0e0e0;
+  border-top: 3px solid #333;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+/* 没有更多数据提示 */
+.no-more-data {
+  text-align: center;
+  padding: 20px;
+  color: #999;
+  font-size: 13px;
+}
+
+/* 错误状态 */
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+}
+
+.error-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.error-state p {
+  color: #666;
+  font-size: 16px;
+  margin-bottom: 16px;
+}
+
+.btn-retry {
+  padding: 10px 24px;
+  background-color: #FF6B35;
+  color: white;
+  border: none;
+  border-radius: 20px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-retry:hover {
+  background-color: #e55a2b;
+  transform: scale(1.05);
+}
+
+/* 加载更多失败 */
+.load-more-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  color: #e74c3c;
+  font-size: 14px;
+}
+
+.btn-retry-small {
+  padding: 6px 16px;
+  background-color: #FF6B35;
+  color: white;
+  border: none;
+  border-radius: 16px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-retry-small:hover {
+  background-color: #e55a2b;
+}
+
 /* 下拉菜单容器 */
 .dropdown-container {
   position: relative;
@@ -2658,6 +3106,12 @@ watch(
   width: 100%;
   height: 100%;
   object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.book-cover img.loaded {
+  opacity: 1;
 }
 
 .book-card--list .book-card-inner .book-cover img {
@@ -2974,6 +3428,38 @@ watch(
   border-radius: var(--radius-lg);
   padding: 16px;
   border: 1px solid rgba(33, 150, 243, 0.1);
+}
+
+.groups-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  color: #1565c0;
+  font-size: 14px;
+}
+
+.groups-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  color: #e53935;
+  font-size: 14px;
+  background: rgba(229, 57, 53, 0.1);
+  border-radius: var(--radius-md);
+}
+
+.groups-error .error-icon {
+  font-size: 16px;
+}
+
+.btn-retry--small {
+  padding: 4px 12px;
+  font-size: 12px;
+  margin-left: 8px;
 }
 
 .section-title {

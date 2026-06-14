@@ -1250,10 +1250,14 @@ class DatabaseService {
       const defaultUser = db.prepare('SELECT * FROM users WHERE id = 1').get();
       if (!defaultUser) {
         db.prepare(`
-          INSERT OR IGNORE INTO users (id, username, name, admin, active)
-          VALUES (1, 'default', '默认用户', 1, 1)
+          INSERT OR IGNORE INTO users (id, username, name, admin, active, extra)
+          VALUES (1, 'default', '默认用户', 1, 1, '{}')
         `).run();
         console.log('✅ 默认用户已创建');
+      } else if (!defaultUser.extra) {
+        // 修复已存在但 extra 为空的用户
+        db.prepare(`UPDATE users SET extra = '{}' WHERE id = 1`).run();
+        console.log('✅ 已修复用户 extra 字段');
       }
 
       // 创建 qc_groups 表（如果不存在）
@@ -2493,36 +2497,41 @@ class DatabaseService {
         if (book.rating) {
           console.log('⭐ [addBookToDB] 准备插入评分:', book.rating);
           // 将浮点数评分乘以2转换为整数（例如7.5 -> 15），以便在INTEGER字段中存储
-          const ratingValue = Math.round(parseFloat(book.rating) * 2);
+          // Calibre ratings 表存储 0-10 的整数，用户输入也是 0-10
+          // 不需要乘以 2，直接四舍五入到整数即可
+          const ratingValue = Math.round(parseFloat(book.rating));
           console.log('🔄 [addBookToDB] 评分转换:', book.rating, '->', ratingValue);
-          try {
-            // 查找或创建评分
-            const rating = this.calibreDb.prepare(`SELECT id FROM ratings WHERE rating = ?`).get(ratingValue);
-            let ratingId;
-            if (rating) {
-              ratingId = rating.id;
-              console.log('✅ [addBookToDB] 找到已存在的评分ID:', ratingId);
-            } else {
-              const newRatingResult = this.calibreDb.prepare(`INSERT INTO ratings (rating) VALUES (?)`).run(ratingValue);
-              ratingId = newRatingResult.lastInsertRowid;
-              console.log('✅ [addBookToDB] 创建新评分ID:', ratingId);
-            }
+          if (ratingValue < 0 || ratingValue > 10) {
+            console.warn('⚠️ [addBookToDB] 评分超出范围，跳过评分更新:', ratingValue);
+          } else {
+            try {
+              // 查找或创建评分
+              const rating = this.calibreDb.prepare(`SELECT id FROM ratings WHERE rating = ?`).get(ratingValue);
+              let ratingId;
+              if (rating) {
+                ratingId = rating.id;
+                console.log('✅ [addBookToDB] 找到已存在的评分ID:', ratingId);
+              } else {
+                const newRatingResult = this.calibreDb.prepare(`INSERT INTO ratings (rating) VALUES (?)`).run(ratingValue);
+                ratingId = newRatingResult.lastInsertRowid;
+                console.log('✅ [addBookToDB] 创建新评分ID:', ratingId);
+              }
 
-            // 删除旧的评分关联（如果存在）
-            this.calibreDb.prepare(`DELETE FROM books_ratings_link WHERE book = ?`).run(bookId);
+              // 删除旧的评分关联（如果存在）
+              this.calibreDb.prepare(`DELETE FROM books_ratings_link WHERE book = ?`).run(bookId);
 
-            // 添加新的评分关联
-            const ratingLinkResult = this.calibreDb.prepare(`INSERT INTO books_ratings_link (book, rating) VALUES (?, ?)`).run(bookId, ratingId);
-            console.log('✅ [addBookToDB] 评分关联成功，link ID:', ratingLinkResult.lastInsertRowid);
+              // 添加新的评分关联
+              const ratingLinkResult = this.calibreDb.prepare(`INSERT INTO books_ratings_link (book, rating) VALUES (?, ?)`).run(bookId, ratingId);
+              console.log('✅ [addBookToDB] 评分关联成功，link ID:', ratingLinkResult.lastInsertRowid);
 
-            // 验证评分关联是否正确插入
-            const insertedRatingLink = this.calibreDb.prepare(`SELECT * FROM books_ratings_link WHERE book = ? AND rating = ?`).get(bookId, ratingId);
-            if (!insertedRatingLink) {
-              throw new Error('评分关联插入后验证失败');
-            }
-            console.log('✅ [addBookToDB] 评分关联验证成功');
-          } catch (ratingError) {
-            console.error('❌ [addBookToDB] 评分插入失败:', ratingError.message);
+              // 验证评分关联是否正确插入
+              const insertedRatingLink = this.calibreDb.prepare(`SELECT * FROM books_ratings_link WHERE book = ? AND rating = ?`).get(bookId, ratingId);
+              if (!insertedRatingLink) {
+                throw new Error('评分关联插入后验证失败');
+              }
+              console.log('✅ [addBookToDB] 评分关联验证成功');
+            } catch (ratingError) {
+              console.error('❌ [addBookToDB] 评分插入失败:', ratingError.message);
             console.error('❌ [addBookToDB] 详细信息:', {
               bookId,
               rating: book.rating,
@@ -2964,18 +2973,23 @@ class DatabaseService {
         // 6. 更新评分
         this.calibreDb.prepare(`DELETE FROM books_ratings_link WHERE book = ?`).run(bookId);
         if (mergedBook.rating) {
-          // 将浮点数评分乘以2转换为整数（例如7.5 -> 15），以便在INTEGER字段中存储
-          const ratingValue = Math.round(parseFloat(mergedBook.rating) * 2);
-          // 查找或创建评分
-          const rating = this.calibreDb.prepare(`SELECT id FROM ratings WHERE rating = ?`).get(ratingValue);
-          let ratingId;
-          if (rating) {
-            ratingId = rating.id;
+          // Calibre ratings 表存储 0-10 的整数，用户输入也是 0-10
+          // 不需要乘以 2，直接四舍五入到整数即可
+          const ratingValue = Math.round(parseFloat(mergedBook.rating));
+          if (ratingValue >= 0 && ratingValue <= 10) {
+            // 查找或创建评分
+            const rating = this.calibreDb.prepare(`SELECT id FROM ratings WHERE rating = ?`).get(ratingValue);
+            let ratingId;
+            if (rating) {
+              ratingId = rating.id;
+            } else {
+              ratingId = this.calibreDb.prepare(`INSERT INTO ratings (rating) VALUES (?)`).run(ratingValue).lastInsertRowid;
+            }
+            this.calibreDb.prepare(`INSERT INTO books_ratings_link (book, rating) VALUES (?, ?)`).run(bookId, ratingId);
+            console.log('✅ 评分已更新:', mergedBook.rating);
           } else {
-            ratingId = this.calibreDb.prepare(`INSERT INTO ratings (rating) VALUES (?)`).run(ratingValue).lastInsertRowid;
+            console.warn('⚠️ 评分超出范围，跳过评分更新:', ratingValue);
           }
-          this.calibreDb.prepare(`INSERT INTO books_ratings_link (book, rating) VALUES (?, ?)`).run(bookId, ratingId);
-          console.log('✅ 评分已更新:', mergedBook.rating);
         }
 
         // 7. 更新标签
