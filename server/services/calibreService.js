@@ -82,11 +82,11 @@ const updateBookDir = () => {
 
 // 缓存配置
 // 书籍列表缓存：TTL 30秒（缩短缓存时间，确保新添加的书籍能快速显示）
-const BOOKS_LIST_CACHE = new NodeCache({ stdTTL: 30, maxKeys: 10 });
+const BOOKS_LIST_CACHE = new NodeCache({ stdTTL: 30 });
 // 单本书籍缓存：TTL 5分钟
-const BOOK_CACHE = new NodeCache({ stdTTL: 5 * 60, maxKeys: 200 });
+const BOOK_CACHE = new NodeCache({ stdTTL: 5 * 60 });
 // 封面存在性缓存：TTL 15分钟
-const COVER_CACHE = new NodeCache({ stdTTL: 15 * 60, maxKeys: 300 });
+const COVER_CACHE = new NodeCache({ stdTTL: 15 * 60 });
 
 // 缓存键前缀
 const CACHE_PREFIX = 'calibre:';
@@ -284,7 +284,7 @@ const syncAllBooksToCalibre = async (books) => {
 };
 
 /**
- * 解析Calibre书籍目录（优化版本：带封面缓存）
+ * 解析Calibre书籍目录（优化版本：从目录名提取ID或通过路径匹配）
  */
 const parseCalibreBook = async (bookPath) => {
   const startTime = Date.now();
@@ -295,17 +295,44 @@ const parseCalibreBook = async (bookPath) => {
     // 确保使用最新的书库目录
     updateBookDir();
 
-    let calibreJson;
-
-    // 不再读取calibre.json或OPF文件，直接返回null，依赖数据库获取书籍信息
-    console.log(`📖 不再读取calibre.json或OPF文件，依赖数据库获取书籍信息`);
-    return null;
-
     // 从书籍路径提取作者和标题
     const relativePath = path.relative(BOOK_DIR, bookPath);
     const pathParts = relativePath.split(path.sep);
     const author = pathParts[0] || '未知作者';
-    const title = pathParts[1] || '未知书名';
+    const bookDirName = pathParts[1] || '未知书名';
+
+    // 从数据库获取书籍信息
+    const dbService = databaseService && databaseService.default ? databaseService.default : databaseService;
+    if (!dbService || !dbService.isCalibreAvailable || !dbService.isCalibreAvailable()) {
+      console.log(`📖 数据库不可用，无法获取书籍信息: ${bookDirName}`);
+      return null;
+    }
+
+    let bookFromDb = null;
+
+    // 方法1：从目录名提取书籍ID（格式：书名 (ID)）
+    const idMatch = bookDirName.match(/\((\d+)\)\s*$/);
+    if (idMatch) {
+      const bookId = parseInt(idMatch[1]);
+      bookFromDb = dbService.getBookById(bookId);
+      if (bookFromDb) {
+        console.log(`📖 通过ID找到书籍: ${bookFromDb.title} (ID=${bookId})`);
+      }
+    }
+
+    // 方法2：通过路径匹配数据库中的书籍
+    if (!bookFromDb) {
+      console.log(`📖 尝试通过路径匹配书籍: ${relativePath}`);
+      bookFromDb = dbService.getBookByPath(relativePath);
+      if (bookFromDb) {
+        console.log(`📖 通过路径找到书籍: ${bookFromDb.title}`);
+      }
+    }
+
+    if (!bookFromDb) {
+      console.log(`📖 数据库中未找到书籍: 目录=${bookDirName}, 路径=${relativePath}`);
+      return null;
+    }
 
     // 检查是否有封面（使用缓存）
     const coverPath = path.join(bookPath, 'cover.jpg');
@@ -322,37 +349,22 @@ const parseCalibreBook = async (bookPath) => {
       COVER_CACHE.set(cacheKey, hasCover);
     }
 
+    // 生成封面URL
+    const coverUrl = hasCover ? `/api/static/calibre/${encodeURIComponent(relativePath)}/cover.jpg` : undefined;
+
     // 构建书籍对象
     const book = {
-      id: calibreJson.id,
-      title: calibreJson.title || title,  // 确保title不为空，使用路径中的title作为后备
-      author: calibreJson.author || author,
-      publisher: calibreJson.publisher || '',
-      publishYear: calibreJson.pubdate ? parseInt(calibreJson.pubdate.split('-')[0]) : undefined,
-      isbn: calibreJson.isbn || '',
-      description: calibreJson.comments || '',
-      coverFilename: hasCover ? 'cover.jpg' : undefined,
-      // 优先级：1. 本地封面 2. calibre.json中的原始coverUrl 3. undefined
-      coverUrl: hasCover ? `/api/static/calibre/${encodeURIComponent(relativePath)}/cover.jpg` : calibreJson.coverUrl,
-      // 兼容前端localCoverData字段
-      localCoverData: hasCover ? `/api/static/calibre/${encodeURIComponent(relativePath)}/cover.jpg` : calibreJson.coverUrl,
-      tags: calibreJson.tags || [],
-      groups: calibreJson.groups || [],
-      readStatus: calibreJson.read_status === 0 || calibreJson.read_status === '0' || calibreJson.read_status === '未读' ? '未读' : calibreJson.read_status === 1 || calibreJson.read_status === '1' || calibreJson.read_status === '在读' ? '在读' : '已读',
-      purchaseDate: calibreJson.purchase_date || '',
-      readCompleteDate: calibreJson.read_complete_date || '',
-      standardPrice: calibreJson.standard_price || 0,
-      note: calibreJson.note || '',
-      series: calibreJson.series || '',
-      // 额外的Calibre元数据
-      calibrePath: bookPath,
-      hasCover: hasCover || !!calibreJson.coverUrl,
-      uuid: calibreJson.uuid
+      ...bookFromDb,
+      coverUrl: coverUrl,
+      localCoverData: coverUrl,
+      hasCover: hasCover || !!bookFromDb.has_cover,
+      calibrePath: bookPath
     };
 
     const elapsed = Date.now() - startTime;
     perfMetrics.parseBook.totalTime += elapsed;
 
+    console.log(`📖 成功解析书籍: ${book.title}`);
     return book;
   } catch (err) {
     console.error(`❌ 解析Calibre书籍失败: ${bookPath}`, err.message);
@@ -363,7 +375,7 @@ const parseCalibreBook = async (bookPath) => {
 
 
 /**
- * 获取所有Calibre书籍（优化版本：优先使用数据库，降级到文件系统）
+ * 获取所有Calibre书籍（从数据库读取）
  * @param {boolean} useCache - 是否使用缓存
  * @param {number} readerId - 读者ID（用于加载阅读状态，默认为0）
  */
@@ -390,80 +402,36 @@ const getAllBooksFromCalibre = async (useCache = true, readerId = 0) => {
 
     let books = [];
 
-    // 方案1：优先从SQLite数据库读取
-    try {
-      const dbService = databaseService && databaseService.default ? databaseService.default : databaseService;
-      if (dbService && dbService.isCalibreAvailable && dbService.isCalibreAvailable()) {
-        books = await dbService.getAllBooksFromCalibre(readerId);
-        console.log(`✅ 从数据库获取书籍: ${books.length}本`);
-        
-        // 为数据库返回的书籍生成正确的封面URL（如果还没有的话）
-        books = await Promise.all(books.map(async (book) => {
-          // 如果已经有coverUrl字段，直接使用
-          if (book.coverUrl) {
-            return book;
-          }
-          
-          // 构建书籍的本地路径
-          const bookPath = path.join(BOOK_DIR, book.path);
-          // 检查封面文件是否存在
-          const coverPath = path.join(bookPath, 'cover.jpg');
-          const cacheKey = CACHE_PREFIX + 'cover:' + bookPath;
-          let hasCover = COVER_CACHE.get(cacheKey);
-          
-          if (hasCover === undefined) {
-            try {
-              await fs.access(coverPath);
-              hasCover = true;
-            } catch {
-              hasCover = false;
-            }
-            COVER_CACHE.set(cacheKey, hasCover);
-          }
-          
-          // 生成封面URL
-          const coverUrl = hasCover ? `/api/static/calibre/${encodeURIComponent(book.path)}/cover.jpg` : undefined;
-          
-          return {
-            ...book,
-            hasCover: hasCover || !!book.has_cover,
-            coverUrl: coverUrl,
-            localCoverData: coverUrl
-          };
-        }));
-        console.log(`✅ 已为数据库书籍生成封面URL`);
-      } else {
-        throw new Error('数据库服务不可用');
-      }
-    } catch (dbError) {
-      console.warn('⚠️ 数据库读取失败，降级到文件系统读取:', dbError.message);
-
-      // 方案2：降级到文件系统读取
-      const bookPath = path.join(BOOK_DIR);
-      console.log(`📁 正在从文件系统读取书籍，BOOK_DIR: ${BOOK_DIR}`);
-      console.log(`📁 正在从文件系统读取书籍，bookPath: ${bookPath}`);
-
-      let authorDirs;
-      try {
-        authorDirs = await fs.readdir(bookPath, { withFileTypes: true });
-        console.log(`📁 找到 ${authorDirs.length} 个目录项`);
-      } catch (readErr) {
-        console.error(`❌ 读取目录失败: ${bookPath}`, readErr.message);
-        authorDirs = [];
-      }
-
-      for (const authorDir of authorDirs) {
-        console.log(`📁 处理目录项: ${authorDir.name}, 类型: ${authorDir.isDirectory() ? '目录' : '文件'}`);
-        if (authorDir.isDirectory()) {
-          const authorBooks = await processAuthorDirectory(authorDir);
-          console.log(`📁 作者 ${authorDir.name} 包含 ${authorBooks.length} 本书籍`);
-          if (authorBooks) {
-            books.push(...authorBooks);
-          }
-        }
-      }
-      console.log(`📁 文件系统读取完成，共找到 ${books.length} 本书籍`);
+    // 从SQLite数据库读取
+    const dbService = databaseService && databaseService.default ? databaseService.default : databaseService;
+    
+    if (!dbService || !dbService.isCalibreAvailable || !dbService.isCalibreAvailable()) {
+      throw new Error('Calibre数据库不可用');
     }
+
+    console.log(`🔄 开始从数据库获取书籍...`);
+    books = await dbService.getAllBooksFromCalibre(readerId);
+    console.log(`✅ 从数据库获取书籍: ${books.length}本`);
+    
+    // 为数据库返回的书籍生成正确的封面URL（使用数据库中的has_cover字段，避免文件系统检查）
+    books = books.map((book) => {
+      // 如果已经有coverUrl字段，直接使用
+      if (book.coverUrl) {
+        return book;
+      }
+      
+      // 使用数据库中的has_cover字段
+      const hasCover = !!book.has_cover;
+      const coverUrl = hasCover ? `/api/static/calibre/${encodeURIComponent(book.path)}/cover.jpg` : undefined;
+      
+      return {
+        ...book,
+        hasCover,
+        coverUrl,
+        localCoverData: coverUrl
+      };
+    });
+    console.log(`✅ 已为数据库书籍生成封面URL`);
 
     // 从talebook数据库的reading_state表读取阅读状态
     try {
@@ -617,38 +585,19 @@ const processAuthorDirectory = async (authorDir) => {
       // 方案1：优先从数据库读取
       try {
         const dbService = databaseService && databaseService.default ? databaseService.default : null;
-        console.log(`🔍 调试信息：databaseService = ${databaseService ? '存在' : '不存在'}`);
-        console.log(`🔍 调试信息：dbService = ${dbService ? '存在' : '不存在'}`);
-        console.log(`🔍 调试信息：dbService.isCalibreAvailable = ${dbService && dbService.isCalibreAvailable ? '存在' : '不存在'}`);
-        console.log(`🔍 调试信息：dbService.isCalibreAvailable() = ${dbService && dbService.isCalibreAvailable ? dbService.isCalibreAvailable() : 'N/A'}`);
         
         if (dbService && dbService.isCalibreAvailable && dbService.isCalibreAvailable()) {
           // 直接调用数据库服务的getBookById方法
           book = dbService.getBookById(bookId);
           
-          console.log(`✅ 从数据库获取书籍: ${book ? '成功' : '失败'}`);
+          console.log(`📖 [getBookFromCalibreById] 数据库返回的书籍: id=${book?.id}, has_cover=${book?.has_cover}, coverUrl=${book?.coverUrl}, path=${book?.path}`);
           
-          // 为数据库返回的书籍生成正确的封面URL
+          // 为数据库返回的书籍生成正确的封面URL（使用数据库has_cover字段）
           if (book) {
-            // 构建书籍的本地路径
-            const bookPath = path.join(BOOK_DIR, book.path);
-            // 检查封面文件是否存在
-            const coverPath = path.join(bookPath, 'cover.jpg');
-            const cacheKey = CACHE_PREFIX + 'cover:' + bookPath;
-            let hasCover = COVER_CACHE.get(cacheKey);
-            
-            if (hasCover === undefined) {
-              try {
-                await fs.access(coverPath);
-                hasCover = true;
-              } catch {
-                hasCover = false;
-              }
-              COVER_CACHE.set(cacheKey, hasCover);
-            }
-            
-            // 生成封面URL
-            const coverUrl = hasCover ? `/api/static/calibre/${encodeURIComponent(book.path)}/cover.jpg` : undefined;
+            // 优先使用 enrichBook 中已生成的 coverUrl
+            const hasCover = !!book.has_cover;
+            const coverUrl = book.coverUrl || (hasCover ? `/api/static/calibre/${encodeURIComponent(book.path)}/cover.jpg` : undefined);
+            console.log(`📖 [getBookFromCalibreById] 计算封面URL: book.coverUrl=${book.coverUrl}, hasCover=${hasCover}, 最终coverUrl=${coverUrl}`);
             
             // 从 QCBookLog 数据库获取扩展数据
             let extendedData = {};
@@ -797,6 +746,98 @@ const getBookFromCalibre = async (author, title) => {
   }
 };
 
+/**
+ * 分页获取书籍（优化版本）
+ * @param {Object} options - 分页选项
+ * @param {number} options.page - 页码（从1开始）
+ * @param {number} options.pageSize - 每页数量
+ * @param {number} options.readerId - 读者ID
+ * @param {string} options.sortBy - 排序字段
+ * @param {string} options.sortOrder - 排序方向
+ */
+const getBooksPaginated = async (options = {}) => {
+  const startTime = Date.now();
+  const {
+    page = 1,
+    pageSize = 25,
+    readerId = 0,
+    sortBy = 'last_modified',
+    sortOrder = 'DESC'
+  } = options;
+
+  console.log(`📄 分页获取书籍: page=${page}, pageSize=${pageSize}, readerId=${readerId}`);
+
+  try {
+    updateBookDir();
+
+    const dbService = databaseService && databaseService.default ? databaseService.default : databaseService;
+    
+    if (!dbService || !dbService.isCalibreAvailable || !dbService.isCalibreAvailable()) {
+      throw new Error('Calibre数据库不可用');
+    }
+
+    const result = dbService.getBooksPaginated({
+      page,
+      pageSize,
+      readerId,
+      sortBy,
+      sortOrder
+    });
+
+    const books = result.list;
+
+    const booksWithCovers = books.map((book) => {
+      if (book.coverUrl) {
+        return book;
+      }
+      
+      const hasCover = !!book.has_cover;
+      const coverUrl = hasCover ? `/api/static/calibre/${encodeURIComponent(book.path)}/cover.jpg` : undefined;
+      
+      return {
+        ...book,
+        hasCover,
+        coverUrl,
+        localCoverData: coverUrl
+      };
+    });
+
+    const elapsed = Date.now() - startTime;
+    console.log(`✅ 分页获取书籍完成，耗时: ${elapsed}ms`);
+
+    return {
+      ...result,
+      list: booksWithCovers
+    };
+  } catch (err) {
+    console.error(`❌ 分页获取书籍失败:`, err.message);
+    return {
+      list: [],
+      total: 0,
+      page: page,
+      pageSize: pageSize,
+      totalPages: 0,
+      hasMore: false
+    };
+  }
+};
+
+/**
+ * 获取书籍总数
+ */
+const getBooksTotalCount = () => {
+  try {
+    const dbService = databaseService && databaseService.default ? databaseService.default : databaseService;
+    if (!dbService || !dbService.isCalibreAvailable || !dbService.isCalibreAvailable()) {
+      return 0;
+    }
+    return dbService.getBooksTotalCount();
+  } catch (error) {
+    console.error('获取书籍总数失败:', error.message);
+    return 0;
+  }
+};
+
 // 导出服务
 const calibreService = {
   syncBookToCalibre,
@@ -805,6 +846,8 @@ const calibreService = {
   syncAllBooksToCalibre,
   generateCalibreMetadataSummary,
   getAllBooksFromCalibre,
+  getBooksPaginated,
+  getBooksTotalCount,
   getBookFromCalibreById,
   getBookFromCalibre,
   // 路径管理

@@ -94,9 +94,24 @@ export interface BookService {
   addBook(book: Omit<Book, 'id' | 'createTime' | 'updateTime'>): Promise<Book>;
   updateBook(book: Book, readerId?: number): Promise<Book>;
   deleteBook(id: number): Promise<void>;
-  getBookById(id: number): Promise<Book | undefined>;
+  getBookById(id: number, readerId?: number): Promise<Book | undefined>;
   getBooks(params?: BookQueryParams): Promise<BookQueryResult>;
   getAllBooks(readerId?: number): Promise<Book[]>;
+  getBooksPaginated(options?: {
+    page?: number;
+    pageSize?: number;
+    readerId?: number;
+    sortBy?: string;
+    sortOrder?: string;
+  }): Promise<{
+    list: Book[];
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+    hasMore: boolean;
+  }>;
+  getBooksCount(): Promise<number>;
   batchAddBooks(books: Omit<Book, 'id' | 'createTime' | 'updateTime'>[]): Promise<Book[]>;
 
   // 分组管理

@@ -558,8 +558,9 @@ onMounted(async () => {
 
 
   try {
-    // 总是从API获取最新的书籍信息，确保groups和tags数据完整
-    book.value = await bookService.getBookById(bookId) || null;
+    book.value = await bookService.getBookById(bookId, readerStore.currentReaderId) || null;
+
+    console.log(`📖 [Detail.vue] 获取书籍数据: id=${book.value?.id}, coverUrl=${book.value?.coverUrl}, has_cover=${book.value?.has_cover}, path=${book.value?.path}`);
 
     if (book.value) {
       // 将API返回的tags字段（Calibre标签）复制到calibreTags

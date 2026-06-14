@@ -21,13 +21,16 @@
         class="book-group-card__thumbnail"
       >
         <img
-          v-if="book.coverUrl"
-          :src="book.coverUrl"
+          v-if="book.coverUrl || book.path"
+          :src="book.coverUrl || getBookCoverUrl(book)"
           :alt="book.title"
           class="thumbnail__image"
           loading="lazy"
+          decoding="async"
+          @load="handleThumbnailLoad"
+          @error="handleThumbnailError($event, book)"
         />
-        <div v-else class="thumbnail__placeholder">
+        <div v-if="!(book.coverUrl || book.path) || thumbnailErrors[book.id]" class="thumbnail__placeholder">
           {{ book.title ? book.title.charAt(0) : '?' }}
         </div>
       </div>
@@ -76,7 +79,7 @@
 
     <!-- 书籍数量标签 -->
     <div class="book-group-card__count">
-      <span class="count-number">{{ books.length }}</span>
+      <span class="count-number">{{ displayBookCount }}</span>
       <span class="count-label">本</span>
     </div>
   </div>
@@ -109,6 +112,7 @@ const emit = defineEmits<{
 const isEditing = ref(false);
 const editingName = ref('');
 const editInputRef = ref<HTMLInputElement | null>(null);
+const thumbnailErrors = ref<Record<number, boolean>>({});
 
 const handleStartEdit = () => {
   isEditing.value = true;
@@ -154,6 +158,35 @@ const displayThumbnails = computed(() => {
 const displayBooks = computed(() => {
   return props.books.slice(0, props.maxThumbnails);
 });
+
+// 显示的书籍数量（优先使用后端返回的 bookCount）
+const displayBookCount = computed(() => {
+  return props.group.bookCount ?? props.books.length;
+});
+
+// 缩略图加载成功
+const handleThumbnailLoad = (event: Event) => {
+  const imgElement = event.target as HTMLImageElement;
+  imgElement.classList.add('loaded');
+};
+
+// 获取书籍封面URL
+const getBookCoverUrl = (book: Book): string | undefined => {
+  if (book.coverUrl) return book.coverUrl;
+  // 始终尝试根据 path 加载封面，不依赖 has_cover 字段
+  if (book.path) {
+    return `/api/static/calibre/${encodeURIComponent(book.path)}/cover.jpg`;
+  }
+  return undefined;
+};
+
+// 缩略图加载失败
+const handleThumbnailError = (event: Event, book: Book) => {
+  const imgElement = event.target as HTMLImageElement;
+  imgElement.style.display = 'none';
+  // 标记该书籍封面加载失败
+  thumbnailErrors.value[book.id] = true;
+};
 
 const handleClick = () => {
   if (!isEditing.value) {
@@ -249,6 +282,12 @@ const handleClick = () => {
   height: 100%;
   object-fit: cover; /* 填满容器 */
   display: block;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.thumbnail__image.loaded {
+  opacity: 1;
 }
 
 .thumbnail__placeholder {

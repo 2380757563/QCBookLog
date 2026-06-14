@@ -532,7 +532,19 @@ class BookRepository extends BaseRepository {
         console.warn('⚠️ 从 Talebook 获取书籍类型信息失败:', error.message);
       }
 
-      // 对于 Talebook 中没有找到的书籍，从 QCBookLog 获取
+      try {
+        const readingStateQuery = `
+          SELECT book_id, favorite, wants, read_state, personal_rating, personal_rating_date
+          FROM reading_state
+          WHERE book_id IN (${placeholders}) AND reader_id = ?
+        `;
+        const readingStates = this.talebookDb.prepare(readingStateQuery).all(...bookIds, readerId);
+        readingStates.forEach(rs => readingStateMap.set(rs.book_id, rs));
+        console.log(`✅ 从 Talebook 数据库获取了 ${readingStates.length} 本书籍的阅读状态`);
+      } catch (error) {
+        console.warn('⚠️ 从 Talebook 获取阅读状态失败:', error.message);
+      }
+
       const missingBookIds = bookIds.filter(id => !bookTypeMap.has(id));
       if (missingBookIds.length > 0 && this.qcBooklogDb) {
         try {

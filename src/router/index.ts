@@ -126,14 +126,6 @@ const routes: Array<RouteRecordRaw> = [
       title: '搜索'
     }
   },
-  {
-    path: '/test-isbn',
-    name: 'TestISBNSearch',
-    component: () => import('@/views/TestISBNSearch.vue'),
-    meta: {
-      title: 'ISBN搜索测试'
-    }
-  },
   { path: '/book/isbn-search', name: 'ISBNBookSearch', component: () => import('@/views/Book/ISBNSearch.vue'), meta: { title: 'ISBN搜索' } },
   { path: '/book/isbn-scanner', name: 'ISBNScanner', component: () => import('@/views/Book/ISBNScanner.vue'), meta: { title: 'ISBN扫描' } },
   { path: '/book/batch-scanner', name: 'BatchScanner', component: () => import('@/views/Book/BatchScanner.vue'), meta: { title: '批量扫描' } },

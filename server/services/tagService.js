@@ -326,4 +326,8 @@ class TagService {
   }
 }
 
-export default TagService;
+import databaseService from './database/index.js';
+
+const tagService = new TagService(databaseService);
+
+export default tagService;

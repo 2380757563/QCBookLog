@@ -6,6 +6,11 @@
 
 import databaseService from './database/index.js';
 import calibreService from './calibreService.js';
+import NodeCache from 'node-cache';
+
+// 缓存配置
+const GROUPS_CACHE = new NodeCache({ stdTTL: 60, maxKeys: 10 });
+const CACHE_PREFIX = 'qc:';
 
 /**
  * qcDataService类
@@ -122,6 +127,9 @@ class QcDataService {
         groupData.description || ''
       );
       
+      // 清除分组缓存
+      this.clearGroupsCache();
+      
       return {
         id: String(result.lastInsertRowid),
         name: groupData.name,
@@ -147,6 +155,14 @@ class QcDataService {
       return [];
     }
 
+    // 检查缓存
+    const cacheKey = `${CACHE_PREFIX}groups:all`;
+    const cachedGroups = GROUPS_CACHE.get(cacheKey);
+    if (cachedGroups) {
+      console.log('📦 从缓存获取分组列表');
+      return cachedGroups;
+    }
+
     try {
       const query = `
         SELECT 
@@ -162,7 +178,7 @@ class QcDataService {
       `;
       const groups = this.db.prepare(query).all();
       
-      return groups.map(g => ({
+      const result = groups.map(g => ({
         id: String(g.id),
         name: g.name,
         sort: g.id,
@@ -173,6 +189,12 @@ class QcDataService {
         created_at: g.created_at,
         updated_at: g.updated_at
       }));
+
+      // 存入缓存
+      GROUPS_CACHE.set(cacheKey, result);
+      console.log(`✅ 获取分组列表并缓存，共 ${result.length} 个分组`);
+      
+      return result;
     } catch (error) {
       console.error('❌ 获取所有分组失败:', error.message);
       return [];
@@ -246,6 +268,9 @@ class QcDataService {
         return null;
       }
       
+      // 清除分组缓存
+      this.clearGroupsCache();
+      
       return {
         id: String(groupId),
         name: groupData.name,
@@ -277,11 +302,22 @@ class QcDataService {
       const query = 'DELETE FROM qc_groups WHERE id = ?';
       const result = this.db.prepare(query).run(groupId);
       
+      // 清除分组缓存
+      this.clearGroupsCache();
+      
       return result.changes > 0;
     } catch (error) {
       console.error(`❌ 删除分组ID ${groupId} 失败:`, error.message);
       throw error;
     }
+  }
+
+  /**
+   * 清除分组缓存
+   */
+  clearGroupsCache() {
+    GROUPS_CACHE.flushAll();
+    console.log('🗑️ 分组缓存已清除');
   }
 
   // ----------------------
@@ -338,6 +374,12 @@ class QcDataService {
         VALUES (?, ?)
       `;
       const result = this.db.prepare(query).run(mapping.id, groupId);
+      
+      // 清除分组缓存以更新书籍数量
+      if (result.changes > 0) {
+        this.clearGroupsCache();
+      }
+      
       return result.changes > 0;
     } catch (error) {
       console.error(`❌ 添加书籍ID ${bookId} 到分组ID ${groupId} 失败:`, error.message);
@@ -365,6 +407,12 @@ class QcDataService {
         WHERE mapping_id = ? AND group_id = ?
       `;
       const result = this.db.prepare(query).run(mapping.id, groupId);
+      
+      // 清除分组缓存以更新书籍数量
+      if (result.changes > 0) {
+        this.clearGroupsCache();
+      }
+      
       return result.changes > 0;
     } catch (error) {
       console.error(`❌ 从分组ID ${groupId} 移除书籍ID ${bookId} 失败:`, error.message);
