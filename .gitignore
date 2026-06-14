@@ -85,9 +85,8 @@ API_FIX_SUMMARY.md
 __pycache__/
 *.pyc
 
-# 书籍数据文件（PDF等大文件，不应纳入版本控制）
-moni/book/**/*.pdf
-moni/book/**/*.epub
+# 测试数据目录
+moni/
 
 # 备份文件
 *.bak
