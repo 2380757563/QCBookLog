@@ -93,7 +93,7 @@
             <div v-if="currentSource.data.rating" class="detail-item">
               <label>评分:</label>
               <div class="rating-display">
-                <span class="stars">{{ '★'.repeat(Math.max(0, Math.min(5, Math.round(currentSource.data.rating / 2)))) }}{{ '☆'.repeat(Math.max(0, 5 - Math.max(0, Math.min(5, Math.round(currentSource.data.rating / 2))))) }}</span>
+                <span class="stars">{{ '★'.repeat(Math.max(0, Math.min(10, Math.round(currentSource.data.rating)))) }}{{ '☆'.repeat(Math.max(0, 10 - Math.max(0, Math.min(10, Math.round(currentSource.data.rating))))) }}</span>
                 <span class="rating-value">{{ currentSource.data.rating.toFixed(1) }}</span>
               </div>
             </div>

@@ -67,6 +67,10 @@
           <div class="function-card__icon">⚙️</div>
           <div class="function-card__label">阅读设置</div>
         </router-link>
+        <router-link to="/library-settings" class="function-card">
+          <div class="function-card__icon">📚</div>
+          <div class="function-card__label">书库设置</div>
+        </router-link>
       </div>
     </div>
   </div>

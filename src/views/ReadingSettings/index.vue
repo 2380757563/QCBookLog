@@ -9,51 +9,6 @@
     </div>
 
     <div class="content">
-      <!-- 阅读状态显示方式 -->
-      <div class="settings-section">
-        <h2 class="section-title">阅读状态显示方式</h2>
-        <p class="section-desc">选择在书籍列表中显示阅读状态的方式</p>
-        
-        <div class="option-cards">
-          <div
-            :class="['option-card', { active: progressDisplayMode === 'label' }]"
-            @click="setProgressDisplayMode('label')"
-          >
-            <div class="option-icon">🏷️</div>
-            <div class="option-content">
-              <h3 class="option-title">标签模式</h3>
-              <p class="option-desc">显示"未读"、"在读"、"已读"标签</p>
-              <div class="option-preview">
-                <span class="preview-label preview-label--unread">未读</span>
-                <span class="preview-label preview-label--reading">在读</span>
-                <span class="preview-label preview-label--read">已读</span>
-              </div>
-            </div>
-            <div v-if="progressDisplayMode === 'label'" class="check-icon">✓</div>
-          </div>
-          
-          <div
-            :class="['option-card', { active: progressDisplayMode === 'progress' }]"
-            @click="setProgressDisplayMode('progress')"
-          >
-            <div class="option-icon">📊</div>
-            <div class="option-content">
-              <h3 class="option-title">进度条模式</h3>
-              <p class="option-desc">显示阅读进度百分比和进度条</p>
-              <div class="option-preview">
-                <div class="preview-progress">
-                  <span class="preview-text">25 / 100 页 (25%)</span>
-                  <div class="preview-bar">
-                    <div class="preview-fill" style="width: 25%"></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div v-if="progressDisplayMode === 'progress'" class="check-icon">✓</div>
-          </div>
-        </div>
-      </div>
-
       <!-- 热力图设置 -->
       <div class="settings-section">
         <h2 class="section-title">🔥 热力图滚动设置</h2>
@@ -227,14 +182,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { useReadingStore } from '@/store/reading';
 import { useHeatmapSettingsStore } from '@/store/heatmapSettings';
 
 const router = useRouter();
-const readingStore = useReadingStore();
 const heatmapSettingsStore = useHeatmapSettingsStore();
 
-const progressDisplayMode = ref<'label' | 'progress'>('label');
 const autoSaveReadingProgress = ref(true);
 const showReadingStatsInList = ref(false);
 const enableReadingReminder = ref(false);
@@ -303,11 +255,6 @@ const updateCurrentPreset = () => {
   }
 };
 
-const setProgressDisplayMode = (mode: 'label' | 'progress') => {
-  progressDisplayMode.value = mode;
-  readingStore.setProgressDisplayMode(mode);
-};
-
 const applyPreset = (preset: 'veryLow' | 'low' | 'medium' | 'high') => {
   currentPreset.value = preset;
   heatmapSettingsStore.setPreset(preset);
@@ -320,7 +267,6 @@ const resetHeatmapSettings = () => {
 
 const saveSettings = () => {
   localStorage.setItem('readingSettings', JSON.stringify({
-    progressDisplayMode: progressDisplayMode.value,
     autoSaveReadingProgress: autoSaveReadingProgress.value,
     showReadingStatsInList: showReadingStatsInList.value,
     enableReadingReminder: enableReadingReminder.value
@@ -337,12 +283,9 @@ const loadSettings = () => {
   if (savedSettings) {
     try {
       const settings = JSON.parse(savedSettings);
-      progressDisplayMode.value = settings.progressDisplayMode || 'label';
       autoSaveReadingProgress.value = settings.autoSaveReadingProgress !== false;
       showReadingStatsInList.value = settings.showReadingStatsInList || false;
       enableReadingReminder.value = settings.enableReadingReminder || false;
-      
-      readingStore.setProgressDisplayMode(progressDisplayMode.value);
     } catch (e) {
       console.error('加载阅读设置失败:', e);
     }

@@ -27,6 +27,7 @@ export interface Book {
   personal_rating_date?: string | null;
   tags: string[];
   groups: string[];
+  customTags?: string[];
   series?: string;
   calibreTags?: string[];
   note?: string;

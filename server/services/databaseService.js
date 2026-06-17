@@ -1044,6 +1044,44 @@ class DatabaseService {
       if (hasBooksTable && hasAuthorsTable) {
         console.log('✅ 数据库已存在表结构，使用现有结构（不进行任何修改）');
         console.log(`   已有表: ${existingTables.map(t => t.name).join(', ')}`);
+
+        // 迁移：将 ratings.rating 列从 INTEGER 改为 REAL（保留小数精度）
+        // 即使表结构已存在，也要执行这次迁移
+        try {
+          const ratingColInfo = db.prepare(`PRAGMA table_info(ratings)`).all().find(c => c.name === 'rating');
+          if (ratingColInfo && String(ratingColInfo.type).toUpperCase().includes('INT')) {
+            console.log('🔄 检测到 ratings.rating 为 INTEGER，开始迁移到 REAL（保留小数）...');
+            // 先备份现有链接
+            const oldLinks = db.prepare(`SELECT book, rating FROM books_ratings_link`).all();
+            db.transaction(() => {
+              // 1. 重命名旧表
+              db.prepare(`ALTER TABLE ratings RENAME TO ratings_old`).run();
+              // 2. 重建新表（rating REAL）
+              db.prepare(`
+                CREATE TABLE ratings (
+                  id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  rating REAL NOT NULL
+                )
+              `).run();
+              // 3. 拷贝数据（CAST 保留整数部分，与原 INTEGER 等价；后续新插入会带小数）
+              db.prepare(`INSERT INTO ratings (id, rating) SELECT id, CAST(rating AS REAL) FROM ratings_old`).run();
+              db.prepare(`DROP TABLE ratings_old`).run();
+            })();
+            // 4. 重新插入链接（在事务外，因为新表已建好）
+            for (const link of oldLinks) {
+              try {
+                db.prepare(`INSERT INTO books_ratings_link (book, rating) VALUES (?, ?)`).run(link.book, link.rating);
+              } catch (e) {
+                // 已存在则忽略
+              }
+            }
+            console.log('✅ ratings 表已迁移到 REAL 类型');
+          } else {
+            console.log('✅ ratings.rating 已为 REAL 类型，无需迁移');
+          }
+        } catch (migrationError) {
+          console.warn('⚠️ ratings 表迁移失败（可忽略，不影响功能）:', migrationError.message);
+        }
         return;
       }
 
@@ -1200,7 +1238,7 @@ class DatabaseService {
           FOREIGN KEY (series) REFERENCES series(id) ON DELETE CASCADE
         )
       `).run();
-      
+
       console.log('✅ Calibre 数据库表结构初始化完成');
     } catch (error) {
       console.error('❌ 初始化 Calibre 数据库表结构失败:', error.message);
@@ -1795,7 +1833,7 @@ class DatabaseService {
           WHERE bal.book = b.id
         ) as author,
         (SELECT i.val FROM identifiers i WHERE i.book = b.id AND i.type = 'isbn') as isbn,
-        (SELECT r.rating / 2.0 FROM ratings r JOIN books_ratings_link brl ON r.id = brl.rating WHERE brl.book = b.id) as rating,
+        (SELECT r.rating FROM ratings r JOIN books_ratings_link brl ON r.id = brl.rating WHERE brl.book = b.id) as rating,
         (SELECT c.text FROM comments c WHERE c.book = b.id) as description,
         (SELECT p.name FROM publishers p WHERE p.id IN (SELECT publisher FROM books_publishers_link WHERE book = b.id)) as publisher,
         (SELECT l.lang_code FROM languages l WHERE l.id IN (SELECT lang_code FROM books_languages_link WHERE book = b.id)) as language,
@@ -2171,7 +2209,7 @@ class DatabaseService {
             WHERE bal.book = b.id
           ) as author,
           (SELECT COALESCE((SELECT i.val FROM identifiers i WHERE i.book = b.id AND i.type = 'isbn'), '') as isbn) as isbn,
-          (SELECT r.rating / 2.0 FROM ratings r JOIN books_ratings_link brl ON r.id = brl.rating WHERE brl.book = b.id) as rating,
+          (SELECT r.rating FROM ratings r JOIN books_ratings_link brl ON r.id = brl.rating WHERE brl.book = b.id) as rating,
           (SELECT c.text FROM comments c WHERE c.book = b.id) as description,
           (SELECT p.name FROM publishers p WHERE p.id IN (SELECT publisher FROM books_publishers_link WHERE book = b.id)) as publisher,
           (SELECT l.lang_code FROM languages l WHERE l.id IN (SELECT lang_code FROM books_languages_link WHERE book = b.id)) as language,
@@ -2236,7 +2274,7 @@ class DatabaseService {
           const readingState = this.talebookDb.prepare(`
             SELECT read_state, read_date FROM reading_state WHERE book_id = ? AND reader_id = 0
           `).get(numericBookId);
-          
+
           if (readingState) {
             const statusMap = {
               0: '未读',
@@ -2250,13 +2288,43 @@ class DatabaseService {
           console.warn(`⚠️ 获取书籍 ${numericBookId} 的阅读状态失败:`, readingError.message);
         }
       }
-      
+
+      // 从 QCBookLog 数据库获取分组 ID 列表和自定义标签
+      let bookGroupIds = [];
+      let bookCustomTags = [];
+      if (this.qcBooklogDb) {
+        try {
+          const groupRows = this.qcBooklogDb.prepare(`
+            SELECT bg.group_id as id
+            FROM qc_book_groups bg
+            JOIN qc_book_mapping m ON bg.mapping_id = m.id
+            WHERE m.calibre_book_id = ?
+          `).all(numericBookId);
+          bookGroupIds = groupRows.map(r => String(r.id));
+
+          // 自定义标签（qc_book_tags 使用 mapping_id + tag_id 关联到 qc_tags.name）
+          const tagRows = this.qcBooklogDb.prepare(`
+            SELECT DISTINCT t.name as name
+            FROM qc_book_tags bt
+            JOIN qc_tags t ON bt.tag_id = t.id
+            JOIN qc_book_mapping m ON bt.mapping_id = m.id
+            WHERE m.calibre_book_id = ?
+            ORDER BY t.name
+          `).all(numericBookId);
+          bookCustomTags = tagRows.map(r => r.name);
+        } catch (groupError) {
+          console.warn(`⚠️ 获取书籍 ${numericBookId} 的分组/标签失败:`, groupError.message);
+        }
+      }
+
       return {
         ...bookWithType,
         coverUrl: coverUrl,
         publishYear: publishYear,
         series: book.series || '',
         tags: tags,
+        groups: bookGroupIds,
+        customTags: bookCustomTags,
         pages: bookWithType.page_count || 0,
         standardPrice: bookWithType.standard_price || 0,
         purchasePrice: bookWithType.purchase_price || 0,
@@ -2493,13 +2561,11 @@ class DatabaseService {
           console.log('⚠️ [addBookToDB] description为空，跳过插入');
         }
 
-        // 8. 添加评分
-        if (book.rating) {
+        // 8. 添加评分（保留 1 位小数，存储为 REAL）
+        if (book.rating !== undefined && book.rating !== null && book.rating !== '' && !isNaN(parseFloat(book.rating))) {
           console.log('⭐ [addBookToDB] 准备插入评分:', book.rating);
-          // 将浮点数评分乘以2转换为整数（例如7.5 -> 15），以便在INTEGER字段中存储
-          // Calibre ratings 表存储 0-10 的整数，用户输入也是 0-10
-          // 不需要乘以 2，直接四舍五入到整数即可
-          const ratingValue = Math.round(parseFloat(book.rating));
+          // 保留 1 位小数（例如 8.7 -> 8.7），存到 REAL 列
+          const ratingValue = Math.round(parseFloat(book.rating) * 10) / 10;
           console.log('🔄 [addBookToDB] 评分转换:', book.rating, '->', ratingValue);
           if (ratingValue < 0 || ratingValue > 10) {
             console.warn('⚠️ [addBookToDB] 评分超出范围，跳过评分更新:', ratingValue);
@@ -2522,7 +2588,7 @@ class DatabaseService {
 
               // 添加新的评分关联
               const ratingLinkResult = this.calibreDb.prepare(`INSERT INTO books_ratings_link (book, rating) VALUES (?, ?)`).run(bookId, ratingId);
-              console.log('✅ [addBookToDB] 评分关联成功，link ID:', ratingLinkResult.lastInsertRowid);
+              console.log('✅ [addBookToDB] 评分关联成功，link ID:', ratingLinkResult.lastInsertRowid, '数值:', ratingValue);
 
               // 验证评分关联是否正确插入
               const insertedRatingLink = this.calibreDb.prepare(`SELECT * FROM books_ratings_link WHERE book = ? AND rating = ?`).get(bookId, ratingId);
@@ -2532,12 +2598,13 @@ class DatabaseService {
               console.log('✅ [addBookToDB] 评分关联验证成功');
             } catch (ratingError) {
               console.error('❌ [addBookToDB] 评分插入失败:', ratingError.message);
-            console.error('❌ [addBookToDB] 详细信息:', {
-              bookId,
-              rating: book.rating,
-              ratingValue,
-              errorStack: ratingError.stack
-            });
+              console.error('❌ [addBookToDB] 详细信息:', {
+                bookId,
+                rating: book.rating,
+                ratingValue,
+                errorStack: ratingError.stack
+              });
+            }
           }
         }
 
@@ -2970,12 +3037,11 @@ class DatabaseService {
           console.log('⚠️ 描述为空，跳过更新');
         }
 
-        // 6. 更新评分
+        // 6. 更新评分（保留 1 位小数，存储为 REAL）
         this.calibreDb.prepare(`DELETE FROM books_ratings_link WHERE book = ?`).run(bookId);
-        if (mergedBook.rating) {
-          // Calibre ratings 表存储 0-10 的整数，用户输入也是 0-10
-          // 不需要乘以 2，直接四舍五入到整数即可
-          const ratingValue = Math.round(parseFloat(mergedBook.rating));
+        if (mergedBook.rating !== undefined && mergedBook.rating !== null && mergedBook.rating !== '' && !isNaN(parseFloat(mergedBook.rating))) {
+          // 保留 1 位小数
+          const ratingValue = Math.round(parseFloat(mergedBook.rating) * 10) / 10;
           if (ratingValue >= 0 && ratingValue <= 10) {
             // 查找或创建评分
             const rating = this.calibreDb.prepare(`SELECT id FROM ratings WHERE rating = ?`).get(ratingValue);
@@ -2986,7 +3052,7 @@ class DatabaseService {
               ratingId = this.calibreDb.prepare(`INSERT INTO ratings (rating) VALUES (?)`).run(ratingValue).lastInsertRowid;
             }
             this.calibreDb.prepare(`INSERT INTO books_ratings_link (book, rating) VALUES (?, ?)`).run(bookId, ratingId);
-            console.log('✅ 评分已更新:', mergedBook.rating);
+            console.log('✅ 评分已更新:', ratingValue);
           } else {
             console.warn('⚠️ 评分超出范围，跳过评分更新:', ratingValue);
           }

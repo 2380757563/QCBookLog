@@ -90,19 +90,11 @@
             </div>
             <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
           </div>
-          <div class="list-item" @click="goToBorderSettings">
-            <div class="item-icon">🖼️</div>
-            <div class="item-info">
-              <span class="item-title">书籍边框设置</span>
-              <span class="item-desc">自定义书籍卡片边框样式</span>
-            </div>
-            <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
-          </div>
-          <div class="list-item" @click="goToBindingSettings">
+          <div class="list-item" @click="goToLibrarySettings">
             <div class="item-icon">📚</div>
             <div class="item-info">
-              <span class="item-title">装帧包边设置</span>
-              <span class="item-desc">书籍装帧风格右下角包边</span>
+              <span class="item-title">书库设置</span>
+              <span class="item-desc">视图布局、评分模式、阅读状态显示等</span>
             </div>
             <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
           </div>
@@ -113,16 +105,6 @@
               <span class="item-desc">Talebook等第三方服务配置</span>
             </div>
             <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
-          </div>
-          <div class="list-item">
-            <div class="item-icon">🎨</div>
-            <div class="item-info">
-              <span class="item-title">界面布局</span>
-            </div>
-            <select v-model="settings.layout" class="item-select">
-              <option value="grid">网格</option>
-              <option value="list">列表</option>
-            </select>
           </div>
           <div class="list-item">
             <div class="item-icon">🗃️</div>
@@ -360,12 +342,8 @@ const goToBookmarkSettings = () => {
   router.push('/bookmark-settings');
 };
 
-const goToBorderSettings = () => {
-  router.push('/border-settings');
-};
-
-const goToBindingSettings = () => {
-  router.push('/binding-settings');
+const goToLibrarySettings = () => {
+  router.push('/library-settings');
 };
 
 const goToThirdPartySettings = () => {
@@ -447,7 +425,6 @@ const setDefaultReader = async () => {
 // 保存设置
 watch(settings, (newSettings) => {
   localStorage.setItem('appSettings', JSON.stringify(newSettings));
-  bookStore.setLayout(newSettings.layout as 'grid' | 'list');
 }, { deep: true });
 
 // 加载数据

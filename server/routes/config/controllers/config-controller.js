@@ -473,7 +473,7 @@ class ConfigController {
       res.json({
         success: true,
         message: result.message,
-        path: result.path,
+        dbPath: result.path,
         libraryUuid: result.libraryUuid
       });
     } catch (error) {
