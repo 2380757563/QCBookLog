@@ -38,8 +38,7 @@
             {{ book.readStatus }}
           </div>
           <div v-if="book.rating" class="book-rating">
-            <span class="stars">{{ '★'.repeat(Math.max(0, Math.min(5, Math.round(book.rating / 2)))) }}{{ '☆'.repeat(Math.max(0, 5 - Math.max(0, Math.min(5, Math.round(book.rating / 2))))) }}</span>
-            <span class="rating-value">{{ book.rating.toFixed(1) }}</span>
+            <RatingDisplay :value="book.rating" :show-value="true" size="large" />
           </div>
         </div>
       </div>
@@ -256,7 +255,8 @@
             v-for="bookmark in filteredBookmarks.slice(0, 5)"
             :key="bookmark.id"
             class="bookmark-item"
-            @click="goToBookmarkDetail(String(bookmark.id))"
+            :class="{ active: selectedBookmarkId === bookmark.id }"
+            @click="selectBookmark(bookmark)"
           >
             <p class="bookmark-content">{{ bookmark.content }}</p>
             <div class="bookmark-meta">
@@ -277,10 +277,100 @@
           <p>暂无书摘</p>
           <button class="btn-primary" @click="goToAddBookmark">添加书摘</button>
         </div>
+
+        <!-- 书摘内容联动展示区 -->
+        <div v-if="selectedBookmark" class="bookmark-detail-panel" :key="selectedBookmark.id">
+          <div class="bookmark-detail-header">
+            <h4 class="bookmark-detail-title">书摘内容</h4>
+            <div class="bookmark-detail-actions">
+              <button class="btn-icon" @click="goToBookmarkDetail(String(selectedBookmark.id))" title="查看完整详情">
+                <svg viewBox="0 0 24 24" width="16" height="16"><path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7zM19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7z"/></svg>
+              </button>
+              <button class="btn-icon" @click="closeBookmarkDetail" title="关闭">
+                <svg viewBox="0 0 24 24" width="16" height="16"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="bookmark-detail-body">
+            <p class="bookmark-detail-content">{{ selectedBookmark.content }}</p>
+            <div class="bookmark-detail-info">
+              <div v-if="selectedBookmark.pageNum" class="detail-info-item">
+                <span class="detail-info-label">页码</span>
+                <span class="detail-info-value">第 {{ selectedBookmark.pageNum }} 页</span>
+              </div>
+              <div v-if="selectedBookmark.chapter" class="detail-info-item">
+                <span class="detail-info-label">章节</span>
+                <span class="detail-info-value">{{ selectedBookmark.chapter }}</span>
+              </div>
+              <div class="detail-info-item">
+                <span class="detail-info-label">创建时间</span>
+                <span class="detail-info-value">{{ formatDate(selectedBookmark.createTime) }}</span>
+              </div>
+              <div v-if="selectedBookmark.note" class="detail-info-item">
+                <span class="detail-info-label">备注</span>
+                <span class="detail-info-value">{{ selectedBookmark.note }}</span>
+              </div>
+              <div v-if="selectedBookmark.tags && selectedBookmark.tags.length" class="detail-info-item">
+                <span class="detail-info-label">标签</span>
+                <span class="detail-info-value">
+                  <span v-for="tag in selectedBookmark.tags" :key="tag" class="mini-tag">{{ tag }}</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
     <div v-else class="loading">加载中...</div>
+
+    <!-- 书摘详情弹窗（联动面板的另一种展示方式 - 弹窗模式） -->
+    <Teleport to="body">
+      <transition name="bookmark-fade">
+        <div v-if="selectedBookmark" class="bookmark-modal-mask" @click.self="closeBookmarkDetail">
+          <div class="bookmark-modal">
+            <div class="bookmark-modal-header">
+              <h4 class="bookmark-modal-title">📖 书摘内容</h4>
+              <div class="bookmark-modal-actions">
+                <button class="btn-icon" @click="goToBookmarkDetail(String(selectedBookmark.id))" title="查看完整详情">
+                  <svg viewBox="0 0 24 24" width="16" height="16"><path d="M14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7zM19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7z"/></svg>
+                </button>
+                <button class="btn-icon" @click="closeBookmarkDetail" title="关闭">
+                  <svg viewBox="0 0 24 24" width="16" height="16"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="bookmark-modal-body">
+              <p class="bookmark-modal-content">{{ selectedBookmark.content }}</p>
+              <div class="bookmark-modal-info">
+                <div v-if="selectedBookmark.pageNum" class="modal-info-item">
+                  <span class="modal-info-label">📄 页码</span>
+                  <span class="modal-info-value">第 {{ selectedBookmark.pageNum }} 页</span>
+                </div>
+                <div v-if="selectedBookmark.chapter" class="modal-info-item">
+                  <span class="modal-info-label">📑 章节</span>
+                  <span class="modal-info-value">{{ selectedBookmark.chapter }}</span>
+                </div>
+                <div class="modal-info-item">
+                  <span class="modal-info-label">🕐 创建时间</span>
+                  <span class="modal-info-value">{{ formatDate(selectedBookmark.createTime) }}</span>
+                </div>
+                <div v-if="selectedBookmark.note" class="modal-info-item">
+                  <span class="modal-info-label">📝 备注</span>
+                  <span class="modal-info-value">{{ selectedBookmark.note }}</span>
+                </div>
+                <div v-if="selectedBookmark.tags && selectedBookmark.tags.length" class="modal-info-item">
+                  <span class="modal-info-label">🏷️ 标签</span>
+                  <span class="modal-info-value">
+                    <span v-for="tag in selectedBookmark.tags" :key="tag" class="mini-tag">{{ tag }}</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </transition>
+    </Teleport>
 
     <!-- 删除确认弹窗 -->
     <div v-if="showDeleteConfirm" class="dialog-overlay" @click="showDeleteConfirm = false">
@@ -302,7 +392,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useBookStore } from '@/store/book';
 import { useReaderStore } from '@/store/reader';
@@ -314,6 +404,7 @@ import readingTrackingService from '@/services/readingTracking';
 import type { Book, BookGroup, ReadingState } from '@/services/book/types';
 import type { Bookmark } from '@/services/bookmark/types';
 import ReadingProgressBarList from '@/components/ReadingProgressBarList/ReadingProgressBarList.vue';
+import RatingDisplay from '@/components/business/RatingDisplay.vue';
 
 const router = useRouter();
 const route = useRoute();
@@ -326,6 +417,12 @@ const book = ref<Book | null>(null);
 const bookmarks = ref<Bookmark[]>([]);
 const bookGroups = ref<BookGroup[]>([]);
 const bookCustomTags = ref<string[]>([]);
+// 书摘联动相关状态
+const selectedBookmarkId = ref<string | number | null>(null);
+const selectedBookmark = computed<Bookmark | null>(() => {
+  if (selectedBookmarkId.value === null) return null;
+  return filteredBookmarks.value.find(bm => bm.id === selectedBookmarkId.value) || null;
+});
 const showActions = ref(false);
 const showDeleteConfirm = ref(false);
 const readingState = ref<ReadingState>({
@@ -450,6 +547,28 @@ const handleDelete = () => {
   showDeleteConfirm.value = true;
 };
 
+// 选择书摘 - 联动显示书摘内容
+const selectBookmark = (bookmark: Bookmark) => {
+  if (selectedBookmarkId.value === bookmark.id) {
+    // 再次点击同一个书摘，关闭联动面板
+    closeBookmarkDetail();
+  } else {
+    selectedBookmarkId.value = bookmark.id;
+    // 滚动到联动面板
+    nextTick(() => {
+      const panel = document.querySelector('.bookmark-detail-panel');
+      if (panel) {
+        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
+  }
+};
+
+// 关闭书摘联动面板
+const closeBookmarkDetail = () => {
+  selectedBookmarkId.value = null;
+};
+
 const confirmDelete = async () => {
   if (!book.value) return;
   try {
@@ -565,7 +684,12 @@ onMounted(async () => {
     if (book.value) {
       // 将API返回的tags字段（Calibre标签）复制到calibreTags
       if (Array.isArray(book.value.tags)) {
-        book.value.calibreTags = book.value.tags as string[];
+        // 处理 tags 可能是字符串数组或对象数组两种情况
+        book.value.calibreTags = (book.value.tags as any[]).map((t: any) => {
+          if (typeof t === 'string') return t;
+          if (t && typeof t === 'object' && typeof t.name === 'string') return t.name;
+          return String(t);
+        });
         // 清空tags字段，用于应用自己的Tag系统
         book.value.tags = [];
       }
@@ -575,6 +699,28 @@ onMounted(async () => {
       // 确保groups字段存在且为数组
       if (!Array.isArray(book.value.groups)) {
         book.value.groups = [];
+      }
+
+      // 标准化自定义标签 - 处理后端可能返回的多种格式
+      if (Array.isArray(book.value.customTags)) {
+        bookCustomTags.value = (book.value.customTags as any[]).map((t: any) => {
+          if (typeof t === 'string') return t;
+          if (t && typeof t === 'object' && typeof t.name === 'string') return t.name;
+          return String(t);
+        });
+      } else {
+        // 兼容旧版本：调用单独接口
+        try {
+          const tags = await bookService.getTags(bookId);
+          bookCustomTags.value = (Array.isArray(tags) ? tags : []).map((t: any) => {
+            if (typeof t === 'string') return t;
+            if (t && typeof t === 'object' && typeof t.name === 'string') return t.name;
+            return String(t);
+          });
+        } catch (error) {
+          console.error('加载自定义标签失败:', error);
+          bookCustomTags.value = [];
+        }
       }
 
       // 加载相关书摘
@@ -588,15 +734,14 @@ onMounted(async () => {
 
       // 加载分组信息
       const allGroups = await bookService.getAllGroups();
-      bookGroups.value = allGroups.filter(g => book.value?.groups.includes(g.id));
-
-      // 加载自定义标签
-      try {
-        bookCustomTags.value = await bookService.getTags(bookId);
-      } catch (error) {
-        console.error('加载自定义标签失败:', error);
-        bookCustomTags.value = [];
-      }
+      // 兼容处理：groups 可能是 string[] 或 number[] 或 Array<{id, name}>
+      const bookGroupIds: string[] = (book.value?.groups || []).map((g: any) => {
+        if (typeof g === 'string') return g;
+        if (typeof g === 'number') return String(g);
+        if (g && typeof g === 'object' && g.id !== undefined) return String(g.id);
+        return String(g);
+      });
+      bookGroups.value = allGroups.filter(g => bookGroupIds.includes(String(g.id)));
 
       // 加载阅读状态
       await loadReadingState();
@@ -986,11 +1131,18 @@ watch(() => readerStore.currentReaderId, async (newReaderId, oldReaderId) => {
   background-color: #f9f9f9;
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: background-color 0.3s;
+  transition: background-color 0.3s, transform 0.2s, box-shadow 0.2s;
+  border: 2px solid transparent;
 }
 
 .bookmark-item:hover {
   background-color: #f0f0f0;
+}
+
+.bookmark-item.active {
+  background-color: #e3f2fd;
+  border-color: var(--primary-color, #1976d2);
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.15);
 }
 
 .bookmark-content {
@@ -1002,6 +1154,227 @@ watch(() => readerStore.currentReaderId, async (newReaderId, oldReaderId) => {
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* 书摘联动详情面板 */
+.bookmark-detail-panel {
+  margin-top: 12px;
+  padding: 16px;
+  background: linear-gradient(135deg, #fafbfc 0%, #f0f4f8 100%);
+  border-radius: var(--radius-md);
+  border-left: 4px solid var(--primary-color, #1976d2);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  animation: slideIn 0.25s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.bookmark-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.bookmark-detail-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--primary-color, #1976d2);
+  margin: 0;
+}
+
+.bookmark-detail-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-secondary, #666);
+  transition: background-color 0.2s;
+}
+
+.btn-icon:hover {
+  background-color: rgba(0, 0, 0, 0.06);
+}
+
+.btn-icon svg {
+  fill: currentColor;
+}
+
+.bookmark-detail-body {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.bookmark-detail-content {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-primary);
+  margin: 0 0 12px 0;
+  padding: 12px;
+  background-color: rgba(255, 255, 255, 0.7);
+  border-radius: 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bookmark-detail-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.detail-info-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.detail-info-label {
+  color: var(--text-secondary, #666);
+  font-weight: 500;
+  min-width: 60px;
+  flex-shrink: 0;
+}
+
+.detail-info-value {
+  color: var(--text-primary);
+}
+
+.mini-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  margin-right: 4px;
+  background-color: var(--primary-color, #1976d2);
+  color: #fff;
+  border-radius: 10px;
+  font-size: 11px;
+}
+
+/* 书摘弹窗 */
+.bookmark-modal-mask {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 16px;
+}
+
+.bookmark-modal {
+  background-color: var(--bg-card, #fff);
+  border-radius: var(--radius-lg, 12px);
+  max-width: 600px;
+  width: 100%;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.bookmark-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-light, #eee);
+}
+
+.bookmark-modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.bookmark-modal-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.bookmark-modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.bookmark-modal-content {
+  font-size: 15px;
+  line-height: 1.8;
+  color: var(--text-primary);
+  margin: 0 0 16px 0;
+  padding: 16px;
+  background-color: rgba(0, 0, 0, 0.02);
+  border-radius: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bookmark-modal-info {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.modal-info-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  padding: 6px 0;
+}
+
+.modal-info-label {
+  color: var(--text-secondary, #666);
+  font-weight: 500;
+  min-width: 80px;
+  flex-shrink: 0;
+}
+
+.modal-info-value {
+  color: var(--text-primary);
+}
+
+.bookmark-fade-enter-active,
+.bookmark-fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.bookmark-fade-enter-active .bookmark-modal,
+.bookmark-fade-leave-active .bookmark-modal {
+  transition: transform 0.2s ease;
+}
+
+.bookmark-fade-enter-from,
+.bookmark-fade-leave-to {
+  opacity: 0;
+}
+
+.bookmark-fade-enter-from .bookmark-modal,
+.bookmark-fade-leave-to .bookmark-modal {
+  transform: scale(0.95) translateY(-10px);
 }
 
 .bookmark-meta {

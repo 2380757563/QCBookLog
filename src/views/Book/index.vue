@@ -535,8 +535,7 @@
                   <p class="book-author">{{ book.author || '未知作者' }}</p>
                   <ReadingProgressBarList v-if="readingStore.progressDisplayMode === 'progress' && book.read_pages && book.pages" :book="book" :show-duration="true" />
                   <div v-if="book.rating" class="book-rating">
-                    <span class="rating-stars">{{ '★'.repeat(Math.max(0, Math.min(5, Math.round(book.rating / 2)))) }}{{ '☆'.repeat(Math.max(0, 5 - Math.max(0, Math.min(5, Math.round(book.rating / 2))))) }}</span>
-                    <span class="rating-value">{{ book.rating.toFixed(1) }}</span>
+                    <RatingDisplay :value="book.rating" :show-value="true" size="small" />
                   </div>
                 </div>
               </div>
@@ -782,6 +781,8 @@ import type { WishlistItem } from '@/services/wishlistService';
 import BookGroupCard from '@/components/business/BookGroupCard/BookGroupCard.vue';
 import ReadingProgressBarList from '@/components/ReadingProgressBarList/ReadingProgressBarList.vue';
 import BindingBorder from '@/components/business/BindingBorder/BindingBorder.vue';
+import RatingDisplay from '@/components/business/RatingDisplay.vue';
+import { useBookViewSettings } from '@/composables/useBookViewSettings';
 import { useBindingBorderStore } from '@/store/bindingBorder';
 import { 
   getBindingType, 
@@ -986,7 +987,6 @@ const tabs = computed(() => [
 const activeTab = ref('library');
 
 // 布局和筛选
-const layout = ref<'grid' | 'list'>('grid');
 const filterStatus = ref('');
 const sortBy = ref('createTime');
 
@@ -1052,26 +1052,29 @@ const showSettingsMenu = ref(false);
 const scanDropdownRef = ref<HTMLElement | null>(null);
 const settingsDropdownRef = ref<HTMLElement | null>(null);
 
-const gridColumns = ref<'auto' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | '13' | '14' | '15' | '16' | '17' | '18' | '19' | '20'>('auto');
-const manualColumnCount = ref(3);
+const {
+  layout,
+  gridColumns,
+  manualColumnCount,
+  setLayout: setViewLayout,
+  toggleLayout: toggleViewLayout,
+  setGridColumns: setViewGridColumns,
+  applyManualColumns: applyViewManualColumns,
+  useAutoColumns: useViewAutoColumns
+} = useBookViewSettings();
 
 // 切换到手动模式
 const toggleManualColumns = () => {
   if (gridColumns.value === 'auto') {
-    // 从localStorage读取之前的手动设置
-    const saved = localStorage.getItem('bookGridManualColumns');
-    manualColumnCount.value = saved ? parseInt(saved, 10) : 3;
-    applyManualColumns();
+    applyViewManualColumns();
   }
 };
 
-// 应用手动列数
+// 应用手动列数（composable 已包含 localStorage 持久化 + 范围限制）
 const applyManualColumns = () => {
-  gridColumns.value = String(manualColumnCount.value) as any;
-  localStorage.setItem('bookGridColumns', gridColumns.value);
-  localStorage.setItem('bookGridManualColumns', String(manualColumnCount.value));
+  applyViewManualColumns();
   if (layout.value === 'list') {
-    layout.value = 'grid';
+    setViewLayout('grid');
     bookStore.setLayout('grid');
   }
 };
@@ -1457,7 +1460,7 @@ const currentGroup = computed(() => {
 
 // 切换布局
 const toggleLayout = () => {
-  layout.value = layout.value === 'grid' ? 'list' : 'grid';
+  setViewLayout(layout.value === 'grid' ? 'list' : 'grid');
   bookStore.setLayout(layout.value);
   showSettingsMenu.value = false;
 };
@@ -1588,24 +1591,19 @@ const getBinding2Name = (value: number): string => {
   return map[value] || '未知';
 };
 
-// 设置网格列数
+// 设置网格列数（兼容旧 API，内部走 composable 持久化）
 const setGridColumns = (columns: 'auto' | '2' | '3' | '4' | '5') => {
-  gridColumns.value = columns;
-  // 保存到本地存储
-  localStorage.setItem('bookGridColumns', columns);
+  setViewGridColumns(columns as any);
   // 切换到网格视图（如果当前是列表视图）
   if (layout.value === 'list') {
-    layout.value = 'grid';
+    setViewLayout('grid');
     bookStore.setLayout('grid');
   }
 };
 
-// 加载网格列数配置
+// 加载网格列数配置（composable 内部已自动从 localStorage 初始化）
 const loadGridColumns = () => {
-  const saved = localStorage.getItem('bookGridColumns');
-  if (saved) {
-    gridColumns.value = saved as any;
-  }
+  // no-op: composable 在首次调用时已从 localStorage 恢复状态
 };
 
 // 导航方法
@@ -1943,10 +1941,11 @@ const loadData = async () => {
     // 加载应用设置
     appStore.loadSettings();
 
-    // 加载布局设置
-    layout.value = bookStore.currentLayout;
+    // 加载布局设置（composable 已在首次调用时从 localStorage 自动恢复）
+    // 同步 bookStore 的布局状态以保持兼容
+    bookStore.setLayout(layout.value);
 
-    // 加载网格列数配置
+    // 加载网格列数配置（composable 已处理，no-op）
     loadGridColumns();
 
     // 清空选中状态，避免切换数据库后删除不存在的书籍ID
@@ -2888,8 +2887,8 @@ watch(
 }
 
 .book-grid--grid {
-  /* 默认使用 auto 布局 */
-  align-items: stretch;
+  /* 默认按内容自然撑开，列数变多时不被同行其他卡片拉伸 - 避免信息区被裁切 */
+  align-items: start;
 }
 
 /* 根据列数动态调整 gap 和卡片样式 */
@@ -3017,6 +3016,10 @@ watch(
   cursor: pointer;
   transition: all 0.3s;
   position: relative;
+  width: 100%;
+  /* 不在 book-card 外层设置固定 aspect-ratio，
+     避免列数变多时内部信息区被裁切。
+     封面内部使用 3:4 固定比例保证图片不变形，book-info 区域使用自然高度。 */
 }
 
 .book-card:hover {
@@ -3036,29 +3039,32 @@ watch(
 .book-grid--grid .book-card {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  /* 不使用 height: 100%，让 book-card 按内容（封面 3:4 + 信息区）自然撑开 */
+  align-self: start;
   width: 100%;
   min-width: 0;
 }
 
 .book-grid--grid .book-card-inner {
-  flex: 1;
   display: flex;
   flex-direction: column;
+  /* 不使用 flex: 1，避免 inner 拉伸撑满父级，保证信息区按自然高度显示 */
+  flex: 0 0 auto;
   min-height: 0;
 }
 
 .book-grid--grid .book-info {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 50px;
+  flex-shrink: 0;
 }
 
 .book-card--list {
   display: flex;
   align-items: center;
   padding: 12px;
+  /* 列表模式取消固定宽高比，让内容自然撑开 */
+  aspect-ratio: auto;
 }
 
 .book-card-inner {
@@ -3592,94 +3598,43 @@ watch(
   grid-template-columns: repeat(12, minmax(0, 1fr));
 }
 
-/* 分组卡片高度根据列数调整 - 跟随书籍变化 */
-.groups-grid.grid-cols-auto .book-group-card {
-  min-height: 200px;
+.groups-grid.grid-cols-13 {
+  grid-template-columns: repeat(13, minmax(0, 1fr));
 }
 
-.groups-grid.grid-cols-2 .book-group-card {
-  min-height: 300px;
+.groups-grid.grid-cols-14 {
+  grid-template-columns: repeat(14, minmax(0, 1fr));
 }
 
-.groups-grid.grid-cols-3 .book-group-card {
-  min-height: 250px;
+.groups-grid.grid-cols-15 {
+  grid-template-columns: repeat(15, minmax(0, 1fr));
 }
 
-.groups-grid.grid-cols-4 .book-group-card {
-  min-height: 220px;
+.groups-grid.grid-cols-16 {
+  grid-template-columns: repeat(16, minmax(0, 1fr));
 }
 
-.groups-grid.grid-cols-5 .book-group-card {
-  min-height: 190px;
+.groups-grid.grid-cols-17 {
+  grid-template-columns: repeat(17, minmax(0, 1fr));
 }
 
-/* 分组卡片缩略图高度根据列数调整 */
-.groups-grid.grid-cols-auto .book-group-card__thumbnail,
-.groups-grid.grid-cols-auto .thumbnails-4,
-.groups-grid.grid-cols-auto .thumbnails-9 .book-group-card__thumbnail {
-  height: 60px;
-  min-height: 60px;
+.groups-grid.grid-cols-18 {
+  grid-template-columns: repeat(18, minmax(0, 1fr));
 }
 
-.groups-grid.grid-cols-auto .thumbnails-4 {
-  grid-template-rows: repeat(2, 60px);
+.groups-grid.grid-cols-19 {
+  grid-template-columns: repeat(19, minmax(0, 1fr));
 }
 
-.groups-grid.grid-cols-auto .thumbnails-9 {
-  grid-template-rows: repeat(3, 60px);
+.groups-grid.grid-cols-20 {
+  grid-template-columns: repeat(20, minmax(0, 1fr));
 }
 
-.groups-grid.grid-cols-2 .book-group-card__thumbnail {
-  height: 100px;
-  min-height: 100px;
-}
-
-.groups-grid.grid-cols-2 .thumbnails-4 {
-  grid-template-rows: repeat(2, 100px);
-}
-
-.groups-grid.grid-cols-2 .thumbnails-9 {
-  grid-template-rows: repeat(3, 100px);
-}
-
-.groups-grid.grid-cols-3 .book-group-card__thumbnail {
-  height: 80px;
-  min-height: 80px;
-}
-
-.groups-grid.grid-cols-3 .thumbnails-4 {
-  grid-template-rows: repeat(2, 80px);
-}
-
-.groups-grid.grid-cols-3 .thumbnails-9 {
-  grid-template-rows: repeat(3, 80px);
-}
-
-.groups-grid.grid-cols-4 .book-group-card__thumbnail {
-  height: 65px;
-  min-height: 65px;
-}
-
-.groups-grid.grid-cols-4 .thumbnails-4 {
-  grid-template-rows: repeat(2, 65px);
-}
-
-.groups-grid.grid-cols-4 .thumbnails-9 {
-  grid-template-rows: repeat(3, 65px);
-}
-
-.groups-grid.grid-cols-5 .book-group-card__thumbnail {
-  height: 55px;
-  min-height: 55px;
-}
-
-.groups-grid.grid-cols-5 .thumbnails-4 {
-  grid-template-rows: repeat(2, 55px);
-}
-
-.groups-grid.grid-cols-5 .thumbnails-9 {
-  grid-template-rows: repeat(3, 55px);
-}
+/* 分组卡片和缩略图比例由 BookGroupCard 内部 padding-top 控制
+   - 缩略图区 3:4 (与 BookCard 封面一致)
+   - 缩略图单元格 3:4 (3:4 容器被 2x2 / 3x3 等分)
+   - 卡片整体 = 3:4 缩略图区 + 52px 信息区
+   这里不再按列数覆盖 min-height / height，避免破坏固定比例。*/
 
 /* 整理模式下的分组框网格 */
 .groups-grid--organize {

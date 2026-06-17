@@ -162,7 +162,8 @@ async function searchTanshu(isbn: string): Promise<BookSearchResult | null> {
           coverUrl: data.img || '',
           description: data.summary || '',
           price: data.price || '',
-          rating: data.rating ? parseFloat((data.rating / 2).toFixed(1)) : undefined, // 探数评分通常是0-10，转换为0-5
+          // 探数 API 的 rating 字段可能为字符串或数字，统一用 parseFloat 转换
+          rating: data.rating != null && data.rating !== '' && !isNaN(parseFloat(String(data.rating))) ? Math.round(parseFloat(String(data.rating)) * 10) / 10 : undefined, // 探数评分保持 0-10 原值，保留 1 位小数
           series: data.series ? (typeof data.series === 'string' ? data.series : data.series?.title || '') : '',
           tags: data.tags ? (Array.isArray(data.tags) ? data.tags.map((t: any) => typeof t === 'string' ? t : t.title).filter(Boolean) : [data.tags]) : []
         };
@@ -307,7 +308,8 @@ async function searchIsbnWork(isbn: string): Promise<BookSearchResult | null> {
         coverUrl: coverUrl,
         description: data.bookDesc || '',
         price: price,
-        rating: data.rating ? parseFloat((data.rating / 2).toFixed(1)) : undefined, // 转换评分
+        // 公共图书 API 的 rating 字段可能为字符串或数字，统一用 parseFloat 转换
+        rating: data.rating != null && data.rating !== '' && !isNaN(parseFloat(String(data.rating))) ? Math.round(parseFloat(String(data.rating)) * 10) / 10 : undefined, // 评分保持 0-10 原值
         series: data.series ? (typeof data.series === 'string' ? data.series : data.series?.title || '') : '',
         tags: data.tags ? (Array.isArray(data.tags) ? data.tags.map((t: any) => typeof t === 'string' ? t : t.title).filter(Boolean) : [data.tags]) : []
       };
@@ -433,7 +435,8 @@ async function searchDBR(isbn: string): Promise<BookSearchResult | null> {
       coverUrl: coverUrl,
       description: data.summary || '',
       price: data.price || '',
-      rating: data.rating?.average ? parseFloat((data.rating.average / 2).toFixed(1)) : undefined, // DBR评分结构是 {average: 8.2}
+      // DBR 评分结构是 {average: 8.2}，但 average 可能是字符串，统一用 parseFloat 转换
+      rating: data.rating?.average != null && data.rating.average !== '' && !isNaN(parseFloat(String(data.rating.average))) ? Math.round(parseFloat(String(data.rating.average)) * 10) / 10 : undefined, // DBR评分保持 0-10 原值
       // DBR使用serials字段，豆瓣使用series字段，需要兼容两种格式
       series: (data.series ? (typeof data.series === 'string' ? data.series : data.series?.title || '') : '') ||
               (data.serials ? (typeof data.serials === 'string' ? data.serials : data.serials?.title || '') : ''),
@@ -559,7 +562,8 @@ async function searchDouban(isbn: string): Promise<BookSearchResult | null> {
       localCoverData: localCoverData,
       description: data.summary || '',
       price: data.price || '',
-      rating: data.rating?.average ? parseFloat((data.rating.average / 2).toFixed(1)) : undefined, // 豆瓣评分结构是 {average: 8.2}
+      // 豆瓣评分结构是 {average: "8.7"}（注意是字符串，不是数字），统一用 parseFloat 转换
+      rating: data.rating?.average != null && data.rating.average !== '' && !isNaN(parseFloat(String(data.rating.average))) ? Math.round(parseFloat(String(data.rating.average)) * 10) / 10 : undefined, // 豆瓣评分保持 0-10 原值
       series: data.series ? (typeof data.series === 'string' ? data.series : data.series?.title || '') : '',
       tags: data.tags ? (Array.isArray(data.tags) ? data.tags.map((t: any) => typeof t === 'string' ? t : t.title).filter(Boolean) : [data.tags]) : []
     };

@@ -341,7 +341,21 @@ onMounted(async () => {
 
     // 加载书摘标签（从书摘标签 API）
     try {
-      allTags.value = await tagApi.getAll();
+      // tagApi.getAll() 返回 [{tag_id, count}]，编辑页只关心标签名
+      const tagsResp = await tagApi.getAll();
+      if (Array.isArray(tagsResp)) {
+        allTags.value = tagsResp
+          .map((t: any) => {
+            if (typeof t === 'string') return t;
+            if (t && typeof t === 'object') {
+              return t.tag_id ?? t.name ?? t.tagName ?? String(t);
+            }
+            return String(t);
+          })
+          .filter((v: any) => typeof v === 'string' && v.length > 0);
+      } else {
+        allTags.value = [];
+      }
 
     } catch (error) {
 

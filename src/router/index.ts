@@ -119,6 +119,22 @@ const routes: Array<RouteRecordRaw> = [
     }
   },
   {
+    path: '/system-settings',
+    name: 'SystemSettings',
+    component: () => import('@/views/SystemSettings/index.vue'),
+    meta: {
+      title: '系统设置'
+    }
+  },
+  {
+    path: '/library-settings',
+    name: 'LibrarySettings',
+    component: () => import('@/views/LibrarySettings/index.vue'),
+    meta: {
+      title: '书库设置'
+    }
+  },
+  {
     path: '/search',
     name: 'Search',
     component: () => import('@/views/Search/index.vue'),

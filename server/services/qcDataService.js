@@ -476,14 +476,17 @@ class QcDataService {
     }
 
     try {
+      // qc_book_tags 表使用 mapping_id + tag_id，需要 JOIN qc_book_mapping 和 qc_tags
       const query = `
-        SELECT DISTINCT tag_name
-        FROM qc_book_tags
-        WHERE book_id = ?
-        ORDER BY tag_name
+        SELECT DISTINCT t.name as name
+        FROM qc_book_tags bt
+        JOIN qc_tags t ON bt.tag_id = t.id
+        JOIN qc_book_mapping m ON bt.mapping_id = m.id
+        WHERE m.calibre_book_id = ?
+        ORDER BY t.name
       `;
       const results = this.db.prepare(query).all(bookId);
-      return results.map(item => item.tag_name);
+      return results.map(item => item.name);
     } catch (error) {
       console.error(`❌ 获取书籍ID ${bookId} 的标签失败:`, error.message);
       return [];
@@ -844,6 +847,7 @@ class QcDataService {
         const tags = bookmarkTags.get(bookmark.id) || [];
         return {
           ...bookmark,
+          bookId: bookmark.book_id,
           pageNum: bookmark.pos,
           pageNumber: bookmark.pos,
           content: bookmark.text,

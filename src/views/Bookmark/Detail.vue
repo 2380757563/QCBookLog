@@ -6,8 +6,10 @@
         <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
       </button>
       <h1 class="title">书摘详情</h1>
-      <button class="action-btn" @click="showActions = !showActions">
-        <svg viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+      <button class="action-btn" @click="showActions = !showActions" aria-label="更多操作" title="更多操作">
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true">
+          <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+        </svg>
       </button>
       <div v-if="showActions" class="actions-menu">
         <div class="menu-item" @click="handleEdit">编辑</div>
@@ -222,10 +224,10 @@ onMounted(async () => {
 <style scoped>
 .detail-container { min-height: 100vh; background-color: var(--bg-primary); }
 .header { display: flex; align-items: center; padding: 12px 16px; background-color: var(--bg-secondary); border-bottom: 1px solid var(--border-light); position: sticky; top: 0; z-index: 100; }
-.back-btn, .action-btn { width: 36px; height: 36px; border: none; background: none; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-.back-btn svg, .action-btn svg { width: 24px; height: 24px; fill: var(--text-primary); }
-.title { flex: 1; text-align: center; font-size: 18px; font-weight: 500; margin: 0; }
-.actions-menu { position: absolute; top: 100%; right: 16px; background: var(--bg-card); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); }
+.back-btn, .action-btn { width: 36px; height: 36px; border: none; background: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-primary); position: relative; padding: 0; }
+.back-btn svg, .action-btn svg { width: 24px; height: 24px; fill: currentColor; }
+.title { flex: 1; text-align: center; font-size: 18px; font-weight: 500; margin: 0; color: var(--text-primary); }
+.actions-menu { position: absolute; top: calc(100% + 4px); right: 0; background: var(--bg-card); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); min-width: 120px; z-index: 110; overflow: hidden; border: 1px solid var(--border-light); }
 .menu-item { padding: 12px 24px; cursor: pointer; } .menu-item:hover { background: #f5f5f5; }
 .content { padding: 16px; }
 .book-info { display: flex; align-items: center; gap: 12px; padding: 16px; background: var(--bg-card); border-radius: var(--radius-lg); margin-bottom: 16px; cursor: pointer; }

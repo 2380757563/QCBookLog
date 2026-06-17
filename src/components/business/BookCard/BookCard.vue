@@ -37,20 +37,7 @@
         
         <!-- 评分 -->
         <div v-if="book.rating" class="book-card__rating">
-          <span class="book-card__rating-text">{{ book.rating.toFixed(1) }}</span>
-          <div class="book-card__rating-stars">
-            <span
-              v-for="i in 5"
-              :key="i"
-              class="book-card__rating-star"
-              :class="{
-                'book-card__rating-star--filled': i <= Math.floor(book.rating / 2),
-                'book-card__rating-star--half': i > Math.floor(book.rating / 2) && i < book.rating / 2 + 1
-              }"
-            >
-              ★
-            </span>
-          </div>
+          <RatingDisplay :value="book.rating" :show-value="true" size="small" />
         </div>
 
         <!-- 标签 -->
@@ -123,6 +110,7 @@ import {
   Binding2Type
 } from '@/store/bindingBorder/types';
 import BindingBorder from '@/components/business/BindingBorder/BindingBorder.vue';
+import RatingDisplay from '@/components/business/RatingDisplay.vue';
 
 const props = withDefaults(defineProps<BookCardProps>(), {
   layout: 'grid',

@@ -1,13 +1,10 @@
-# QC Booklog Docker Compose 配置
-# 完整的容器化部署方案
-
 services:
   # 前端服务 - Nginx
   frontend:
-    image: crpi-bpk9dy6331fn5ymt.cn-hangzhou.personal.cr.aliyuncs.com/unripora/qc-booklog-frontend:v0.9.85
+    image: crpi-bpk9dy6331fn5ymt.cn-hangzhou.personal.cr.aliyuncs.com/unripora/qc-booklog-frontend:v0.9.84
     container_name: qc-booklog-frontend
     ports:
-      - "${FRONTEND_PORT:-80}:80"
+     - "7403:80"
     depends_on:
       backend:
         condition: service_healthy
@@ -16,8 +13,14 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
+    volumes:
+      # 关键修复：挂载自定义Nginx配置文件
+      - /home/dockerdata/qcbookdata/nginx/conf.d/default.conf:/etc/nginx/conf.d/default.conf:ro
+    tmpfs:
+      - /var/cache/nginx:mode=777
+      - /run:mode=777
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:80/"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -36,55 +39,38 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # 后端服务 - Node.js
+  # 后端服务保持不变
   backend:
-    build:
-      context: ./server
-      dockerfile: Dockerfile
-    image: crpi-bpk9dy6331fn5ymt.cn-hangzhou.personal.cr.aliyuncs.com/unripora/qc-booklog-backend:v0.9.85
+    image: crpi-bpk9dy6331fn5ymt.cn-hangzhou.personal.cr.aliyuncs.com/unripora/qc-booklog-backend:v0.9.84
     container_name: qc-booklog-backend
-    user: root
     networks:
       - qc-booklog-network
     ports:
-      - "${BACKEND_PORT:-7401}:7401"
+      - "7401:7401"
     volumes:
-      # ========== 外部数据库（读写同步）==========
-      # Calibre数据库目录（包含书籍和封面）
-      - ./moni/book:/app/calibre
-      # Talebook数据库目录
-      - ./moni:/app/talebook
-      # ========== 应用自有数据（读写）==========
-      # 应用数据持久化（包含qc-booklog.db）
-      - qc-booklog-data:/app/data
-      # 日志持久化
-      - qc-booklog-logs:/app/data/logs
-      # 备份目录
-      - qc-booklog-backup:/app/data/backup
+      - /home/dockerdata/talebook/books/library:/app/calibre
+      - /home/dockerdata/talebook/books:/app/talebook
+      - /home/dockerdata/qcbookdata/data:/app/data
+      - /home/dockerdata/qcbookdata/data/logs:/app/data/logs
+      - /home/dockerdata/qcbookdata/data/backup:/app/data/backup
+      - /home/dockerdata/qcbookdata/data/logs:/data/logs
     restart: unless-stopped
     environment:
-      # 基础配置
       - NODE_ENV=production
       - PORT=7401
-      # 数据库路径配置（容器内路径）
       - CALIBRE_DB_PATH=/app/calibre/metadata.db
       - TALEBOOK_DB_PATH=/app/talebook/calibre-webserver.db
       - QCBOOKLOG_DB_PATH=/app/data/qc-booklog.db
-      # 日志配置
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - LOG_PATH=/app/data/logs
-      # API密钥配置
       - TANSHU_API_KEY=bc621345d6f1908f5fff0c062708ed1d
       - DOUBAN_API_KEY=0ac44ae016490db2204ce0a042db2916
       - ISBN_WORK_API_KEY=ae1718d4587744b0b79f940fbef69e77
-      # 文件上传配置
       - MAX_FILE_SIZE=${MAX_FILE_SIZE:-20}
-      # CORS配置
       - CORS_ORIGIN=${CORS_ORIGIN:-*}
-      # 同步调度配置
       - SYNC_INTERVAL=${SYNC_INTERVAL:-300000}
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7401/api/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:7401/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -103,13 +89,11 @@ services:
         max-size: "20m"
         max-file: "5"
 
-# 网络定义
 networks:
   qc-booklog-network:
     driver: bridge
     name: qc-booklog-network
 
-# 数据卷定义
 volumes:
   qc-booklog-data:
     driver: local

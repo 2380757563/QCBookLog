@@ -39,6 +39,8 @@ class BookServiceImpl implements BookService {
       purchasePrice: typeof book.purchasePrice === 'number' ? book.purchasePrice : undefined,
       standardPrice: book.standardPrice !== undefined && book.standardPrice !== null ? parseFloat(String(book.standardPrice)) : undefined,
       rating: typeof book.rating === 'number' ? book.rating : undefined,
+      personal_rating: typeof book.personal_rating === 'number' ? book.personal_rating : undefined,
+      personal_rating_date: book.personal_rating_date ?? null,
       // 确保书籍类型和装帧是数字类型
       book_type: typeof book.book_type === 'number' ? book.book_type : 1,
       binding1: typeof book.binding1 === 'number' ? book.binding1 : 0,
@@ -149,6 +151,8 @@ class BookServiceImpl implements BookService {
       purchasePrice: typeof book.purchasePrice === 'number' ? book.purchasePrice : undefined,
       standardPrice: typeof book.standardPrice === 'number' ? book.standardPrice : undefined,
       rating: typeof book.rating === 'number' ? book.rating : undefined,
+      personal_rating: typeof book.personal_rating === 'number' ? book.personal_rating : undefined,
+      personal_rating_date: book.personal_rating_date ?? null,
       // 确保书籍类型和装帧是数字类型
       book_type: typeof book.book_type === 'number' ? book.book_type : 1,
       binding1: typeof book.binding1 === 'number' ? book.binding1 : 0,

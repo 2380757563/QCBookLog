@@ -923,10 +923,9 @@ class DatabaseService {
         calibreDb.prepare('INSERT INTO identifiers (book, type, val) VALUES (?, ?, ?)').run(bookId, 'isbn', book.isbn);
       }
 
-      // 7. 添加评分
-      if (book.rating !== undefined && book.rating !== null && book.rating > 0) {
-        // Calibre ratings 表存储 0-10 的整数，用户输入也是 0-10
-        const ratingValue = Math.round(book.rating);
+      // 7. 添加评分（保留 1 位小数，存储为 REAL）
+      if (book.rating !== undefined && book.rating !== null && !isNaN(parseFloat(book.rating))) {
+        const ratingValue = Math.round(parseFloat(book.rating) * 10) / 10;
         if (ratingValue >= 0 && ratingValue <= 10) {
           let ratingId = calibreDb.prepare('SELECT id FROM ratings WHERE rating = ?').get(ratingValue);
           if (!ratingId) {
@@ -1212,13 +1211,12 @@ class DatabaseService {
         }
       }
 
-      // 7. 更新豆瓣评分
+      // 7. 更新豆瓣评分（保留 1 位小数，存储为 REAL）
       if (book.rating !== undefined) {
         calibreDb.prepare('DELETE FROM books_ratings_link WHERE book = ?').run(book.id);
-        if (book.rating !== null && book.rating > 0) {
-          // Calibre ratings 表存储 0-10 的整数，用户输入也是 0-10
-          // 不需要乘以 2，直接四舍五入到整数即可
-          const ratingValue = Math.round(book.rating);
+        if (book.rating !== null && !isNaN(parseFloat(book.rating))) {
+          // 保留 1 位小数
+          const ratingValue = Math.round(parseFloat(book.rating) * 10) / 10;
           if (ratingValue >= 0 && ratingValue <= 10) {
             let ratingId = calibreDb.prepare('SELECT id FROM ratings WHERE rating = ?').get(ratingValue);
             if (!ratingId) {

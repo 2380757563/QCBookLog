@@ -1,4 +1,5 @@
 <template>
+  <!-- 分组卡 - 高度由内部 3:4 缩略图 + 52px 信息区自然决定，不再用 transform: scale -->
   <div
     :class="['book-group-card', { 'book-group-card--selected': selected, 'book-group-card--organize': isOrganizeMode }]"
     @click="handleClick"
@@ -13,33 +14,36 @@
       </svg>
     </div>
 
-    <!-- 分组书籍缩略图网格 -->
-    <div class="book-group-card__thumbnails" :class="`thumbnails-${displayThumbnails}`">
-      <div
-        v-for="(book, index) in displayBooks"
-        :key="book.id"
-        class="book-group-card__thumbnail"
-      >
-        <img
-          v-if="book.coverUrl || book.path"
-          :src="book.coverUrl || getBookCoverUrl(book)"
-          :alt="book.title"
-          class="thumbnail__image"
-          loading="lazy"
-          decoding="async"
-          @load="handleThumbnailLoad"
-          @error="handleThumbnailError($event, book)"
-        />
-        <div v-if="!(book.coverUrl || book.path) || thumbnailErrors[book.id]" class="thumbnail__placeholder">
-          {{ book.title ? book.title.charAt(0) : '?' }}
+    <!-- 分组书籍缩略图网格 - 与 BookCard 封面同款 3:4 布局
+         外层 3:4 容器 + 内层 2x2/3x3 grid，单元格天然保持 3:4，无挤压变形 -->
+    <div class="book-group-card__thumbnails">
+      <div class="book-group-card__thumbnails-grid" :class="`thumbnails-${displayThumbnails}`">
+        <div
+          v-for="(book, index) in displayBooks"
+          :key="book.id"
+          class="book-group-card__thumbnail"
+        >
+          <img
+            v-if="book.coverUrl || book.path"
+            :src="book.coverUrl || getBookCoverUrl(book)"
+            :alt="book.title"
+            class="thumbnail__image"
+            loading="lazy"
+            decoding="async"
+            @load="handleThumbnailLoad"
+            @error="handleThumbnailError($event, book)"
+          />
+          <div v-if="!(book.coverUrl || book.path) || thumbnailErrors[book.id]" class="thumbnail__placeholder">
+            {{ book.title ? book.title.charAt(0) : '?' }}
+          </div>
         </div>
-      </div>
-      <!-- 如果书籍数量少于最大显示数量，用占位符填充 -->
-      <div
-        v-for="index in Math.max(0, displayThumbnails - displayBooks.length)"
-        :key="`placeholder-${index}`"
-        class="book-group-card__thumbnail book-group-card__thumbnail--empty"
-      >
+        <!-- 如果书籍数量少于最大显示数量，用占位符填充 -->
+        <div
+          v-for="index in Math.max(0, displayThumbnails - displayBooks.length)"
+          :key="`placeholder-${index}`"
+          class="book-group-card__thumbnail book-group-card__thumbnail--empty"
+        >
+        </div>
       </div>
     </div>
 
@@ -86,7 +90,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, computed } from 'vue';
+import { ref, nextTick, computed, onMounted, onBeforeUnmount } from 'vue';
 import { BookGroup } from '@/services/book/types';
 import { Book } from '@/services/book/types';
 
@@ -96,18 +100,82 @@ interface Props {
   maxThumbnails?: number;
   selected?: boolean;
   isOrganizeMode?: boolean;
+  /** 基准宽度（CSS像素），用于缩放计算 */
+  baseWidth?: number;
+  /** 基准高度（CSS像素） */
+  baseHeight?: number;
+  /** 最小缩放比例 */
+  minScale?: number;
+  /** 最大缩放比例 */
+  maxScale?: number;
+  /** 是否启用 DPI/分辨率自适应缩放 */
+  enableAdaptiveScale?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   maxThumbnails: 9,
   selected: false,
-  isOrganizeMode: false
+  isOrganizeMode: false,
+  baseWidth: 240,
+  baseHeight: 220,
+  minScale: 0.7,
+  maxScale: 1.0,
+  enableAdaptiveScale: true,
 });
 
 const emit = defineEmits<{
   click: [groupId: string];
   updateGroup: [groupId: string, newName: string];
 }>();
+
+// 屏幕参数
+const viewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1280);
+const devicePixelRatio = ref(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1);
+
+/**
+ * 计算分组卡缩放比例（仅做等比缩放，不再用 transform: scale 撑大 wrapper）
+ * - 缩放区间由 minScale/maxScale 限制
+ * - 这里只用来在缩略图网格缝隙等地方做微调，不再影响 wrapper/cell 尺寸
+ */
+const cardScale = computed(() => {
+  if (!props.enableAdaptiveScale) return 1;
+  const widthRatio = viewportWidth.value / 1920;
+  const dprRatio = Math.min(1.5, Math.max(1, devicePixelRatio.value));
+  const raw = widthRatio * dprRatio;
+  const scale = Math.max(props.minScale, Math.min(props.maxScale, raw));
+  return Number(scale.toFixed(3));
+});
+
+const handleResize = () => {
+  if (typeof window === 'undefined') return;
+  viewportWidth.value = window.innerWidth;
+};
+
+const handleDprChange = () => {
+  if (typeof window === 'undefined') return;
+  devicePixelRatio.value = window.devicePixelRatio || 1;
+};
+
+let dprMediaQuery: MediaQueryList | null = null;
+
+onMounted(() => {
+  if (typeof window === 'undefined') return;
+  window.addEventListener('resize', handleResize);
+  dprMediaQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+  if (dprMediaQuery) {
+    dprMediaQuery.addEventListener('change', handleDprChange);
+  }
+  handleResize();
+  handleDprChange();
+});
+
+onBeforeUnmount(() => {
+  if (typeof window === 'undefined') return;
+  window.removeEventListener('resize', handleResize);
+  if (dprMediaQuery) {
+    dprMediaQuery.removeEventListener('change', handleDprChange);
+  }
+});
 
 const isEditing = ref(false);
 const editingName = ref('');
@@ -196,6 +264,7 @@ const handleClick = () => {
 </script>
 
 <style scoped>
+/* 分组卡 - 高度由内容自然决定：3:4 缩略图区 + 52px 信息区 */
 .book-group-card {
   position: relative;
   background-color: var(--bg-card);
@@ -207,7 +276,8 @@ const handleClick = () => {
   border: 1px solid var(--border-light);
   display: flex;
   flex-direction: column;
-  min-height: 220px; /* 固定最小高度，确保布局稳定 */
+  width: 100%;
+  /* 高度由内容决定：3:4 缩略图区 + 52px 信息区 - 与 BookCard 结构完全一致 */
 }
 
 .book-group-card:hover {
@@ -242,45 +312,62 @@ const handleClick = () => {
   color: var(--primary-color);
 }
 
-/* 缩略图网格容器 */
+/* 缩略图网格外层 - 与 BookCard 封面同款 padding-top 3:4 布局 */
 .book-group-card__thumbnails {
+  position: relative;
+  width: 100%;
+  padding-top: 133.33%; /* 3:4 比例，与 BookCard 封面完全一致 */
+  background-color: var(--bg-secondary);
+  flex-shrink: 0; /* 固定 3:4 比例，不被信息区挤压 */
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 缩略图网格内层 - 绝对定位填满 padding-top 区域，去掉 10px padding 后的精确 3:4 空间 */
+.book-group-card__thumbnails-grid {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
   display: grid;
   gap: 6px;
-  padding: 10px;
-  background-color: var(--bg-secondary);
-  flex: 1; /* 占据剩余空间 */
-  min-height: 0; /* 确保高度正确计算 */
 }
 
-/* 2x2 网格（最多显示4本） */
+/* 2x2 网格（最多显示4本）- 单元格天然 3:4 */
 .thumbnails-4 {
   grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
 }
 
-/* 3x3 网格（最多显示9本） - 强制九宫格布局 */
+/* 3x3 网格（最多显示9本）- 单元格天然 3:4 */
 .thumbnails-9 {
-  grid-template-columns: repeat(3, 1fr); /* 强制3列 */
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
 }
 
-/* 缩略图单元格 - 高度由外部根据列数控制 */
+/* 缩略图单元格 - 由 grid 等分得到 3:4 比例，比例锁定 */
 .book-group-card__thumbnail {
-  height: 80px; /* 默认高度，可被外部覆盖 */
-  min-height: 80px;
+  position: relative;
+  width: 100%;
+  height: 100%;
   background-color: #e0e0e0;
   border-radius: 4px;
   overflow: hidden;
-  position: relative;
 }
 
 .book-group-card__thumbnail--empty {
   background-color: transparent;
 }
 
-/* 缩略图图片 - 使用object-fit: cover填满容器 */
+/* 缩略图图片 - 绝对定位填满整个 3:4 单元格，保持原始宽高比 */
 .thumbnail__image {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover; /* 填满容器 */
+  object-fit: cover; /* 保持原图比例，超出部分裁剪 */
   display: block;
   opacity: 0;
   transition: opacity 0.3s ease;
@@ -291,6 +378,9 @@ const handleClick = () => {
 }
 
 .thumbnail__placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
   display: flex;
@@ -411,23 +501,16 @@ const handleClick = () => {
 /* 响应式设计 */
 @media (max-width: 640px) {
   .book-group-card {
-    min-height: 180px;
+    /* 小屏沿用 3:4 + 52px 信息区结构 */
   }
 
-  .book-group-card__thumbnails {
+  /* 缩略图区小屏下内边距缩小 */
+  .book-group-card__thumbnails-grid {
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
     gap: 4px;
-    padding: 8px;
-  }
-
-  .book-group-card__thumbnail,
-  .thumbnails-4 .book-group-card__thumbnail {
-    height: 60px;
-    min-height: 60px;
-  }
-
-  .thumbnails-9 .book-group-card__thumbnail {
-    height: 60px;
-    min-height: 60px;
   }
 
   .book-group-card__info {
