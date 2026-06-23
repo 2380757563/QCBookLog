@@ -3,13 +3,13 @@
     <!-- 顶部导航栏 -->
     <div class="header">
       <button class="back-btn" @click="handleBack">
-        <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" fill="currentColor"/></svg>
       </button>
       <h1 class="title">正在阅读</h1>
       <div class="header-actions">
         <div class="timer">{{ formattedTime }}</div>
         <button class="settings-btn" @click="goToSettings">
-          <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" fill="currentColor"/></svg>
         </button>
       </div>
     </div>
@@ -80,7 +80,7 @@
           ></textarea>
           <div class="bookmark-actions">
             <button class="btn btn-primary" @click="handleAddBookmark">
-              <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" fill="currentColor"/></svg>
               添加摘录
             </button>
           </div>
@@ -90,15 +90,15 @@
       <!-- 阅读控制 -->
       <div class="reading-controls">
         <button v-if="!isPaused" class="control-btn pause" @click="pauseReading">
-          <svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" fill="currentColor"/></svg>
           <span>暂停阅读</span>
         </button>
         <button v-else class="control-btn resume" @click="resumeReading">
-          <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>
           <span>继续阅读</span>
         </button>
         <button class="control-btn end" @click="handleEndReading">
-          <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill="currentColor"/></svg>
           <span>结束阅读</span>
         </button>
       </div>
@@ -347,12 +347,14 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  padding: 0;
+  color: var(--text-primary);
 }
 
-.back-btn svg {
+.back-btn :deep(svg) {
   width: 24px;
   height: 24px;
-  fill: var(--text-primary);
+  fill: currentColor;
 }
 
 .title {
@@ -387,6 +389,8 @@ onUnmounted(() => {
   justify-content: center;
   flex-shrink: 0;
   transition: all 0.2s ease;
+  color: var(--text-secondary);
+  padding: 0;
 }
 
 .settings-btn:hover {
@@ -394,10 +398,10 @@ onUnmounted(() => {
   border-radius: 50%;
 }
 
-.settings-btn svg {
+.settings-btn :deep(svg) {
   width: 20px;
   height: 20px;
-  fill: var(--text-secondary);
+  fill: currentColor;
 }
 
 .content {
@@ -561,6 +565,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   transition: all 0.2s ease;
+  padding: 0;
 }
 
 .page-btn:hover:not(:disabled) {
@@ -625,7 +630,7 @@ onUnmounted(() => {
   transition: all 0.2s ease;
 }
 
-.control-btn svg {
+.control-btn :deep(svg) {
   width: 20px;
   height: 20px;
   fill: currentColor;
@@ -672,7 +677,7 @@ onUnmounted(() => {
   transition: all 0.2s ease;
 }
 
-.btn svg {
+.btn :deep(svg) {
   width: 18px;
   height: 18px;
   fill: currentColor;

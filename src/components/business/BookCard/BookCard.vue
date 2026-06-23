@@ -27,6 +27,14 @@
       <div class="book-card__read-status" :class="`book-card__read-status--${book.readStatus}`">
         {{ book.readStatus }}
       </div>
+      <!-- 书籍来源 badge -->
+      <div
+        v-if="book.source"
+        class="book-card__source"
+        :title="`来源：${getSourceLabel(book.source)}`"
+      >
+        {{ getSourceShortLabel(book.source) }}
+      </div>
     </div>
 
     <!-- 书籍信息 - 带包边效果 -->
@@ -98,10 +106,11 @@ import { BookCardProps, BookCardEmits } from './types';
 import { useBookBorderStore } from '@/store/bookBorder';
 import { BookStatus } from '@/store/bookBorder/types';
 import { useBindingBorderStore } from '@/store/bindingBorder';
-import { 
-  getBindingType, 
-  getHardcoverTexture, 
-  shouldShowOilEdge, 
+import { API_CONFIGS } from '@/services/common/isbnApi/apiConfig';
+import {
+  getBindingType,
+  getHardcoverTexture,
+  shouldShowOilEdge,
   getSpecialPattern,
   getPaperbackVariant,
   getEbookVariant,
@@ -111,6 +120,32 @@ import {
 } from '@/store/bindingBorder/types';
 import BindingBorder from '@/components/business/BindingBorder/BindingBorder.vue';
 import RatingDisplay from '@/components/business/RatingDisplay.vue';
+
+// 书籍来源标签映射
+const SOURCE_SHORT_LABELS: Record<string, string> = {
+  dbr: 'DBR',
+  douban: '豆瓣',
+  isbnWork: '公共',
+  tanshu: '探数',
+  manual: '手动',
+  calibre: 'Calibre'
+};
+
+// 获取书源显示名称
+const getSourceLabel = (source: string): string => {
+  if (!source) return '';
+  const key = source.toLowerCase();
+  if (API_CONFIGS[key]) return API_CONFIGS[key].name;
+  if (SOURCE_SHORT_LABELS[key]) return SOURCE_SHORT_LABELS[key];
+  return source;
+};
+
+// 获取书源短标签（用于卡片 badge）
+const getSourceShortLabel = (source: string): string => {
+  if (!source) return '';
+  const key = source.toLowerCase();
+  return SOURCE_SHORT_LABELS[key] || source;
+};
 
 const props = withDefaults(defineProps<BookCardProps>(), {
   layout: 'grid',
@@ -351,6 +386,23 @@ const handleViewBookmarks = () => {
 
 .book-card__read-status--已读 {
   background-color: #2ecc71;
+}
+
+/* 书籍来源 badge */
+.book-card__source {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 3px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #fff;
+  background-color: rgba(155, 89, 182, 0.9);
+  z-index: 10;
+  line-height: 1.4;
+  cursor: help;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
 
 /* 信息包装器 - 带立体包边效果 */

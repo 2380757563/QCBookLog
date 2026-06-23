@@ -1004,9 +1004,9 @@ class DatabaseService {
         
         const insertResult = qcBooklogDb.prepare(`
           INSERT OR REPLACE INTO qc_bookdata (
-            mapping_id, book_id, book_type, page_count, standard_price, purchase_price, 
-            purchase_date, binding1, binding2, paper1, edge1, edge2, note
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            mapping_id, book_id, book_type, page_count, standard_price, purchase_price,
+            purchase_date, binding1, binding2, paper1, edge1, edge2, note, source
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           mappingId,
           bookId,
@@ -1020,7 +1020,8 @@ class DatabaseService {
           book.paper1 !== undefined && book.paper1 !== null ? parseInt(book.paper1) || 0 : 0,
           book.edge1 !== undefined && book.edge1 !== null ? parseInt(book.edge1) || 0 : 0,
           book.edge2 !== undefined && book.edge2 !== null ? parseInt(book.edge2) || 0 : 0,
-          book.note || ''
+          book.note || '',
+          book.source || ''
         );
         console.log('📊 INSERT 执行结果:', JSON.stringify(insertResult));
         
@@ -1309,15 +1310,16 @@ class DatabaseService {
           const newEdge1 = book.edge1 !== undefined ? book.edge1 : existingBookData.edge1;
           const newEdge2 = book.edge2 !== undefined ? book.edge2 : existingBookData.edge2;
           const newNote = book.note !== undefined ? book.note : existingBookData.note;
-          
+          const newSource = book.source !== undefined ? book.source : (existingBookData.source || '');
+
           console.log('📊 更新值（保留现有值）:');
           console.log(`  - pageCount: ${newPageCount} (原: ${existingBookData.page_count})`);
           console.log(`  - standardPrice: ${newStandardPrice} (原: ${existingBookData.standard_price})`);
           console.log(`  - binding1: ${newBinding1} (原: ${existingBookData.binding1})`);
-          
+
           qcBooklogDb.prepare(`
             UPDATE qc_bookdata
-            SET page_count = ?, standard_price = ?, purchase_price = ?, purchase_date = ?, binding1 = ?, binding2 = ?, paper1 = ?, edge1 = ?, edge2 = ?, note = ?
+            SET page_count = ?, standard_price = ?, purchase_price = ?, purchase_date = ?, binding1 = ?, binding2 = ?, paper1 = ?, edge1 = ?, edge2 = ?, note = ?, source = ?
             WHERE book_id = ?
           `).run(
             newPageCount,
@@ -1330,6 +1332,7 @@ class DatabaseService {
             newEdge1,
             newEdge2,
             newNote,
+            newSource,
             book.id
           );
           console.log('✅ QCBookLog书籍扩展数据更新成功');
@@ -1340,17 +1343,17 @@ class DatabaseService {
             INSERT OR REPLACE INTO qc_book_mapping (library_uuid, calibre_book_id, talebook_book_id, title, author)
             VALUES (?, ?, ?, ?, ?)
           `).run(libraryUuid, book.id, book.id, book.title, book.author);
-          
+
           // 获取映射记录的 ID
           const mapping = qcBooklogDb.prepare(`
             SELECT id FROM qc_book_mapping WHERE library_uuid = ? AND calibre_book_id = ?
           `).get(libraryUuid, book.id);
           const mappingId = mapping ? mapping.id : null;
-          
+
           // 添加书籍扩展数据
           qcBooklogDb.prepare(`
-            INSERT INTO qc_bookdata (mapping_id, book_id, page_count, standard_price, purchase_price, purchase_date, binding1, binding2, paper1, edge1, edge2, note)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO qc_bookdata (mapping_id, book_id, page_count, standard_price, purchase_price, purchase_date, binding1, binding2, paper1, edge1, edge2, note, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(
             mappingId,
             book.id,
@@ -1363,7 +1366,8 @@ class DatabaseService {
             book.paper1 || 0,
             book.edge1 || 0,
             book.edge2 || 0,
-            book.note || ''
+            book.note || '',
+            book.source || ''
           );
           console.log('✅ QCBookLog书籍映射和扩展数据插入成功');
         } else {

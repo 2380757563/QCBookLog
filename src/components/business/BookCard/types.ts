@@ -16,6 +16,7 @@ export interface BookCardProps {
     wants?: number;
     binding1?: number;
     binding2?: number;
+    source?: string;
   };
   /**
    * 布局类型

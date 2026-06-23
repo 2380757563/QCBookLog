@@ -90,12 +90,17 @@ const perStar = computed(() => 10 / totalStars.value);
 /** 在当前模式下，value 对应的星级数（带小数） */
 const scaledRating = computed(() => displayValue.value / perStar.value);
 
-/** 满星数（向下取整） */
-const fullStars = computed(() => Math.floor(scaledRating.value));
+/** 满星数（向下取整，尾数 ≥ 0.75 视为下一颗满星） */
+const fullStars = computed(() => {
+  const raw = scaledRating.value;
+  const frac = raw - Math.floor(raw);
+  return Math.floor(raw) + (frac >= 0.75 ? 1 : 0);
+});
 
-/** 是否有半星（尾数 ≥ 0.25 视为半填充） */
+/** 是否有半星（0.25 ≤ 尾数 < 0.75 视为半填充） */
 const hasHalfStar = computed(() => {
-  const frac = scaledRating.value - fullStars.value;
+  const raw = scaledRating.value;
+  const frac = raw - Math.floor(raw);
   return frac >= 0.25 && frac < 0.75;
 });
 

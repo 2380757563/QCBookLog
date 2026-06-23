@@ -615,7 +615,8 @@ const processAuthorDirectory = async (authorDir) => {
                     paper1: qcBookdata.paper1 !== undefined && qcBookdata.paper1 !== null ? qcBookdata.paper1 : book.paper1,
                     edge1: qcBookdata.edge1 !== undefined && qcBookdata.edge1 !== null ? qcBookdata.edge1 : book.edge1,
                     edge2: qcBookdata.edge2 !== undefined && qcBookdata.edge2 !== null ? qcBookdata.edge2 : book.edge2,
-                    note: qcBookdata.note || book.note
+                    note: qcBookdata.note || book.note,
+                    source: qcBookdata.source || ''
                   };
                 } else {
                   // 即使qcBookdata为null，也确保基础字段存在
@@ -629,7 +630,8 @@ const processAuthorDirectory = async (authorDir) => {
                     paper1: book.paper1,
                     edge1: book.edge1,
                     edge2: book.edge2,
-                    note: book.note
+                    note: book.note,
+                    source: ''
                   };
                 }
               } catch (extError) {
@@ -645,7 +647,8 @@ const processAuthorDirectory = async (authorDir) => {
                   paper1: book.paper1,
                   edge1: book.edge1,
                   edge2: book.edge2,
-                  note: book.note
+                  note: book.note,
+                  source: ''
                 };
               }
             }

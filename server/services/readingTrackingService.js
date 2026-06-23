@@ -106,6 +106,44 @@ class ReadingTrackingService {
 
       console.log(`✅ 创建阅读记录: ID=${result.lastInsertRowid}, 书籍ID=${bookId}, 时长=${duration}分钟`);
 
+      // 同步写入活动日志，便于时间线/详情页直接展示
+      try {
+        let bookInfo = null;
+        try {
+          const calibreDb = databaseService.calibreDb;
+          if (calibreDb) {
+            bookInfo = calibreDb.prepare(`
+              SELECT b.id, b.title, b.has_cover, b.path,
+                     GROUP_CONCAT(a.name, ' & ') as author
+              FROM books b
+              LEFT JOIN books_authors_link bal ON bal.book = b.id
+              LEFT JOIN authors a ON a.id = bal.author
+              WHERE b.id = ?
+              GROUP BY b.id
+            `).get(bookId);
+          }
+        } catch (e) {
+          console.warn('⚠️ 读取 Calibre 书籍信息失败:', e.message);
+        }
+        activityService.logActivity({
+          type: 'reading_record',
+          userId: actualReaderId,
+          readerId: actualReaderId,
+          bookId,
+          bookTitle: bookInfo?.title || null,
+          bookAuthor: bookInfo?.author || null,
+          bookCover: bookInfo?.has_cover ? `/api/book/${bookId}/cover` : null,
+          startTime,
+          endTime,
+          duration,
+          startPage,
+          endPage,
+          pagesRead
+        });
+      } catch (logErr) {
+        console.warn('⚠️ 写入阅读活动日志失败:', logErr.message);
+      }
+
       await this.updateBookReadingStats(bookId, actualReaderId, duration, pagesRead, startTime, endPage);
 
       const date = new Date(startTime).toISOString().split('T')[0];
@@ -131,29 +169,64 @@ class ReadingTrackingService {
    * @param {number} [limit=10] - 返回记录数
    * @returns {Array} 阅读记录列表
    */
-  async getBookReadingRecords(bookId, readerId, limit = 10) {
+  async getBookReadingRecords(bookId, readerId, limit = 100) {
     const qcBooklogDb = databaseService.getQcBooklogDb();
+    const calibreDb = databaseService.calibreDb;
 
     if (!qcBooklogDb) return [];
 
     try {
       const query = `
-        SELECT *
+        SELECT
+          id,
+          book_id   AS bookId,
+          reader_id AS readerId,
+          start_time AS startTime,
+          end_time   AS endTime,
+          duration,
+          start_page AS startPage,
+          end_page   AS endPage,
+          pages_read AS pagesRead,
+          notes,
+          created_at AS createdAt
         FROM qc_reading_records
-        WHERE book_id = ? AND user_id = ?
+        WHERE book_id = ? AND reader_id = ?
         ORDER BY start_time DESC
         LIMIT ?
       `;
 
       const records = qcBooklogDb.prepare(query).all(bookId, readerId, limit);
+      console.log(`📚 [getBookReadingRecords] bookId=${bookId}, readerId=${readerId} 返回 ${records.length} 条`);
 
-      return records.map(record => ({
-        ...record,
-        title: '',
-        author: '',
-        coverUrl: '',
-        totalPages: 0
-      }));
+      // 附带书籍信息
+      let bookMap = {};
+      try {
+        if (calibreDb) {
+          const book = calibreDb.prepare(`
+            SELECT b.id, b.title, b.has_cover, b.path,
+                   GROUP_CONCAT(a.name, ' & ') as author
+            FROM books b
+            LEFT JOIN books_authors_link bal ON bal.book = b.id
+            LEFT JOIN authors a ON a.id = bal.author
+            WHERE b.id = ?
+            GROUP BY b.id
+          `).get(bookId);
+          if (book) bookMap[book.id] = book;
+        }
+      } catch (e) {
+        console.warn('⚠️ 读取 Calibre 书籍信息失败:', e.message);
+      }
+
+      return records.map(record => {
+        const b = bookMap[record.bookId] || {};
+        return {
+          ...record,
+          title: b.title || '',
+          author: b.author || '',
+          coverUrl: b.has_cover ? `/api/book/${record.bookId}/cover` : '',
+          totalPages: 0
+        };
+      });
     } catch (error) {
       console.error('❌ 获取书籍阅读记录失败:', error);
       return [];
@@ -167,9 +240,20 @@ class ReadingTrackingService {
 
     try {
       let query = `
-        SELECT *
+        SELECT
+          id,
+          book_id   AS bookId,
+          reader_id AS readerId,
+          start_time AS startTime,
+          end_time   AS endTime,
+          duration,
+          start_page AS startPage,
+          end_page   AS endPage,
+          pages_read AS pagesRead,
+          notes,
+          created_at AS createdAt
         FROM qc_reading_records
-        WHERE user_id = ?
+        WHERE reader_id = ?
       `;
       const params = [readerId];
 
@@ -386,7 +470,7 @@ class ReadingTrackingService {
     try {
       let query = `
         SELECT * FROM qc_daily_reading_stats
-        WHERE user_id = ?
+        WHERE reader_id = ?
       `;
       const params = [readerId];
 
@@ -418,9 +502,20 @@ class ReadingTrackingService {
 
     try {
       const query = `
-        SELECT *
+        SELECT
+          id,
+          book_id   AS bookId,
+          reader_id AS readerId,
+          start_time AS startTime,
+          end_time   AS endTime,
+          duration,
+          start_page AS startPage,
+          end_page   AS endPage,
+          pages_read AS pagesRead,
+          notes,
+          created_at AS createdAt
         FROM qc_reading_records
-        WHERE user_id = ? AND DATE(start_time) = ?
+        WHERE reader_id = ? AND DATE(start_time) = ?
         ORDER BY start_time ASC
       `;
 
@@ -488,7 +583,7 @@ class ReadingTrackingService {
           COUNT(DISTINCT book_id) as totalBooks,
           SUM(pages_read) as totalPages
         FROM qc_reading_records
-        WHERE user_id = ? AND strftime('%Y', start_time) = ?
+        WHERE reader_id = ? AND strftime('%Y', start_time) = ?
         GROUP BY DATE(start_time)
       `;
 
@@ -518,23 +613,23 @@ class ReadingTrackingService {
 
     try {
       const totalRecords = qcBooklogDb.prepare(
-        `SELECT COUNT(*) as count FROM qc_reading_records WHERE user_id = ?`
+        `SELECT COUNT(*) as count FROM qc_reading_records WHERE reader_id = ?`
       ).get(readerId)?.count || 0;
 
       const totalTime = qcBooklogDb.prepare(
-        `SELECT SUM(duration) as total FROM qc_reading_records WHERE user_id = ?`
+        `SELECT SUM(duration) as total FROM qc_reading_records WHERE reader_id = ?`
       ).get(readerId)?.total || 0;
 
       const totalPages = qcBooklogDb.prepare(
-        `SELECT SUM(pages_read) as total FROM qc_reading_records WHERE user_id = ?`
+        `SELECT SUM(pages_read) as total FROM qc_reading_records WHERE reader_id = ?`
       ).get(readerId)?.total || 0;
 
       const totalBooks = qcBooklogDb.prepare(
-        `SELECT COUNT(DISTINCT book_id) as count FROM qc_reading_records WHERE user_id = ?`
+        `SELECT COUNT(DISTINCT book_id) as count FROM qc_reading_records WHERE reader_id = ?`
       ).get(readerId)?.count || 0;
 
       const latest = qcBooklogDb.prepare(
-        `SELECT DATE(MAX(start_time)) as date FROM qc_reading_records WHERE user_id = ?`
+        `SELECT DATE(MAX(start_time)) as date FROM qc_reading_records WHERE reader_id = ?`
       ).get(readerId)?.date || null;
 
       return {

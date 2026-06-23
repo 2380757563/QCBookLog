@@ -500,6 +500,19 @@ class DatabaseConnectionManager {
         console.warn('  ⚠️ 检查/添加 book_type 列失败:', err.message);
       }
 
+      // 检查并添加缺失的 source 列（兼容旧数据库）
+      try {
+        const columns = this.qcBooklogDb.prepare("PRAGMA table_info(qc_bookdata)").all();
+        const hasSource = columns.some(col => col.name === 'source');
+        if (!hasSource) {
+          console.log('  🔄 检测到 qc_bookdata 表缺少 source 列，正在添加...');
+          this.qcBooklogDb.exec("ALTER TABLE qc_bookdata ADD COLUMN source TEXT DEFAULT ''");
+          console.log('  ✅ source 列添加成功');
+        }
+      } catch (err) {
+        console.warn('  ⚠️ 检查/添加 source 列失败:', err.message);
+      }
+
       // 创建书摘表
       console.log('📝 创建书摘表 (qc_bookmarks)...');
       this.qcBooklogDb.exec(`

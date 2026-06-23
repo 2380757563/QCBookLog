@@ -38,7 +38,12 @@
             {{ book.readStatus }}
           </div>
           <div v-if="book.rating" class="book-rating">
+            <span class="rating-label">书籍评分</span>
             <RatingDisplay :value="book.rating" :show-value="true" size="large" />
+          </div>
+          <div v-if="book.personal_rating" class="book-rating">
+            <span class="rating-label">个人评分</span>
+            <RatingDisplay :value="book.personal_rating" :show-value="true" size="large" />
           </div>
         </div>
       </div>
@@ -137,6 +142,10 @@
           <div class="info-item" v-if="book.series">
             <span class="info-label">丛书</span>
             <span class="info-value">{{ book.series }}</span>
+          </div>
+          <div class="info-item" v-if="book.source">
+            <span class="info-label">书籍来源</span>
+            <span class="info-value">{{ getSourceLabel(book.source) }}</span>
           </div>
         </div>
       </div>
@@ -535,6 +544,24 @@ const formatDate = (dateStr: string): string => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 };
 
+// 书籍来源显示映射
+const sourceLabelMap: Record<string, string> = {
+  douban: '豆瓣读书',
+  dbr: '豆瓣读书 (DBR)',
+  google: 'Google Books',
+  openlibrary: 'Open Library',
+  manual: '手动添加',
+  import: '批量导入',
+  calibre: 'Calibre 书库',
+  talebook: 'Talebook 书库'
+};
+const getSourceLabel = (source: string): string => {
+  if (!source) return '';
+  const lower = source.toLowerCase();
+  if (sourceLabelMap[lower]) return sourceLabelMap[lower];
+  return source;
+};
+
 // 编辑
 const handleEdit = () => {
   showActions.value = false;
@@ -920,6 +947,13 @@ watch(() => readerStore.currentReaderId, async (newReaderId, oldReaderId) => {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-top: 4px;
+}
+
+.book-rating .rating-label {
+  font-size: 13px;
+  color: var(--text-secondary, #666);
+  min-width: 64px;
 }
 
 .stars {

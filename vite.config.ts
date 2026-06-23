@@ -2,16 +2,22 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { resolve } from 'path'
 
+// 后端地址：可通过环境变量覆盖
+//   - 本地开发（不在容器内）：默认 http://localhost:7401
+//   - 容器开发（deploy.sh 启动）：VITE_BACKEND_TARGET=http://qc-booklog-backend:7401
+const backendTarget = process.env.VITE_BACKEND_TARGET || process.env.BACKEND_TARGET || 'http://localhost:7401'
+
 // https://vite.dev/config/
-export default defineConfig({
-  base: '/',
-  plugins: [vue()],
-  resolve: {
-    alias: {
-      '@': resolve(process.cwd(), 'src')
-    }
-  },
-  server: {
+export default defineConfig(() => {
+  return {
+    base: '/',
+    plugins: [vue()],
+    resolve: {
+      alias: {
+        '@': resolve(process.cwd(), 'src')
+      }
+    },
+    server: {
     host: '0.0.0.0', // 允许外部设备访问
     port: 8080, // 修改端口号为 8080
     strictPort: false, // 不强制使用特定端口，如果被占用则自动递增
@@ -29,92 +35,92 @@ export default defineConfig({
     proxy: {
       // 优先匹配具体的API路径，代理到本地后端
       '/api/douban/cover': {
-        target: 'http://localhost:7401',
+        target: backendTarget,
         changeOrigin: true,
         rewrite: (path) => path
       },
       // 阿里云OSS图片代理，代理到本地后端
       '/api/aliyun-oss-image': {
-        target: 'http://localhost:7401',
+        target: backendTarget,
         changeOrigin: true,
         rewrite: (path) => path
       },
       // DBR API代理，代理到本地后端
       '/api/dbr': {
-        target: 'http://localhost:7401',
+        target: backendTarget,
         changeOrigin: true,
         rewrite: (path) => path
       },
       // 探数图书API代理，代理到本地后端
       '/api/tanshu': {
-        target: 'http://localhost:7401',
+        target: backendTarget,
         changeOrigin: true,
         rewrite: (path) => path
       },
       // 豆瓣图书API代理，代理到本地后端
       '/api/douban': {
-        target: 'http://localhost:7401',
+        target: backendTarget,
         changeOrigin: true,
         rewrite: (path) => path
       },
       // 公共图书API代理，代理到本地后端
       '/api/isbn-work': {
-        target: 'http://localhost:7401',
+        target: backendTarget,
         changeOrigin: true,
         rewrite: (path) => path
       },
       // 其他书籍相关API，代理到本地后端
       '/api/books': {
-        target: 'http://localhost:7401',
+        target: backendTarget,
         changeOrigin: true,
         rewrite: (path) => path
       },
       '/api/groups': {
-        target: 'http://localhost:7401',
+        target: backendTarget,
         changeOrigin: true,
         rewrite: (path) => path
       },
       '/api/tags': {
-        target: 'http://localhost:7401',
+        target: backendTarget,
         changeOrigin: true,
         rewrite: (path) => path
       },
       '/api/bookmarks': {
-        target: 'http://localhost:7401',
+        target: backendTarget,
         changeOrigin: true,
         rewrite: (path) => path
       },
       '/api/backup': {
-        target: 'http://localhost:7401',
+        target: backendTarget,
         changeOrigin: true,
         rewrite: (path) => path
       },
       // 健康检查和版本信息，代理到本地后端
       '/api/health': {
-        target: 'http://localhost:7401',
+        target: backendTarget,
         changeOrigin: true,
         rewrite: (path) => path
       },
       '/api/version': {
-        target: 'http://localhost:7401',
+        target: backendTarget,
         changeOrigin: true,
         rewrite: (path) => path
       },
       // 性能监控API，代理到本地后端
       '/api/performance': {
-        target: 'http://localhost:7401',
+        target: backendTarget,
         changeOrigin: true,
         rewrite: (path) => path
       },
       // Calibre 配置API，代理到本地后端
       '/api/config': {
-        target: 'http://localhost:7401',
+        target: backendTarget,
         changeOrigin: true,
         rewrite: (path) => path
       },
       // 阅读追踪API，代理到本地后端
       '/api/reading': {
-        target: 'http://localhost:7401',
+        target: backendTarget,
         changeOrigin: true,
         rewrite: (path) => path
       },
@@ -141,10 +147,15 @@ export default defineConfig({
       },
       // 其他API请求代理到本地后端服务器（通用代理）
       '/api': {
-        target: 'http://localhost:7401',
+        target: backendTarget,
         changeOrigin: true,
         rewrite: (path) => path
       }
     }
+  },
+  // 把后端地址注入到客户端代码（兼容已有代码使用 import.meta.env 读取）
+  define: {
+    __BACKEND_TARGET__: JSON.stringify(backendTarget)
   }
+}
 })

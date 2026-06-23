@@ -587,7 +587,7 @@ class BookRepository extends BaseRepository {
         const currentLibraryUuid = this.getCurrentLibraryUuid ? this.getCurrentLibraryUuid() : null;
         const bookDataQuery = `
           SELECT m.calibre_book_id as book_id, bd.page_count, bd.standard_price, bd.purchase_price, bd.purchase_date,
-                 bd.binding1, bd.binding2, bd.paper1, bd.edge1, bd.edge2, bd.note, bd.book_type
+                 bd.binding1, bd.binding2, bd.paper1, bd.edge1, bd.edge2, bd.note, bd.book_type, bd.source
           FROM qc_bookdata bd
           JOIN qc_book_mapping m ON bd.mapping_id = m.id
           WHERE m.calibre_book_id IN (${placeholders}) AND m.library_uuid = ?
@@ -606,6 +606,7 @@ class BookRepository extends BaseRepository {
             edge2: item.edge2 || 0,
             note: item.note || '',
             book_type: item.book_type || 0,
+            source: item.source || '',
             total_reading_time: 0,
             read_pages: 0,
             reading_count: 0,
@@ -734,7 +735,8 @@ class BookRepository extends BaseRepository {
       read_pages: 0,
       reading_count: 0,
       last_read_date: null,
-      last_read_duration: 0
+      last_read_duration: 0,
+      source: ''
     };
 
     if (this.qcBooklogDb) {
@@ -742,11 +744,11 @@ class BookRepository extends BaseRepository {
         const bookData = this.qcBooklogDb.prepare(`
           SELECT page_count, standard_price, purchase_price, purchase_date,
                  binding1, binding2, paper1, edge1, edge2, note,
-                 total_reading_time, read_pages, reading_count, last_read_date, last_read_duration, book_type
+                 total_reading_time, read_pages, reading_count, last_read_date, last_read_duration, book_type, source
           FROM qc_bookdata
           WHERE book_id = ?
         `).get(book.id);
-        
+
         if (bookData) {
           extendedData = {
             pages: bookData.page_count || 0,
@@ -764,7 +766,8 @@ class BookRepository extends BaseRepository {
             reading_count: bookData.reading_count || 0,
             last_read_date: bookData.last_read_date || null,
             last_read_duration: bookData.last_read_duration || 0,
-            book_type: bookData.book_type !== undefined && bookData.book_type !== null ? bookData.book_type : 1
+            book_type: bookData.book_type !== undefined && bookData.book_type !== null ? bookData.book_type : 1,
+            source: bookData.source || ''
           };
         }
       } catch (error) {

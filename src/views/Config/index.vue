@@ -35,14 +35,6 @@
           @refresh="refreshSyncStatus"
         />
 
-        <TransferCard
-          :source-info="transferSourceInfo"
-          :loading="transferLoading"
-          :logs="transferLogs"
-          @open-dialog="openTransferDialog"
-          @load-logs="loadTransferLogs"
-        />
-
         <SyncDetailsPanel :logs="syncLogs" />
       </div>
     </template>
@@ -68,6 +60,9 @@
         :talebook-path="talebookPath"
         :new-calibre-path="newCalibrePath"
         :new-talebook-path="newTalebookPath"
+        :source-info="transferSourceInfo"
+        :transfer-loading="transferLoading"
+        :transfer-logs="transferLogs"
         @update:config-mode="configMode = $event"
         @update:calibre-path="calibrePath = $event"
         @update:talebook-path="talebookPath = $event"
@@ -76,6 +71,8 @@
         @validate="validateDb"
         @create-new="createNewDatabase"
         @set-error="(msg) => (error = msg)"
+        @open-transfer-dialog="openTransferDialog"
+        @load-transfer-logs="loadTransferLogs"
       />
 
       <!-- 步骤 1: 验证 -->

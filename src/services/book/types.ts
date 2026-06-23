@@ -43,6 +43,7 @@ export interface Book {
   favorite_date?: string | null;
   wants?: number;
   wants_date?: string | null;
+  source?: string;
 }
 
 export interface BookGroup {
