@@ -79,6 +79,18 @@ export async function migrate() {
       console.log('  ✅ 字段重命名成功');
     }
 
+    // 检查并添加 qc_bookdata 表的 source 字段
+    const bookdataInfo = db.pragma('table_info(qc_bookdata)');
+    const bookdataColumns = bookdataInfo.map(col => col.name);
+
+    if (!bookdataColumns.includes('source')) {
+      console.log('📝 添加 qc_bookdata.source 字段...');
+      db.exec("ALTER TABLE qc_bookdata ADD COLUMN source TEXT DEFAULT ''");
+      console.log('  ✅ source 字段添加成功');
+    } else {
+      console.log('  ✓ qc_bookdata.source 字段已存在');
+    }
+
     console.log('🎉 QCBookLog 数据库更新完成!');
 
     db.close();

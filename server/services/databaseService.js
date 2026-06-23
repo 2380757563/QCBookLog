@@ -631,6 +631,7 @@ class DatabaseService {
           last_read_date DATE DEFAULT NULL,
           last_read_duration INTEGER DEFAULT 0,
           book_type INTEGER DEFAULT 1,
+          source TEXT DEFAULT '',
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
           updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
@@ -1465,6 +1466,7 @@ class DatabaseService {
           reading_count INTEGER DEFAULT 0,
           last_read_date DATE DEFAULT NULL,
           last_read_duration INTEGER DEFAULT 0,
+          source TEXT DEFAULT '',
           FOREIGN KEY (book_id) REFERENCES items(book_id) ON DELETE CASCADE
         )
       `).run();
@@ -1485,7 +1487,8 @@ class DatabaseService {
           { name: 'last_read_duration', sql: 'last_read_duration INTEGER DEFAULT 0' },
           { name: 'paper1', sql: 'paper1 INTEGER DEFAULT 0' },
           { name: 'edge1', sql: 'edge1 INTEGER DEFAULT 0' },
-          { name: 'edge2', sql: 'edge2 INTEGER DEFAULT 0' }
+          { name: 'edge2', sql: 'edge2 INTEGER DEFAULT 0' },
+          { name: 'source', sql: "source TEXT DEFAULT ''" }
         ];
 
         for (const field of requiredFields) {

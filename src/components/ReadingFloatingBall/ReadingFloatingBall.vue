@@ -5,7 +5,7 @@
         v-if="readingStore.currentBook && !readingStore.isInReadingPage"
         class="floating-ball"
         :class="{ expanded: isExpanded, paused: readingStore.isPaused }"
-        :style="{ left: position.x + 'px', top: position.y + 'px' }"
+        :style="{ right: position.right + 'px', top: position.top + 'px' }"
         @mousedown="startDrag"
         @click="handleClick"
       >
@@ -16,11 +16,11 @@
             <div class="reading-time">{{ formattedTime }}</div>
           </div>
           <button class="pause-btn" @click.stop="togglePause">
-            <svg v-if="readingStore.isPaused" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z"/>
+            <svg v-if="readingStore.isPaused" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M8 5v14l11-7z" fill="currentColor"/>
             </svg>
-            <svg v-else viewBox="0 0 24 24">
-              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+            <svg v-else viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" fill="currentColor"/>
             </svg>
           </button>
         </div>
@@ -30,7 +30,7 @@
           <div class="expanded-header">
             <div class="book-name">{{ readingStore.currentBook.title }}</div>
             <button class="close-btn" @click.stop="isExpanded = false">
-              <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill="currentColor"/></svg>
             </button>
           </div>
           
@@ -61,7 +61,7 @@
 
           <div class="expanded-actions">
             <button class="action-btn secondary" @click.stop="handleBackToReading">
-              <svg viewBox="0 0 24 24"><path d="M5.59 7.41L10.18 12l-4.59 4.59L7 18l6-6-6-6zM16 6h2v12h-2zM11 6h2v12h-2z"/></svg>
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M5.59 7.41L10.18 12l-4.59 4.59L7 18l6-6-6-6zM16 6h2v12h-2zM11 6h2v12h-2z" fill="currentColor"/></svg>
               <span>返回阅读</span>
             </button>
           </div>
@@ -69,7 +69,7 @@
 
         <!-- 拖动指示器 -->
         <div v-if="!isExpanded" class="drag-indicator" v-show="isDragging">
-          <svg viewBox="0 0 24 24"><path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>
+          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" fill="currentColor"/></svg>
         </div>
       </div>
     </Transition>
@@ -92,9 +92,10 @@ const emit = defineEmits<{
 const isExpanded = ref(false);
 const isDragging = ref(false);
 const dragOffset = ref({ x: 0, y: 0 });
+const initialBoxRect = ref({ left: 0, top: 0, width: 0, height: 0 });
 
-// 位置状态（从localStorage读取或使用默认值）
-const position = ref({ x: window.innerWidth - 200, y: 100 });
+// 位置状态（从localStorage读取或使用默认值） - 使用 right 定位，避免展开后超出屏幕
+const position = ref({ right: 20, top: 100 });
 
 // 加载保存的位置
 const loadPosition = () => {
@@ -102,13 +103,20 @@ const loadPosition = () => {
     const saved = localStorage.getItem('floatingBallPosition');
     if (saved) {
       const pos = JSON.parse(saved);
-      // 确保位置在屏幕内
-      const maxX = window.innerWidth - 300;
-      const maxY = window.innerHeight - 200;
-      position.value = {
-        x: Math.min(Math.max(0, pos.x), maxX),
-        y: Math.min(Math.max(0, pos.y), maxY)
-      };
+      if (typeof pos.right === 'number' && typeof pos.top === 'number') {
+        // 新格式 { right, top }
+        position.value = {
+          right: Math.max(0, pos.right),
+          top: Math.min(Math.max(0, pos.top), window.innerHeight - 100)
+        };
+      } else if (typeof pos.x === 'number' && typeof pos.y === 'number') {
+        // 兼容旧格式 { x, y } - 转换为 right
+        const boxWidth = 200;
+        position.value = {
+          right: Math.max(0, window.innerWidth - pos.x - boxWidth),
+          top: Math.min(Math.max(0, pos.y), window.innerHeight - 100)
+        };
+      }
     }
   } catch (e) {
     console.error('Failed to load position:', e);
@@ -164,13 +172,16 @@ const handleClick = () => {
 // 开始拖动
 const startDrag = (e: MouseEvent) => {
   if (isExpanded.value) return;
-  
+
   isDragging.value = true;
+  const target = e.currentTarget as HTMLElement;
+  const rect = target.getBoundingClientRect();
+  initialBoxRect.value = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
   dragOffset.value = {
-    x: e.clientX - position.value.x,
-    y: e.clientY - position.value.y
+    x: e.clientX - rect.left,
+    y: e.clientY - rect.top
   };
-  
+
   document.addEventListener('mousemove', onDrag);
   document.addEventListener('mouseup', endDrag);
 };
@@ -178,13 +189,19 @@ const startDrag = (e: MouseEvent) => {
 // 拖动中
 const onDrag = (e: MouseEvent) => {
   if (!isDragging.value) return;
-  
-  const maxX = window.innerWidth - 300;
-  const maxY = window.innerHeight - 200;
-  
+
+  const newLeft = e.clientX - dragOffset.value.x;
+  const newTop = e.clientY - dragOffset.value.y;
+  const boxWidth = initialBoxRect.value.width;
+  const boxHeight = initialBoxRect.value.height;
+
+  // 限制在屏幕内：左侧不能小于 0，右侧不能超出屏幕
+  const clampedLeft = Math.min(Math.max(0, newLeft), window.innerWidth - boxWidth);
+  const clampedTop = Math.min(Math.max(0, newTop), window.innerHeight - boxHeight);
+
   position.value = {
-    x: Math.min(Math.max(0, e.clientX - dragOffset.value.x), maxX),
-    y: Math.min(Math.max(0, e.clientY - dragOffset.value.y), maxY)
+    right: Math.max(0, window.innerWidth - clampedLeft - boxWidth),
+    top: clampedTop
   };
 };
 
@@ -192,7 +209,7 @@ const onDrag = (e: MouseEvent) => {
 const endDrag = () => {
   isDragging.value = false;
   savePosition();
-  
+
   document.removeEventListener('mousemove', onDrag);
   document.removeEventListener('mouseup', endDrag);
 };
@@ -212,11 +229,9 @@ const handleBackToReading = () => {
 
 // 监听窗口大小变化
 const handleResize = () => {
-  const maxX = window.innerWidth - 300;
-  const maxY = window.innerHeight - 200;
   position.value = {
-    x: Math.min(Math.max(0, position.value.x), maxX),
-    y: Math.min(Math.max(0, position.value.y), maxY)
+    right: Math.max(0, position.value.right),
+    top: Math.min(Math.max(0, position.value.top), window.innerHeight - 100)
   };
 };
 
@@ -288,12 +303,14 @@ onUnmounted(() => {
   border-radius: 50%;
   border: none;
   background: #f5f5f5;
+  color: #333;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   transition: all 0.2s ease;
+  padding: 0;
 }
 
 .pause-btn:hover {
@@ -303,7 +320,11 @@ onUnmounted(() => {
 .pause-btn svg {
   width: 20px;
   height: 20px;
-  fill: #333;
+  display: block;
+}
+
+.pause-btn svg path {
+  fill: currentColor;
 }
 
 /* 展开状态 */
@@ -337,6 +358,8 @@ onUnmounted(() => {
   justify-content: center;
   border-radius: 4px;
   transition: background 0.2s ease;
+  color: #666;
+  padding: 0;
 }
 
 .close-btn:hover {
@@ -346,7 +369,7 @@ onUnmounted(() => {
 .close-btn svg {
   width: 20px;
   height: 20px;
-  fill: #666;
+  fill: currentColor;
 }
 
 .expanded-content {

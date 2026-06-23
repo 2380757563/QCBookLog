@@ -27,7 +27,7 @@
           <input 
             v-model="isbnInput" 
             class="isbn-input"
-            placeholder="输入ISBN自动获取信息"
+            placeholder="输入或填入ISBN获取/更新信息"
           />
           <button class="scan-btn" @click="fetchBookByISBN" :disabled="fetching">
             {{ fetching ? '获取中...' : '获取' }}
@@ -140,6 +140,20 @@
         <div class="form-item">
           <label class="form-label">丛书系列</label>
           <input v-model="form.series" class="form-input" placeholder="所属丛书系列" />
+        </div>
+
+        <div class="form-item">
+          <label class="form-label">书籍来源</label>
+          <div class="source-display">
+            <span v-if="form.source" class="source-badge">{{ getSourceLabel(form.source) }}</span>
+            <input
+              v-else
+              v-model="form.source"
+              class="form-input"
+              placeholder="例如：douban / dbr / google / manual"
+            />
+            <small v-if="form.source" class="source-hint">已自动记录来源：{{ form.source }}</small>
+          </div>
         </div>
       </div>
 
@@ -394,12 +408,197 @@
       <div class="form-section">
         <h3 class="section-title">备注</h3>
         <div class="form-item">
-          <textarea 
-            v-model="form.note" 
-            class="form-textarea" 
+          <textarea
+            v-model="form.note"
+            class="form-textarea"
             placeholder="添加书籍备注..."
             rows="4"
           ></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- 阅读记录弹窗 -->
+    <div v-if="showReadingRecords" class="reading-records-modal" @click.self="closeReadingRecords">
+      <div class="reading-records-dialog">
+        <div class="reading-records-header">
+          <h3 class="reading-records-title">阅读记录</h3>
+          <button class="reading-records-close" @click="closeReadingRecords" aria-label="关闭">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+          </button>
+        </div>
+        <div class="reading-records-body">
+          <div v-if="loadingReadingRecords" class="reading-records-loading">加载中...</div>
+          <div v-else-if="!readingRecords.length" class="reading-records-empty">暂无阅读记录</div>
+          <ul v-else class="reading-records-list">
+            <li v-for="record in readingRecords" :key="record.id || record.startTime" class="reading-record-item">
+              <div class="reading-record-date">{{ formatRecordDate(record.startTime) }}</div>
+              <div class="reading-record-meta">
+                <span class="reading-record-time">{{ formatRecordTimeRange(record.startTime, record.endTime) }}</span>
+                <span v-if="record.duration" class="reading-record-duration">时长 {{ formatRecordDuration(record.duration) }}</span>
+                <span v-if="record.startPage != null || record.endPage != null" class="reading-record-pages">
+                  第 {{ record.startPage || 0 }} - {{ record.endPage || 0 }} 页
+                  <template v-if="record.pagesRead">(共 {{ record.pagesRead }} 页)</template>
+                </span>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- ISBN 多源获取对话框 -->
+    <div v-if="showIsbnFetchDialog" class="isbn-fetch-dialog" @click.self="closeIsbnFetchDialog">
+      <div class="isbn-fetch-content">
+        <div class="dialog-header">
+          <h3 class="dialog-title">📚 选择书源</h3>
+          <span class="dialog-isbn">ISBN: {{ isbnCurrentIsbn }}</span>
+          <button class="dialog-close" @click="closeIsbnFetchDialog" aria-label="关闭">✕</button>
+        </div>
+
+        <div class="dialog-body">
+          <!-- 加载中 -->
+          <div v-if="isbnFetchLoading" class="loading-state">
+            <div class="spinner"></div>
+            <p>正在从多个书源获取书籍信息...</p>
+          </div>
+
+          <!-- 错误提示 -->
+          <div v-if="isbnFetchError && !isbnFetchLoading" class="error-state">
+            <p>❌ {{ isbnFetchError }}</p>
+          </div>
+
+          <!-- 书源列表 -->
+          <div v-if="!isbnFetchLoading" class="source-list">
+            <div
+              v-for="(config, key) in API_CONFIGS"
+              :key="key"
+              :class="[
+                'source-item',
+                {
+                  'selected': isbnFetchSelectedSource === key,
+                  'disabled': !isbnFetchResults[key]
+                }
+              ]"
+              @click="isbnFetchResults[key] && (isbnFetchSelectedSource = key)"
+            >
+              <div class="source-radio">
+                <input
+                  type="radio"
+                  :id="`isbn-source-${key}`"
+                  :value="key"
+                  v-model="isbnFetchSelectedSource"
+                  :disabled="!isbnFetchResults[key]"
+                />
+                <label :for="`isbn-source-${key}`">
+                  <span class="source-name">{{ config.name }}</span>
+                  <span v-if="isbnFetchResults[key]" class="source-status success">✓</span>
+                  <span v-else class="source-status empty">无数据</span>
+                </label>
+              </div>
+              <div class="source-badges">
+                <span v-if="config.isFree" class="badge free">免费</span>
+                <span v-else class="badge paid">计费</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 数据预览 -->
+          <div
+            v-if="isbnFetchSelectedSource && isbnFetchResults[isbnFetchSelectedSource] && !isbnFetchLoading"
+            class="preview-section"
+          >
+            <h4 class="preview-title">
+              数据预览 · {{ getApiSourceLabel(isbnFetchSelectedSource) }}
+            </h4>
+            <div class="preview-content">
+              <div
+                v-if="isbnFetchResults[isbnFetchSelectedSource]?.coverUrl"
+                class="preview-cover"
+              >
+                <img
+                  :src="isbnFetchResults[isbnFetchSelectedSource]!.coverUrl"
+                  alt="封面"
+                  @error="($event.target as HTMLImageElement).style.display = 'none'"
+                />
+              </div>
+              <div class="preview-info">
+                <div class="info-row">
+                  <span class="info-label">书名:</span>
+                  <span class="info-value">{{ isbnFetchResults[isbnFetchSelectedSource]?.title || '无' }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">作者:</span>
+                  <span class="info-value">{{ isbnFetchResults[isbnFetchSelectedSource]?.author || '无' }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">出版社:</span>
+                  <span class="info-value">{{ isbnFetchResults[isbnFetchSelectedSource]?.publisher || '无' }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">出版年:</span>
+                  <span class="info-value">{{ isbnFetchResults[isbnFetchSelectedSource]?.publishYear || '无' }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">页数:</span>
+                  <span class="info-value">{{ isbnFetchResults[isbnFetchSelectedSource]?.pages || '无' }}</span>
+                </div>
+                <div class="info-row">
+                  <span class="info-label">装帧:</span>
+                  <span class="info-value">{{ isbnFetchResults[isbnFetchSelectedSource]?.binding || '无' }}</span>
+                </div>
+                <div v-if="isbnFetchResults[isbnFetchSelectedSource]?.rating" class="info-row">
+                  <span class="info-label">评分:</span>
+                  <span class="info-value rating">{{ isbnFetchResults[isbnFetchSelectedSource]?.rating?.toFixed(1) }}</span>
+                </div>
+                <div v-if="isbnFetchResults[isbnFetchSelectedSource]?.price" class="info-row">
+                  <span class="info-label">价格:</span>
+                  <span class="info-value">{{ isbnFetchResults[isbnFetchSelectedSource]?.price }}</span>
+                </div>
+                <div v-if="isbnFetchResults[isbnFetchSelectedSource]?.series" class="info-row">
+                  <span class="info-label">丛书:</span>
+                  <span class="info-value">{{ isbnFetchResults[isbnFetchSelectedSource]?.series }}</span>
+                </div>
+                <div
+                  v-if="isbnFetchResults[isbnFetchSelectedSource]?.tags && isbnFetchResults[isbnFetchSelectedSource]?.tags && isbnFetchResults[isbnFetchSelectedSource]!.tags!.length > 0"
+                  class="info-row"
+                >
+                  <span class="info-label">标签:</span>
+                  <span class="info-value">{{ isbnFetchResults[isbnFetchSelectedSource]?.tags!.join(', ') }}</span>
+                </div>
+                <div
+                  v-if="isbnFetchResults[isbnFetchSelectedSource]?.description"
+                  class="info-row description-row"
+                >
+                  <span class="info-label">简介:</span>
+                  <p class="description-text">{{ isbnFetchResults[isbnFetchSelectedSource]?.description }}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 探数 API 重试 -->
+          <div
+            v-if="!isbnFetchLoading && !isbnFetchResults.tanshu && (isbnFetchError || (!isbnFetchResults.dbr && !isbnFetchResults.douban && !isbnFetchResults.isbnWork))"
+            class="retry-paid-section"
+          >
+            <p class="hint-text">💡 免费书源未找到书籍信息</p>
+            <p class="hint-subtext">您可以尝试使用探数图书 API（计费服务）</p>
+            <button class="tanshu-btn" @click="tryTanshuInDialog" :disabled="isbnFetchLoading">
+              {{ isbnFetchLoading ? '正在尝试...' : '尝试探数图书' }}
+            </button>
+          </div>
+        </div>
+
+        <div class="dialog-footer">
+          <button class="dialog-btn cancel-btn" @click="closeIsbnFetchDialog">取消</button>
+          <button
+            class="dialog-btn apply-btn"
+            @click="applyIsbnFetchResult"
+            :disabled="!isbnFetchSelectedSource || !isbnFetchResults[isbnFetchSelectedSource]"
+          >
+            应用此书源
+          </button>
         </div>
       </div>
     </div>
@@ -414,8 +613,11 @@ import { useReaderStore } from '@/store/reader';
 import { useReadingStore } from '@/store/reading';
 import { bookService } from '@/services/book';
 import readingTrackingService from '@/services/readingTracking';
+import activityService from '@/services/activity';
 import type { Book, BookGroup, Tag } from '@/services/book/types';
-import { searchBookByISBN, isbnCacheUtils } from '@/services/common/isbnApi';
+import { searchBookByISBN, searchBookByISBNWithSource, isbnCacheUtils } from '@/services/common/isbnApi';
+import { API_CONFIGS } from '@/services/common/isbnApi/apiConfig';
+import type { BookSearchResult } from '@/services/common/isbnApi/types';
 import ReadingProgressBar from '@/components/ReadingProgressBar/ReadingProgressBar.vue';
 import ReadingStatsCard from '@/components/ReadingStatsCard/ReadingStatsCard.vue';
 
@@ -433,6 +635,19 @@ const coverInput = ref<HTMLInputElement | null>(null);
 const calibreTagInput = ref('');
 const allGroups = ref<BookGroup[]>([]);
 const allTags = ref<string[]>([]);
+
+// ISBN 多源获取对话框
+const showIsbnFetchDialog = ref(false);
+const isbnFetchLoading = ref(false);
+const isbnFetchError = ref('');
+const isbnFetchResults = ref<Record<string, BookSearchResult | null>>({
+  dbr: null,
+  douban: null,
+  isbnWork: null,
+  tanshu: null
+});
+const isbnFetchSelectedSource = ref<string>('');
+const isbnCurrentIsbn = ref<string>(''); // 当前正在查询的 ISBN
 
 // 阅读进度相关
 const readingProgress = ref(0);
@@ -475,7 +690,8 @@ const form = reactive<Omit<Book, 'id' | 'createTime' | 'updateTime'> & { id?: st
   favorite: 0,
   favorite_date: null,
   wants: 0,
-  wants_date: null
+  wants_date: null,
+  source: ''
 });
 
 // 阅读状态选项
@@ -603,73 +819,175 @@ const handleCoverChange = (event: Event) => {
   }
 };
 
-// 通过ISBN获取书籍信息
+// 将 API 返回的 source 字符串标准化为 key
+const normalizeSourceKey = (source: string): string => {
+  if (!source) return '';
+  const s = source.toLowerCase();
+  if (s.includes('dbr')) return 'dbr';
+  if (s.includes('豆瓣') || s.includes('douban')) return 'douban';
+  if (s.includes('公共') || s.includes('isbnwork') || s.includes('isbn_work') || s.includes('isbn-work')) return 'isbnWork';
+  if (s.includes('探数') || s.includes('tanshu')) return 'tanshu';
+  return s;
+};
+
+// 获取书源显示名称
+const getApiSourceLabel = (key: string): string => {
+  return API_CONFIGS[key]?.name || key;
+};
+
+// 通过ISBN获取书籍信息（多源选择流程）
 const fetchBookByISBN = async () => {
   const isbn = isbnInput.value.trim();
   if (!isbn) return;
-  
+
+  // 初始化弹窗状态
+  isbnCurrentIsbn.value = isbn;
+  isbnFetchError.value = '';
+  isbnFetchResults.value = { dbr: null, douban: null, isbnWork: null, tanshu: null };
+  isbnFetchSelectedSource.value = '';
+  showIsbnFetchDialog.value = true;
   fetching.value = true;
+  isbnFetchLoading.value = true;
+
   try {
     // 清除该ISBN的缓存，确保获取最新数据
     if (isbnCacheUtils) {
       isbnCacheUtils.clearByISBN(isbn);
-
     }
-    
-    // 调用综合ISBN搜索API
-    const searchResults = await searchBookByISBN(isbn);
-    
-    // 使用最佳结果
-    const bookInfo = searchResults.bestResult;
-    
-    if (bookInfo) {
-          form.isbn = bookInfo.isbn || isbn;
-          form.title = bookInfo.title || '';
-          form.author = bookInfo.author || '';
-          form.publisher = bookInfo.publisher || '';
-          form.publishYear = bookInfo.publishYear;
-          form.pages = bookInfo.pages;
-          
-          // 根据API返回的装帧信息设置binding1和book_type
-          if (bookInfo.binding1 !== undefined && bookInfo.binding1 !== null) {
-            form.binding1 = bookInfo.binding1;
-            form.book_type = bookInfo.book_type !== undefined && bookInfo.book_type !== null ? bookInfo.book_type : (bookInfo.binding1 === 0 ? 0 : 1);
-          } else {
-            const bindingText = (bookInfo.binding || '').toLowerCase();
-            if (bindingText.includes('平装') || bindingText.includes('paperback') || bindingText.includes('平裝')) {
-              form.binding1 = 1;
-              form.book_type = 1;
-            } else if (bindingText.includes('精装') || bindingText.includes('hardcover') || bindingText.includes('精裝')) {
-              form.binding1 = 2;
-              form.book_type = 1;
-            } else if (bindingText.includes('电子') || bindingText.includes('ebook') || bindingText.includes('电子书')) {
-              form.binding1 = 0;
-              form.book_type = 0;
-            } else {
-              form.binding1 = 3;
-              form.book_type = 1;
-            }
-          }
-          
-          form.binding2 = bookInfo.binding2 || 0; // 默认无细分
 
-          form.coverUrl = bookInfo.coverUrl || '';
-          // 设置书籍简介
-          form.description = bookInfo.description || '';
-          // 设置标准价格（从API获取的价格）
-          if (bookInfo.price) {
-            // 去除"元"等非数字字符后再转换
-            form.standardPrice = parseFloat(bookInfo.price.replace(/[^\d.]/g, ''));
-          }
-    } else {
-      alert('未找到相关书籍信息');
+    // 并行调用所有免费书源
+    const searchResults = await searchBookByISBN(isbn);
+
+    isbnFetchResults.value.dbr = searchResults.dbr;
+    isbnFetchResults.value.douban = searchResults.douban;
+    isbnFetchResults.value.isbnWork = searchResults.isbnWork;
+    // 探数 API 不自动调用，等待用户主动点击
+
+    // 根据最佳结果默认选中
+    if (searchResults.bestResult) {
+      isbnFetchSelectedSource.value = normalizeSourceKey(searchResults.bestResult.source);
+    }
+
+    // 检查所有免费书源是否均失败
+    if (!searchResults.bestResult) {
+      isbnFetchError.value = '所有免费书源均未找到该 ISBN 对应的书籍信息';
     }
   } catch (error) {
     console.error('获取书籍信息失败:', error);
-    alert('获取书籍信息失败，请重试');
+    isbnFetchError.value = '获取书籍信息失败，请重试';
   } finally {
     fetching.value = false;
+    isbnFetchLoading.value = false;
   }
+};
+
+// 主动尝试探数书源（计费 API）
+const tryTanshuInDialog = async () => {
+  const isbn = isbnCurrentIsbn.value || isbnInput.value.trim();
+  if (!isbn) return;
+
+  if (!confirm('探数图书 API 为计费服务，是否确认调用？\n\n该服务仅在免费 API 无法找到书籍时建议使用。')) {
+    return;
+  }
+
+  isbnFetchLoading.value = true;
+  try {
+    const result = await searchBookByISBNWithSource(isbn, 'tanshu');
+    if (result) {
+      isbnFetchResults.value.tanshu = result;
+      isbnFetchSelectedSource.value = 'tanshu';
+      isbnFetchError.value = '';
+    } else {
+      alert('探数图书未找到该 ISBN 对应的书籍信息');
+    }
+  } catch (error) {
+    console.error('探数 API 调用失败:', error);
+    alert('探数图书 API 调用失败');
+  } finally {
+    isbnFetchLoading.value = false;
+  }
+};
+
+// 将书源数据应用到表单
+const applyIsbnFetchResult = () => {
+  const sourceKey = isbnFetchSelectedSource.value;
+  if (!sourceKey) {
+    alert('请先选择一个书源');
+    return;
+  }
+
+  const bookInfo = isbnFetchResults.value[sourceKey];
+  if (!bookInfo) {
+    alert('所选书源暂无数据');
+    return;
+  }
+
+  // 填充表单
+  form.isbn = bookInfo.isbn || isbnCurrentIsbn.value;
+  form.title = bookInfo.title || '';
+  form.author = bookInfo.author || '';
+  form.publisher = bookInfo.publisher || '';
+  form.publishYear = bookInfo.publishYear;
+  form.pages = bookInfo.pages;
+
+  // 根据 API 返回的装帧信息设置 binding1 和 book_type
+  if (bookInfo.binding1 !== undefined && bookInfo.binding1 !== null) {
+    form.binding1 = bookInfo.binding1;
+    form.book_type = bookInfo.book_type !== undefined && bookInfo.book_type !== null
+      ? bookInfo.book_type
+      : (bookInfo.binding1 === 0 ? 0 : 1);
+  } else {
+    const bindingText = (bookInfo.binding || '').toLowerCase();
+    if (bindingText.includes('平装') || bindingText.includes('paperback') || bindingText.includes('平裝')) {
+      form.binding1 = 1;
+      form.book_type = 1;
+    } else if (bindingText.includes('精装') || bindingText.includes('hardcover') || bindingText.includes('精裝')) {
+      form.binding1 = 2;
+      form.book_type = 1;
+    } else if (bindingText.includes('电子') || bindingText.includes('ebook') || bindingText.includes('电子书')) {
+      form.binding1 = 0;
+      form.book_type = 0;
+    } else {
+      form.binding1 = 3;
+      form.book_type = 1;
+    }
+  }
+
+  form.binding2 = bookInfo.binding2 || 0;
+  form.coverUrl = bookInfo.coverUrl || '';
+  form.description = bookInfo.description || '';
+
+  if (bookInfo.price) {
+    form.standardPrice = parseFloat(bookInfo.price.replace(/[^\d.]/g, ''));
+  }
+  if (bookInfo.rating !== undefined && bookInfo.rating !== null) {
+    form.rating = bookInfo.rating;
+    doubanRatingInput.value = bookInfo.rating;
+  }
+  if (bookInfo.series) {
+    form.series = bookInfo.series;
+  }
+  if (bookInfo.tags && bookInfo.tags.length > 0) {
+    // 合并而不是覆盖，保留用户已添加的标签
+    const existing = form.calibreTags || [];
+    const merged = Array.from(new Set([...existing, ...bookInfo.tags]));
+    form.calibreTags = merged;
+  }
+
+  // 关键：写入书源（标准化为 key）
+  form.source = sourceKey;
+
+  // 关闭弹窗
+  showIsbnFetchDialog.value = false;
+};
+
+// 关闭 ISBN 弹窗
+const closeIsbnFetchDialog = () => {
+  showIsbnFetchDialog.value = false;
+  isbnFetchError.value = '';
+  isbnFetchResults.value = { dbr: null, douban: null, isbnWork: null, tanshu: null };
+  isbnFetchSelectedSource.value = '';
+  isbnCurrentIsbn.value = '';
 };
 
 // 切换阅读状态
@@ -789,11 +1107,95 @@ const handleProgressUpdate = (newProgress: number) => {
 };
 
 // 查看阅读记录
-const handleViewRecords = () => {
+const showReadingRecords = ref(false);
+const readingRecords = ref<any[]>([]);
+const loadingReadingRecords = ref(false);
+
+const handleViewRecords = async () => {
   if (!form.id) return;
-  
-  const bookId = parseInt(form.id as string);
-  router.push(`/book/detail/${bookId}?tab=reading-records`);
+  showReadingRecords.value = true;
+  loadingReadingRecords.value = true;
+  try {
+    const bookId = parseInt(form.id as string, 10);
+
+    // 优先从活动日志（与时间线页面同一数据源），保证日期/时间/页数/时长齐全
+    let records: any[] = [];
+    try {
+      const activities = await activityService.getActivities({
+        bookId,
+        type: 'reading_record',
+        limit: 200
+      });
+      records = (activities || []).filter((r) => r && r.startTime && r.endTime);
+    } catch (e) {
+      console.warn('⚠️ 从活动日志读取阅读记录失败，回退到 readingTracking:', e);
+    }
+
+    if (records.length === 0) {
+      // 回退到原接口（解决历史数据问题）
+      const fallback = await readingTrackingService.getBookReadingRecords(bookId, 200);
+      records = (fallback || []).filter((r) => r && r.startTime && r.endTime);
+    }
+
+    // 按开始时间倒序排序（最新在前）
+    readingRecords.value = records.slice().sort((a, b) => {
+      return new Date(b.startTime).getTime() - new Date(a.startTime).getTime();
+    });
+  } catch (error) {
+    console.error('加载阅读记录失败:', error);
+    readingRecords.value = [];
+  } finally {
+    loadingReadingRecords.value = false;
+  }
+};
+
+const closeReadingRecords = () => {
+  showReadingRecords.value = false;
+};
+
+// 格式化阅读记录日期
+const formatRecordDate = (dateStr: string): string => {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
+
+// 格式化阅读记录时间范围
+const formatRecordTimeRange = (start: string, end: string): string => {
+  if (!start) return '';
+  const startDate = new Date(start);
+  const startTime = `${String(startDate.getHours()).padStart(2, '0')}:${String(startDate.getMinutes()).padStart(2, '0')}`;
+  if (!end) return startTime;
+  const endDate = new Date(end);
+  const endTime = `${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}`;
+  return `${startTime} - ${endTime}`;
+};
+
+// 书籍来源显示映射
+const sourceLabelMap: Record<string, string> = {
+  douban: '豆瓣读书',
+  dbr: '豆瓣读书 (DBR)',
+  google: 'Google Books',
+  openlibrary: 'Open Library',
+  manual: '手动添加',
+  import: '批量导入',
+  calibre: 'Calibre 书库',
+  talebook: 'Talebook 书库'
+};
+const getSourceLabel = (source: string): string => {
+  if (!source) return '';
+  const lower = source.toLowerCase();
+  if (sourceLabelMap[lower]) return sourceLabelMap[lower];
+  return source;
+};
+
+// 格式化阅读时长（分钟 -> "X小时Y分钟"）
+const formatRecordDuration = (minutes: number): string => {
+  if (!minutes || minutes <= 0) return '0 分钟';
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h > 0) return m > 0 ? `${h}小时${m}分钟` : `${h}小时`;
+  return `${m}分钟`;
 };
 
 // 切换分组
@@ -1101,7 +1503,8 @@ const loadBookData = async () => {
       favorite_date: book.favorite_date ?? null,
       wants_date: book.wants_date ?? null,
       personal_rating: book.personal_rating ?? 0,
-      personal_rating_date: book.personal_rating_date ?? null
+      personal_rating_date: book.personal_rating_date ?? null,
+      source: book.source ?? ''
     });
 
     if (book.rating !== undefined && book.rating !== null) {
@@ -1119,6 +1522,11 @@ const loadBookData = async () => {
     if (Array.isArray(book.tags)) {
       form.calibreTags = book.tags as string[];
       form.tags = [];
+    }
+
+    // 把现有 ISBN 同步到 ISBN 获取输入框（便于直接重新拉取更新）
+    if (book.isbn) {
+      isbnInput.value = book.isbn;
     }
 
     loadReadingStats();
@@ -1192,6 +1600,10 @@ onMounted(async () => {
         form.rating = query.rating ? parseFloat(query.rating as string) : undefined;
         // 设置丛书
         form.series = query.series as string || '';
+        // 设置书籍来源
+        if (query.source) {
+          form.source = query.source as string;
+        }
         // 设置Calibre标签
         if (query.tags) {
           try {
@@ -1764,6 +2176,517 @@ onMounted(async () => {
   width: 20px;
   height: 20px;
   fill: #fff;
+}
+
+/* 阅读记录弹窗 */
+.reading-records-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+}
+
+.reading-records-dialog {
+  background: #fff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 560px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.reading-records-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #eee;
+}
+
+.reading-records-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+  color: #333;
+}
+
+.reading-records-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #999;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.reading-records-close:hover {
+  background: #f5f5f5;
+  color: #333;
+}
+
+.reading-records-close svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+.reading-records-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.reading-records-loading,
+.reading-records-empty {
+  text-align: center;
+  padding: 40px 0;
+  color: #999;
+  font-size: 14px;
+}
+
+.reading-records-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.reading-record-item {
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.reading-record-item:last-child {
+  border-bottom: none;
+}
+
+.reading-record-date {
+  font-size: 15px;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.reading-record-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+  color: #666;
+}
+
+.reading-record-time,
+.reading-record-duration,
+.reading-record-pages {
+  display: inline-block;
+}
+
+/* 书籍来源 */
+.source-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.source-display .form-input {
+  flex: 1;
+  min-width: 220px;
+}
+
+.source-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  background-color: var(--primary-color-light, #e6f3ff);
+  color: var(--primary-color, #1e88e5);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.source-hint {
+  color: var(--text-tertiary, #888);
+  font-size: 12px;
+  flex-basis: 100%;
+}
+
+/* ============ ISBN 多源获取对话框 ============ */
+.isbn-fetch-dialog {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 16px;
+}
+
+.isbn-fetch-content {
+  background: var(--bg-primary, #fff);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 640px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color, #eee);
+}
+
+.dialog-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary, #333);
+}
+
+.dialog-isbn {
+  font-size: 13px;
+  color: var(--text-tertiary, #888);
+  flex: 1;
+}
+
+.dialog-close {
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: var(--text-tertiary, #888);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.dialog-close:hover {
+  background-color: var(--bg-hover, #f5f5f5);
+  color: var(--text-primary, #333);
+}
+
+.dialog-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.loading-state,
+.error-state {
+  text-align: center;
+  padding: 24px 0;
+  color: var(--text-secondary, #666);
+}
+
+.error-state p {
+  color: #e74c3c;
+  margin: 0;
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-color, #eee);
+  border-top-color: var(--primary-color, #3498db);
+  border-radius: 50%;
+  margin: 0 auto 12px;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.source-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color, #e5e5e5);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: var(--bg-primary, #fff);
+}
+
+.source-item:hover:not(.disabled) {
+  border-color: var(--primary-color, #3498db);
+  background-color: var(--bg-hover, #f8fbff);
+}
+
+.source-item.selected {
+  border-color: var(--primary-color, #3498db);
+  background-color: rgba(52, 152, 219, 0.06);
+}
+
+.source-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: var(--bg-secondary, #fafafa);
+}
+
+.source-radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.source-radio input[type="radio"] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.source-radio input[type="radio"]:disabled {
+  cursor: not-allowed;
+}
+
+.source-radio label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  flex: 1;
+  font-size: 14px;
+  color: var(--text-primary, #333);
+}
+
+.source-item.disabled .source-radio label {
+  cursor: not-allowed;
+}
+
+.source-name {
+  font-weight: 500;
+}
+
+.source-status.success {
+  color: #2ecc71;
+  font-size: 12px;
+}
+
+.source-status.empty {
+  color: var(--text-tertiary, #999);
+  font-size: 12px;
+}
+
+.source-badges {
+  display: flex;
+  gap: 4px;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.badge.free {
+  background-color: #e8f8f0;
+  color: #27ae60;
+}
+
+.badge.paid {
+  background-color: #fff5e6;
+  color: #e67e22;
+}
+
+.preview-section {
+  border-top: 1px dashed var(--border-color, #e5e5e5);
+  padding-top: 16px;
+  margin-top: 8px;
+}
+
+.preview-title {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #333);
+}
+
+.preview-content {
+  display: flex;
+  gap: 16px;
+}
+
+.preview-cover {
+  flex-shrink: 0;
+  width: 90px;
+  height: 120px;
+  border-radius: 4px;
+  overflow: hidden;
+  background-color: var(--bg-secondary, #f5f5f5);
+}
+
+.preview-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.preview-info {
+  flex: 1;
+  font-size: 13px;
+  min-width: 0;
+}
+
+.info-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+  line-height: 1.5;
+}
+
+.info-label {
+  color: var(--text-tertiary, #888);
+  flex-shrink: 0;
+  min-width: 56px;
+}
+
+.info-value {
+  color: var(--text-primary, #333);
+  word-break: break-word;
+  flex: 1;
+}
+
+.info-value.rating {
+  color: #f39c12;
+  font-weight: 600;
+}
+
+.description-row {
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.description-row .info-label {
+  margin-bottom: 4px;
+}
+
+.description-text {
+  margin: 0;
+  color: var(--text-secondary, #666);
+  font-size: 12px;
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.retry-paid-section {
+  text-align: center;
+  padding: 16px 0 4px;
+  border-top: 1px dashed var(--border-color, #e5e5e5);
+  margin-top: 16px;
+}
+
+.hint-text {
+  margin: 0 0 4px 0;
+  color: var(--text-primary, #333);
+  font-size: 14px;
+}
+
+.hint-subtext {
+  margin: 0 0 12px 0;
+  color: var(--text-tertiary, #888);
+  font-size: 12px;
+}
+
+.tanshu-btn {
+  background-color: #e67e22;
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background-color 0.2s;
+}
+
+.tanshu-btn:hover:not(:disabled) {
+  background-color: #d35400;
+}
+
+.tanshu-btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--border-color, #eee);
+  background-color: var(--bg-secondary, #fafafa);
+}
+
+.dialog-btn {
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.cancel-btn {
+  background-color: var(--bg-primary, #fff);
+  border-color: var(--border-color, #d0d0d0);
+  color: var(--text-primary, #333);
+}
+
+.cancel-btn:hover {
+  background-color: var(--bg-hover, #f5f5f5);
+}
+
+.apply-btn {
+  background-color: var(--primary-color, #3498db);
+  color: #fff;
+  border-color: var(--primary-color, #3498db);
+}
+
+.apply-btn:hover:not(:disabled) {
+  background-color: #2980b9;
+  border-color: #2980b9;
+}
+
+.apply-btn:disabled {
+  background-color: #ccc;
+  border-color: #ccc;
+  cursor: not-allowed;
 }
 
 </style>

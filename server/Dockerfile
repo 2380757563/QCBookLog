@@ -1,5 +1,5 @@
 # 后端Dockerfile - 生产环境优化版本
-FROM docker.1ms.run/node:20
+FROM docker.m.daocloud.io/library/node:20
 
 LABEL maintainer="QC-Booklog"
 LABEL version="2.0.0"

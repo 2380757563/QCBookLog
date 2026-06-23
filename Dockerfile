@@ -1,6 +1,6 @@
 # 前端Dockerfile - 多阶段构建（极速优化版本）
 # 阶段1: 构建阶段
-FROM docker.1ms.run/node:18-alpine AS builder
+FROM docker.m.daocloud.io/library/node:18-alpine AS builder
 
 WORKDIR /app
 
@@ -27,7 +27,7 @@ COPY tsconfig.json ./
 RUN npx vite build --mode production
 
 # 阶段2: 生产阶段
-FROM docker.1ms.run/nginx:alpine
+FROM docker.m.daocloud.io/library/nginx:alpine
 
 # 复制自定义Nginx配置
 COPY nginx.conf /etc/nginx/nginx.conf

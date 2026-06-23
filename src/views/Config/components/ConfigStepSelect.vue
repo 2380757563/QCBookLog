@@ -21,7 +21,7 @@
         :class="{ active: configMode === 'new' }"
         @click="onModeChange('new')"
       >
-        ➕ 创建新数据库
+        📦 数据转移
       </button>
     </div>
 
@@ -100,20 +100,32 @@
       {{ loading ? '验证中...' : '验证书库' }}
     </button>
     <button
-      v-else
+      v-else-if="isCalibre"
       class="button button--primary"
       :disabled="!activeNewPathProxy || loading"
       @click="$emit('create-new')"
     >
       {{ loading ? '创建中...' : '创建数据库' }}
     </button>
+
+    <!-- Talebook 切换数据库时使用数据转移模块代替创建按钮 -->
+    <TransferCard
+      v-if="configMode === 'new' && !isCalibre"
+      :source-info="sourceInfo"
+      :loading="transferLoading"
+      :logs="transferLogs"
+      @open-dialog="$emit('open-transfer-dialog')"
+      @load-logs="$emit('load-transfer-logs')"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import type { ConfigMode, SelectedType } from '@/composables/useConfig';
+import type { TransferLogEntry } from '@/services/config/dataTransferService';
 import { useFolderPicker } from '@/composables/useFolderPicker';
+import TransferCard from './TransferCard.vue';
 
 const props = defineProps<{
   selectedType: SelectedType;
@@ -123,6 +135,9 @@ const props = defineProps<{
   talebookPath: string;
   newCalibrePath: string;
   newTalebookPath: string;
+  sourceInfo?: any;
+  transferLoading?: boolean;
+  transferLogs?: TransferLogEntry[];
 }>();
 
 const emit = defineEmits<{
@@ -134,6 +149,8 @@ const emit = defineEmits<{
   (e: 'validate'): void;
   (e: 'create-new'): void;
   (e: 'set-error', message: string): void;
+  (e: 'open-transfer-dialog'): void;
+  (e: 'load-transfer-logs'): void;
 }>();
 
 const isCalibre = computed(() => props.selectedType === 'calibre');

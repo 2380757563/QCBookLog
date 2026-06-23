@@ -453,7 +453,8 @@ const useBookInfo = () => {
         groups: [],
         series: sourceData.series || '',
         note: '',
-        description: sourceData.description || ''
+        description: sourceData.description || '',
+        source: sourceData.source || ''
       };
 
       console.log('📤 [ISBNSearch.vue] 准备发送给后端的书籍数据:', JSON.stringify(bookData, null, 2));

@@ -104,13 +104,14 @@ export async function up() {
         last_read_date DATE DEFAULT NULL,
         last_read_duration INTEGER DEFAULT 0,
         book_type INTEGER DEFAULT 1,
+        source TEXT DEFAULT '',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
 
       CREATE INDEX IF NOT EXISTS idx_bookdata_book_id ON qc_bookdata(book_id);
     `);
-    console.log('  ✅ qc_bookdata 表创建成功 (含 book_type 字段)');
+    console.log('  ✅ qc_bookdata 表创建成功 (含 book_type 与 source 字段)');
 
     console.log('📝 创建书摘表 (qc_bookmarks)...');
     db.exec(`

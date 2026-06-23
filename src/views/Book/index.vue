@@ -109,6 +109,65 @@
       </div>
     </div>
 
+    <!-- 标签快速筛选（始终可见的输入框） -->
+    <div class="tag-quick-filter" ref="tagQuickFilterRef">
+      <div class="tag-quick-row">
+        <span class="tag-quick-label">🏷️ 标签</span>
+        <!-- 已选标签 chips（点击移除） -->
+        <span
+          v-for="tag in filterConditions.tags"
+          :key="tag"
+          class="tag-quick-chip"
+          @click="removeTagFromQuickFilter(tag)"
+          :title="`移除 ${tag}`"
+        >
+          {{ tag }} ×
+        </span>
+        <!-- 输入框：边输入边过滤候选 -->
+        <div class="tag-quick-input-wrap" :class="{ 'tag-quick-input-wrap--focus': tagQuickInputFocused }">
+          <input
+            ref="tagQuickInputRef"
+            v-model="tagQuickSearch"
+            class="tag-quick-input"
+            :placeholder="filterConditions.tags.length === 0 ? '输入标签快速筛选...' : '继续输入添加标签...'"
+            @focus="tagQuickInputFocused = true; showTagSuggestions = true"
+            @blur="onTagInputBlur"
+            @keydown.enter.prevent="addTagFromInput"
+            @keydown.escape="closeTagSuggestions"
+            @keydown.backspace="handleBackspace"
+          />
+          <button
+            v-if="filterConditions.tags.length > 0"
+            class="tag-quick-clear-all"
+            @mousedown.prevent="clearTagQuickFilter"
+            title="清空全部标签"
+          >清空</button>
+        </div>
+        <!-- 书籍计数（已筛选 / 总数） -->
+        <span v-if="filterConditions.tags.length > 0" class="tag-quick-result">
+          匹配 {{ filteredBooks.length }} 本
+        </span>
+      </div>
+      <!-- 候选下拉（输入时自动展开） -->
+      <div v-if="showTagSuggestions && filteredAvailableTags.length > 0" class="tag-quick-dropdown">
+        <span
+          v-for="tag in filteredAvailableTags"
+          :key="tag"
+          class="tag-quick-candidate"
+          @mousedown.prevent="addTagToQuickFilter(tag)"
+        >
+          <span class="tag-quick-candidate-icon">+</span>
+          <span v-html="highlightTagMatch(tag)"></span>
+        </span>
+        <span class="tag-quick-meta">
+          {{ tagQuickSearch ? `${filteredAvailableTags.length} 个匹配` : `共 ${availableTags.length - filterConditions.tags.length} 个可选` }}
+        </span>
+      </div>
+      <div v-else-if="showTagSuggestions && tagQuickSearch && filteredAvailableTags.length === 0" class="tag-quick-dropdown tag-quick-dropdown--empty">
+        没有匹配「{{ tagQuickSearch }}」的标签
+      </div>
+    </div>
+
     <!-- 高级筛选弹窗 -->
     <div v-if="showAdvancedFilter" class="filter-overlay" @click="showAdvancedFilter = false">
       <div class="filter-dialog" @click.stop>
@@ -291,16 +350,29 @@
           <!-- 标签筛选 -->
           <div class="filter-section">
             <label class="filter-label">标签（多选）</label>
+            <div class="tags-filter-search">
+              <svg class="tags-filter-search-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path fill="currentColor" d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+              </svg>
+              <input
+                v-model="advancedTagSearch"
+                class="tags-filter-search-input"
+                placeholder="搜索标签..."
+              />
+              <button v-if="advancedTagSearch" class="tags-filter-search-clear" @click="advancedTagSearch = ''" title="清空">×</button>
+            </div>
             <div class="tags-filter">
               <span
-                v-for="tag in availableTags"
+                v-for="tag in filteredAdvancedTags"
                 :key="tag"
                 :class="['filter-tag', { 'filter-tag--active': filterConditions.tags.includes(tag) }]"
                 @click="toggleTagFilter(tag)"
               >
                 {{ tag }}
               </span>
-              <span v-if="availableTags.length === 0" class="no-tags">暂无标签</span>
+              <span v-if="filteredAdvancedTags.length === 0" class="no-tags">
+                {{ advancedTagSearch ? `没有匹配「${advancedTagSearch}」的标签` : '暂无标签' }}
+              </span>
             </div>
           </div>
         </div>
@@ -561,16 +633,26 @@
             <div class="loading-spinner-small"></div>
             <span>加载更多...</span>
           </div>
-          
+
           <!-- 加载更多失败 -->
           <div v-else-if="loadMoreError" class="load-more-error">
             <span>{{ loadMoreError }}</span>
             <button class="btn-retry-small" @click="retryLoadMore">重试</button>
           </div>
-          
+
           <!-- 没有更多数据提示 -->
           <div v-else-if="!hasMoreBooks && usePagination && filteredBooks.length > 0" class="no-more-data">
             已加载全部 {{ filteredBooks.length }} 本书籍
+          </div>
+
+          <!-- 滚动加载哨兵（IntersectionObserver 触发点） -->
+          <div
+            v-if="usePagination && hasMoreBooks && !isLoadingMore && !loadMoreError && filteredBooks.length > 0"
+            ref="loadMoreSentinelRef"
+            class="load-more-sentinel"
+          >
+            <div class="sentinel-dot"></div>
+            <span>下拉加载更多</span>
           </div>
           </template>
           
@@ -765,7 +847,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onActivated, watch, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onActivated, watch, onUnmounted, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
 import { useBookStore } from '@/store/book';
@@ -966,6 +1048,35 @@ const retryLoadMore = () => {
   loadMoreBooks();
 };
 
+// 焦点加载：IntersectionObserver 哨兵
+const loadMoreSentinelRef = ref<HTMLElement | null>(null);
+let intersectionObserver: IntersectionObserver | null = null;
+
+const setupIntersectionObserver = () => {
+  // 清理旧 observer
+  if (intersectionObserver) {
+    intersectionObserver.disconnect();
+    intersectionObserver = null;
+  }
+  if (!loadMoreSentinelRef.value) return;
+
+  intersectionObserver = new IntersectionObserver(
+    (entries) => {
+      const entry = entries[0];
+      // 哨兵进入视口时触发加载
+      if (entry.isIntersecting) {
+        loadMoreBooks();
+      }
+    },
+    {
+      // 提前 200px 触发
+      rootMargin: '0px 0px 200px 0px',
+      threshold: 0,
+    }
+  );
+  intersectionObserver.observe(loadMoreSentinelRef.value);
+};
+
 const handleInfiniteScroll = () => {
   if (isLoadingMore.value || !hasMoreBooks.value || !usePagination.value) return;
 
@@ -1046,6 +1157,112 @@ const availableAuthors = computed(() => {
 const currentGroupId = ref('');
 const groupThumbnailMax = computed(() => appStore.groupThumbnailMax); // 从应用设置中获取分组缩略图最大数量
 
+// 标签快速筛选状态
+const tagQuickSearch = ref('');
+const tagQuickInputFocused = ref(false);
+const showTagSuggestions = ref(false);
+const tagQuickFilterRef = ref<HTMLElement | null>(null);
+const tagQuickInputRef = ref<HTMLInputElement | null>(null);
+
+// 高级筛选弹窗中的标签搜索
+const advancedTagSearch = ref('');
+
+const filteredAdvancedTags = computed(() => {
+  const q = advancedTagSearch.value.trim().toLowerCase();
+  if (!q) return availableTags.value;
+  return availableTags.value.filter(t => t.toLowerCase().includes(q));
+});
+
+const onTagInputBlur = () => {
+  tagQuickInputFocused.value = false;
+  // 延迟关闭，让候选点击的 mousedown 事件先触发
+  setTimeout(() => {
+    showTagSuggestions.value = false;
+  }, 180);
+};
+
+const closeTagSuggestions = () => {
+  showTagSuggestions.value = false;
+  tagQuickSearch.value = '';
+  tagQuickInputRef.value?.blur();
+};
+
+const addTagToQuickFilter = (tag: string) => {
+  if (!filterConditions.value.tags.includes(tag)) {
+    filterConditions.value.tags.push(tag);
+    saveFilterConditions();
+  }
+  tagQuickSearch.value = '';
+  // 继续聚焦输入框以支持连续添加
+  tagQuickInputRef.value?.focus();
+};
+
+const removeTagFromQuickFilter = (tag: string) => {
+  filterConditions.value.tags = filterConditions.value.tags.filter(t => t !== tag);
+  saveFilterConditions();
+};
+
+const clearTagQuickFilter = () => {
+  filterConditions.value.tags = [];
+  saveFilterConditions();
+  tagQuickSearch.value = '';
+};
+
+const addTagFromInput = () => {
+  const q = tagQuickSearch.value.trim();
+  if (!q) return;
+  // 如果精确匹配候选列表中的某个标签，直接添加
+  const exact = filteredAvailableTags.value.find(t => t === q);
+  if (exact) {
+    addTagToQuickFilter(exact);
+    return;
+  }
+  // 否则查找第一个"包含"关系的标签
+  const first = filteredAvailableTags.value[0];
+  if (first) {
+    addTagToQuickFilter(first);
+  }
+};
+
+// 退格键在空输入时移除最后一个标签
+const handleBackspace = () => {
+  if (tagQuickSearch.value === '' && filterConditions.value.tags.length > 0) {
+    filterConditions.value.tags.pop();
+    saveFilterConditions();
+  }
+};
+
+// 高亮匹配的关键字
+const highlightTagMatch = (tag: string): string => {
+  const q = tagQuickSearch.value.trim();
+  if (!q) return escapeHtml(tag);
+  const idx = tag.toLowerCase().indexOf(q.toLowerCase());
+  if (idx === -1) return escapeHtml(tag);
+  return (
+    escapeHtml(tag.substring(0, idx)) +
+    '<mark>' + escapeHtml(tag.substring(idx, idx + q.length)) + '</mark>' +
+    escapeHtml(tag.substring(idx + q.length))
+  );
+};
+
+const escapeHtml = (s: string): string => {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+};
+
+// 过滤后的可用标签（已选的不再出现，支持模糊匹配，最多 20 个）
+const filteredAvailableTags = computed(() => {
+  const q = tagQuickSearch.value.trim().toLowerCase();
+  return availableTags.value
+    .filter(t => !filterConditions.value.tags.includes(t))
+    .filter(t => !q || t.toLowerCase().includes(q))
+    .slice(0, 20);
+});
+
 // 下拉菜单状态
 const showScanMenu = ref(false);
 const showSettingsMenu = ref(false);
@@ -1082,6 +1299,13 @@ const applyManualColumns = () => {
 // 点击外部关闭菜单的处理函数
 const handleClickOutside = (event: MouseEvent) => {
   const target = event.target as Node;
+
+  // 标签快速筛选的外部点击关闭
+  if (showTagQuickFilter.value && tagQuickFilterRef.value) {
+    if (!tagQuickFilterRef.value.contains(target)) {
+      closeTagQuickFilter();
+    }
+  }
 
   // 只有在菜单打开时才检查
   if (showScanMenu.value && scanDropdownRef.value) {
@@ -1481,6 +1705,10 @@ const toggleSettingsMenu = () => {
 const toggleAdvancedFilter = () => {
   showAdvancedFilter.value = !showAdvancedFilter.value;
   showSettingsMenu.value = false;
+  if (showAdvancedFilter.value) {
+    // 打开时清空标签搜索
+    advancedTagSearch.value = '';
+  }
 };
 
 const toggleTagFilter = (tag: string) => {
@@ -2042,9 +2270,13 @@ onMounted(async () => {
   // 添加点击外部关闭菜单的事件监听
   document.addEventListener('click', handleClickOutside);
 
-  // 添加滚动监听（返回顶部 + 无限滚动）
+  // 添加滚动监听（返回顶部 + 无限滚动 fallback）
   window.addEventListener('scroll', handleScroll, { passive: true });
   window.addEventListener('scroll', handleInfiniteScroll, { passive: true });
+
+  // 设置 IntersectionObserver 焦点加载（DOM 渲染后）
+  await nextTick();
+  setupIntersectionObserver();
 });
 
 onActivated(async () => {
@@ -2062,12 +2294,26 @@ watch(() => readerStore.currentReaderId, async (newReaderId, oldReaderId) => {
   }
 });
 
+// 监听筛选/分页变化，重新挂载 IntersectionObserver（哨兵 ref 会变化）
+watch(
+  () => [filterConditions.value.tags, filterConditions.value.readStatus, currentGroupId.value, hasMoreBooks.value, isLoadingMore.value],
+  async () => {
+    await nextTick();
+    setupIntersectionObserver();
+  }
+);
+
 onUnmounted(() => {
   // 移除点击外部关闭菜单的事件监听
   document.removeEventListener('click', handleClickOutside);
   // 移除滚动监听
   window.removeEventListener('scroll', handleScroll);
   window.removeEventListener('scroll', handleInfiniteScroll);
+  // 清理 IntersectionObserver
+  if (intersectionObserver) {
+    intersectionObserver.disconnect();
+    intersectionObserver = null;
+  }
 });
 
 // 整理模式方法
@@ -2489,6 +2735,202 @@ watch(
   align-items: center;
 }
 
+/* 标签快速筛选 - 始终可见输入框 */
+.tag-quick-filter {
+  position: relative;
+  margin: 8px 16px 0 16px;
+  z-index: 50;
+}
+
+.tag-quick-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px;
+  background: #fafafa;
+  border: 1px solid #e8e8e8;
+  border-radius: 10px;
+  min-height: 40px;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.tag-quick-row:focus-within {
+  border-color: #ff6b35;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.08);
+}
+
+.tag-quick-label {
+  font-size: 12px;
+  color: #888;
+  font-weight: 500;
+  flex-shrink: 0;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.tag-quick-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  background: #ff6b35;
+  color: #fff;
+  border-radius: 11px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.tag-quick-chip:hover {
+  background: #e55a2b;
+  transform: translateY(-1px);
+}
+
+.tag-quick-input-wrap {
+  display: inline-flex;
+  align-items: center;
+  flex: 1;
+  min-width: 120px;
+  position: relative;
+}
+
+.tag-quick-input {
+  border: none;
+  outline: none;
+  padding: 4px 6px;
+  font-size: 13px;
+  color: #333;
+  background: transparent;
+  flex: 1;
+  min-width: 80px;
+}
+
+.tag-quick-input::placeholder {
+  color: #aaa;
+}
+
+.tag-quick-clear-all {
+  background: #f0f0f0;
+  border: none;
+  color: #999;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+.tag-quick-clear-all:hover {
+  background: #ffe8df;
+  color: #ff6b35;
+}
+
+.tag-quick-result {
+  font-size: 11px;
+  color: #ff6b35;
+  font-weight: 500;
+  white-space: nowrap;
+  margin-left: auto;
+  padding-left: 6px;
+}
+
+/* 候选下拉 */
+.tag-quick-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 16px;
+  right: 16px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.05);
+  z-index: 100;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.tag-quick-dropdown--empty {
+  color: #999;
+  font-size: 12px;
+  text-align: center;
+  padding: 12px;
+}
+
+.tag-quick-candidate {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: #f5f5f5;
+  color: #555;
+  border-radius: 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.tag-quick-candidate:hover {
+  background: #ff6b35;
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.tag-quick-candidate:hover .tag-quick-candidate-icon {
+  background: rgba(255, 255, 255, 0.3);
+  color: #fff;
+}
+
+.tag-quick-candidate-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  background: #fff;
+  color: #ff6b35;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.tag-quick-candidate mark {
+  background: #fff3e0;
+  color: #ff6b35;
+  padding: 0 1px;
+  border-radius: 2px;
+  font-weight: 600;
+}
+
+.tag-quick-meta {
+  font-size: 11px;
+  color: #999;
+  align-self: center;
+  margin-left: auto;
+  padding: 0 4px;
+}
+
+@media (max-width: 600px) {
+  .tag-quick-filter {
+    margin: 8px 12px 0 12px;
+  }
+  .tag-quick-row {
+    padding: 6px 8px;
+  }
+  .tag-quick-input {
+    min-width: 60px;
+  }
+}
+
 .action-btn {
   width: 36px;
   height: 36px;
@@ -2587,6 +3029,37 @@ watch(
   padding: 20px;
   color: #999;
   font-size: 13px;
+}
+
+/* 滚动加载哨兵 */
+.load-more-sentinel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  color: #999;
+  font-size: 12px;
+  user-select: none;
+}
+
+.sentinel-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff6b35;
+  animation: sentinel-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes sentinel-pulse {
+  0%, 100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
 }
 
 /* 错误状态 */
@@ -4520,6 +4993,66 @@ watch(
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.tags-filter-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 4px 0 8px 0;
+  padding: 6px 10px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background: #fafafa;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.tags-filter-search:focus-within {
+  border-color: #ff6b35;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.08);
+}
+
+.tags-filter-search-icon {
+  width: 14px;
+  height: 14px;
+  color: #999;
+  flex-shrink: 0;
+}
+
+.tags-filter-search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  padding: 0 8px;
+  font-size: 13px;
+  color: #333;
+  background: transparent;
+}
+
+.tags-filter-search-input::placeholder {
+  color: #aaa;
+}
+
+.tags-filter-search-clear {
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: #e0e0e0;
+  color: #999;
+  border-radius: 50%;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.tags-filter-search-clear:hover {
+  background: #ff6b35;
+  color: #fff;
 }
 
 .filter-tag {
