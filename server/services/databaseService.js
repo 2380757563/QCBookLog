@@ -7,6 +7,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { createRequire } from 'module';
 import fsSync from 'fs';
+import { normalizeBookTypeBindings } from '../utils/bookBinding.js';
 
 // 使用同步 require 导入 better-sqlite3
 const require = createRequire(import.meta.url);
@@ -2821,18 +2822,24 @@ class DatabaseService {
             }
 
             // 如果已存在，则更新数据
+            // 联动 book_type / binding1 / binding2，避免历史错误值被写回
+            const { book_type: mergedBookType, binding1: mergedBinding1, binding2: mergedBinding2 } = normalizeBookTypeBindings({
+              book_type: book.book_type !== undefined && book.book_type !== null ? book.book_type : existingBookData.book_type,
+              binding1: book.binding1 !== undefined ? book.binding1 : existingBookData.binding1,
+              binding2: book.binding2 !== undefined ? book.binding2 : existingBookData.binding2
+            });
             qcBookdataDb.prepare(`
               UPDATE qc_bookdata
               SET book_type = ?, page_count = ?, standard_price = ?, purchase_price = ?, purchase_date = ?, binding1 = ?, binding2 = ?, paper1 = ?, edge1 = ?, edge2 = ?, note = ?
               WHERE book_id = ?
             `).run(
-              book.book_type !== undefined && book.book_type !== null ? book.book_type : existingBookData.book_type || 1,
+              mergedBookType,
               pageCount,
               book.standardPrice || existingBookData.standard_price || 0,
               book.purchasePrice || existingBookData.purchase_price || 0,
               book.purchaseDate || existingBookData.purchase_date || new Date().toISOString(),
-              book.binding1 !== undefined ? book.binding1 : existingBookData.binding1 || 0,
-              book.binding2 !== undefined ? book.binding2 : existingBookData.binding2 || 0,
+              mergedBinding1,
+              mergedBinding2,
               book.paper1 !== undefined ? book.paper1 : existingBookData.paper1 || 0,
               book.edge1 !== undefined ? book.edge1 : existingBookData.edge1 || 0,
               book.edge2 !== undefined ? book.edge2 : existingBookData.edge2 || 0,
@@ -3193,6 +3200,12 @@ class DatabaseService {
 
             if (existingBookData) {
               console.log('🔄 更新现有qc_bookdata记录...');
+              // 联动 book_type / binding1 / binding2（实体书→平装，电子书→电子书）
+              const { binding1: mergedBinding1, binding2: mergedBinding2 } = normalizeBookTypeBindings({
+                book_type: book.book_type !== undefined && book.book_type !== null ? book.book_type : existingBookData.book_type,
+                binding1: book.binding1 !== undefined ? book.binding1 : existingBookData.binding1,
+                binding2: book.binding2 !== undefined ? book.binding2 : existingBookData.binding2
+              });
               // 更新现有记录
               const updateResult = qcBookdataDb.prepare(`
                 UPDATE qc_bookdata
@@ -3203,8 +3216,8 @@ class DatabaseService {
                 book.standardPrice || existingBookData.standard_price || 0,
                 book.purchasePrice || existingBookData.purchase_price || 0,
                 book.purchaseDate || existingBookData.purchase_date || new Date().toISOString(),
-                book.binding1 !== undefined ? book.binding1 : existingBookData.binding1 || 0,
-                book.binding2 !== undefined ? book.binding2 : existingBookData.binding2 || 0,
+                mergedBinding1,
+                mergedBinding2,
                 book.paper1 !== undefined ? book.paper1 : existingBookData.paper1 || 0,
                 book.edge1 !== undefined ? book.edge1 : existingBookData.edge1 || 0,
                 book.edge2 !== undefined ? book.edge2 : existingBookData.edge2 || 0,

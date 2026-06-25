@@ -14,7 +14,7 @@
           @click="handleBookClick(book.id)"
         >
           <div class="book-cover">
-            <img v-if="book.coverUrl" :src="book.coverUrl" :alt="book.title" />
+            <img v-if="getBookCoverUrl(book)" :src="getBookCoverUrl(book)" :alt="book.title" @load="handleImgLoad" @error="handleImgError" />
             <div v-else class="cover-placeholder">{{ book.title.charAt(0) }}</div>
           </div>
           <div class="book-info">
@@ -35,6 +35,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRouter } from 'vue-router';
+import { useBookImage } from '@/views/Book/composables/useBookImage';
 import { useBookStore } from '@/store/book';
 import ReadingProgressBarList from '@/components/ReadingProgressBarList/ReadingProgressBarList.vue';
 
@@ -44,12 +45,14 @@ interface Book {
   title: string;
   author: string;
   coverUrl?: string;
+  path?: string;
   readStatus: string;
   read_pages?: number;
   pages?: number;
 }
 
 const router = useRouter();
+const { handleImgLoad, handleImgError, getBookCoverUrl } = useBookImage();
 const bookStore = useBookStore();
 
 // 在读书籍

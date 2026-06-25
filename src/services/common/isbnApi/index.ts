@@ -143,6 +143,8 @@ async function searchTanshu(isbn: string): Promise<BookSearchResult | null> {
         } else if (bindingText.includes('电子') || bindingText.includes('ebook') || bindingText.includes('电子书')) {
           binding1 = 0;
           book_type = 0;
+        } else if (bindingText.includes('套装') || bindingText.includes('set')) {
+          binding1 = 4;
         } else {
           binding1 = 3; // 特殊装帧
         }
@@ -284,6 +286,8 @@ async function searchIsbnWork(isbn: string): Promise<BookSearchResult | null> {
       } else if (bindingText.includes('电子') || bindingText.includes('ebook') || bindingText.includes('电子书')) {
         binding1 = 0;
         book_type = 0;
+      } else if (bindingText.includes('套装') || bindingText.includes('set')) {
+        binding1 = 4;
       } else {
         binding1 = 3; // 特殊装帧
       }
@@ -415,6 +419,8 @@ async function searchDBR(isbn: string): Promise<BookSearchResult | null> {
     } else if (bindingText.includes('电子') || bindingText.includes('ebook') || bindingText.includes('电子书')) {
       binding1 = 0;
       book_type = 0;
+    } else if (bindingText.includes('套装') || bindingText.includes('set')) {
+      binding1 = 4;
     } else {
       binding1 = 3; // 特殊装帧
     }
@@ -542,6 +548,8 @@ async function searchDouban(isbn: string): Promise<BookSearchResult | null> {
     } else if (bindingText.includes('电子') || bindingText.includes('ebook') || bindingText.includes('电子书')) {
       binding1 = 0;
       book_type = 0;
+    } else if (bindingText.includes('套装') || bindingText.includes('set')) {
+      binding1 = 4;
     } else {
       binding1 = 3; // 特殊装帧
     }

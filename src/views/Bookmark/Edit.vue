@@ -20,7 +20,7 @@
           <div class="book-selector" @click="showBookSelector = true">
             <div v-if="selectedBook" class="selected-book">
               <div class="book-cover-sm">
-                <img v-if="selectedBook.coverUrl" :src="selectedBook.coverUrl" />
+                <img v-if="getBookCoverUrl(selectedBook)" :src="getBookCoverUrl(selectedBook)" @load="handleImgLoad" @error="handleImgError" />
                 <span v-else>{{ selectedBook.title.charAt(0) }}</span>
               </div>
               <div class="book-info">
@@ -126,7 +126,7 @@
               @click="selectBook(book)"
             >
               <div class="book-cover-sm">
-                <img v-if="book.coverUrl" :src="book.coverUrl" />
+                <img v-if="getBookCoverUrl(book)" :src="getBookCoverUrl(book)" @load="handleImgLoad" @error="handleImgError" />
                 <span v-else>{{ book.title.charAt(0) }}</span>
               </div>
               <div class="book-info">
@@ -151,11 +151,13 @@ import { bookmarkService } from '@/services/bookmark';
 import { tagApi } from '@/services/apiClient';
 import type { Book } from '@/services/book/types';
 import type { Bookmark } from '@/services/bookmark/types';
+import { useBookImage } from '@/views/Book/composables/useBookImage';
 
 const router = useRouter();
 const route = useRoute();
 const bookStore = useBookStore();
 const bookmarkStore = useBookmarkStore();
+const { handleImgLoad, handleImgError, getBookCoverUrl } = useBookImage();
 
 const isEdit = computed(() => !!route.params.id);
 const saving = ref(false);

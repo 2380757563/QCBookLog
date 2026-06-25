@@ -1,15 +1,6 @@
 <template>
   <div class="reading-header">
-    <!-- 顶部搜索栏 -->
-    <div class="header">
-      <div class="search-bar" @click="handleSearch">
-        <svg class="search-icon" viewBox="0 0 24 24">
-          <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
-        </svg>
-        <span>搜索书籍、书摘...</span>
-      </div>
-    </div>
-
+    <!-- 总览页面不需要顶部搜索框（搜索是书库页面专用入口），已移除 -->
     <!-- Tab导航 -->
     <div class="tabs">
       <div
@@ -25,23 +16,18 @@
 </template>
 
 <script setup lang="ts">
-import { useRouter } from 'vue-router';
+// 总览页面顶部不再有搜索框，原 handleSearch 已移除。
+// 搜索入口仅在书库（/book）页面提供。
 
-// Tab配置
 interface Tab {
   key: string;
   label: string;
 }
 
-const router = useRouter();
-
-// Props
-interface Props {
+const props = withDefaults(defineProps<{
   modelValue: string;
   tabs?: Tab[];
-}
-
-withDefaults(defineProps<Props>(), {
+}>(), {
   tabs: () => [
     { key: 'reading', label: '在读' },
     { key: 'timeline', label: '时间线' },
@@ -54,11 +40,6 @@ const emit = defineEmits<{
   'update:modelValue': [value: string];
 }>();
 
-// 处理搜索
-const handleSearch = () => {
-  router.push('/search');
-};
-
 // 处理Tab切换
 const handleTabChange = (tabKey: string) => {
   emit('update:modelValue', tabKey);
@@ -68,37 +49,6 @@ const handleTabChange = (tabKey: string) => {
 <style scoped lang="scss">
 .reading-header {
   width: 100%;
-}
-
-.header {
-  padding: 12px 16px;
-  background-color: var(--color-background);
-
-  .search-bar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 16px;
-    background-color: var(--color-input-background);
-    border-radius: 20px;
-    cursor: pointer;
-    transition: all 0.3s ease;
-
-    &:hover {
-      background-color: var(--color-input-background-hover);
-    }
-
-    .search-icon {
-      width: 20px;
-      height: 20px;
-      fill: var(--color-text-secondary);
-    }
-
-    span {
-      font-size: 14px;
-      color: var(--color-text-secondary);
-    }
-  }
 }
 
 .tabs {

@@ -13,6 +13,7 @@ import QcBookdataRepository from './repositories/talebook/qc-bookdata-repository
 import QcBookmarksRepository from './repositories/talebook/qc-bookmarks-repository.js';
 import ReadingStateRepository from './repositories/talebook/reading-state-repository.js';
 import QcBooklogQcBookdataRepository from './repositories/qcbooklog/qc-bookdata-repository.js';
+import { normalizeBookTypeBindings } from '../../utils/bookBinding.js';
 import validators from './validators/index.js';
 import readingStateSyncService from '../readingStateSyncService.js';
 import { createRequire } from 'module';
@@ -1002,6 +1003,12 @@ class DatabaseService {
         console.log('  - binding1:', book.binding1);
         console.log('  - binding2:', book.binding2);
         
+        // binding1 默认值与载体类型联动（实体书→平装，电子书→电子书）
+        const { book_type: normalizedBookType, binding1: normalizedBinding1, binding2: normalizedBinding2 } = normalizeBookTypeBindings({
+          book_type: book.book_type,
+          binding1: book.binding1,
+          binding2: book.binding2
+        });
         const insertResult = qcBooklogDb.prepare(`
           INSERT OR REPLACE INTO qc_bookdata (
             mapping_id, book_id, book_type, page_count, standard_price, purchase_price,
@@ -1010,13 +1017,13 @@ class DatabaseService {
         `).run(
           mappingId,
           bookId,
-          book.book_type !== undefined && book.book_type !== null ? book.book_type : 1,
+          normalizedBookType,
           pageCount,
           standardPrice,
           purchasePrice,
           book.purchaseDate || null,
-          book.binding1 !== undefined && book.binding1 !== null ? parseInt(book.binding1) || 0 : 0,
-          book.binding2 !== undefined && book.binding2 !== null ? parseInt(book.binding2) || 0 : 0,
+          normalizedBinding1,
+          normalizedBinding2,
           book.paper1 !== undefined && book.paper1 !== null ? parseInt(book.paper1) || 0 : 0,
           book.edge1 !== undefined && book.edge1 !== null ? parseInt(book.edge1) || 0 : 0,
           book.edge2 !== undefined && book.edge2 !== null ? parseInt(book.edge2) || 0 : 0,
@@ -1351,6 +1358,12 @@ class DatabaseService {
           const mappingId = mapping ? mapping.id : null;
 
           // 添加书籍扩展数据
+          // binding1 默认值与载体类型联动（实体书→平装，电子书→电子书）
+          const { binding1: normalizedBinding1New, binding2: normalizedBinding2New } = normalizeBookTypeBindings({
+            book_type: book.book_type,
+            binding1: book.binding1,
+            binding2: book.binding2
+          });
           qcBooklogDb.prepare(`
             INSERT INTO qc_bookdata (mapping_id, book_id, page_count, standard_price, purchase_price, purchase_date, binding1, binding2, paper1, edge1, edge2, note, source)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -1361,8 +1374,8 @@ class DatabaseService {
             book.standardPrice || 0,
             book.purchasePrice || 0,
             book.purchaseDate || new Date().toISOString(),
-            book.binding1 || 0,
-            book.binding2 || 0,
+            normalizedBinding1New,
+            normalizedBinding2New,
             book.paper1 || 0,
             book.edge1 || 0,
             book.edge2 || 0,
