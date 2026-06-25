@@ -4,6 +4,7 @@
  */
 
 import BaseRepository from '../base-repository.js';
+import { normalizeBookTypeBindings } from '../../../../utils/bookBinding.js';
 
 /**
  * QCBookLog 书籍扩展数据仓储类
@@ -48,6 +49,20 @@ class QcBooklogQcBookdataRepository extends BaseRepository {
       const existing = this.findByBookId(bookId);
 
       if (existing) {
+        // 更新：binding1/binding2/book_type 三元组统一规范化（避免历史错误值被写回）
+        const needsBindingNormalize =
+          data.book_type !== undefined ||
+          data.binding1 !== undefined ||
+          data.binding2 !== undefined;
+        let normalizedBindings = null;
+        if (needsBindingNormalize) {
+          normalizedBindings = normalizeBookTypeBindings({
+            book_type: data.book_type !== undefined ? data.book_type : existing.book_type,
+            binding1: data.binding1 !== undefined ? data.binding1 : existing.binding1,
+            binding2: data.binding2 !== undefined ? data.binding2 : existing.binding2,
+          });
+        }
+
         // 更新
         const updates = [];
         const values = [];
@@ -70,11 +85,18 @@ class QcBooklogQcBookdataRepository extends BaseRepository {
         }
         if (data.binding1 !== undefined) {
           updates.push('binding1 = ?');
-          values.push(data.binding1);
+          values.push(normalizedBindings ? normalizedBindings.binding1 : data.binding1);
+        } else if (normalizedBindings && (data.book_type !== undefined || data.binding2 !== undefined)) {
+          // 联动：book_type / binding2 变化时回写 binding1，避免落库值与载体类型不一致
+          updates.push('binding1 = ?');
+          values.push(normalizedBindings.binding1);
         }
         if (data.binding2 !== undefined) {
           updates.push('binding2 = ?');
-          values.push(data.binding2);
+          values.push(normalizedBindings ? normalizedBindings.binding2 : data.binding2);
+        } else if (normalizedBindings && (data.book_type !== undefined || data.binding1 !== undefined)) {
+          updates.push('binding2 = ?');
+          values.push(normalizedBindings.binding2);
         }
         if (data.paper1 !== undefined) {
           updates.push('paper1 = ?');
@@ -122,14 +144,21 @@ class QcBooklogQcBookdataRepository extends BaseRepository {
         return this.findByBookId(bookId);
       } else {
         // 创建
+        // binding1 默认值与载体类型联动（实体书→平装，电子书→电子书）
+        const { book_type, binding1, binding2 } = normalizeBookTypeBindings({
+          book_type: data.book_type,
+          binding1: data.binding1,
+          binding2: data.binding2
+        });
         const insertData = {
           book_id: bookId,
           page_count: data.page_count || 0,
           standard_price: data.standard_price || 0,
           purchase_price: data.purchase_price || 0,
           purchase_date: data.purchase_date || null,
-          binding1: data.binding1 || 0,
-          binding2: data.binding2 || 0,
+          book_type,
+          binding1,
+          binding2,
           paper1: data.paper1 || 0,
           edge1: data.edge1 || 0,
           edge2: data.edge2 || 0,

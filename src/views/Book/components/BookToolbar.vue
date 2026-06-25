@@ -39,7 +39,7 @@
 
       <!-- 设置按钮（带下拉菜单） -->
       <div class="dropdown-container" ref="settingsDropdownRef">
-        <button class="action-btn" @click="toggleSettingsMenu" title="设置">
+        <button class="action-btn settings-btn" @click="toggleSettingsMenu" title="设置">
           <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path fill="currentColor" d="M19.14 12.94c.04-.31.06-.63.06-.94 0-.31-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
           </svg>
@@ -85,34 +85,25 @@
             <div class="row-count-buttons">
               <button
                 :class="['row-btn', { active: gridColumns === 'auto' }]"
-                @click="$emit('set-grid-columns', 'auto')"
+                @click="$emit('use-auto-columns')"
               >
                 自动
               </button>
               <button
-                :class="['row-btn', { active: gridColumns === '2' }]"
-                @click="$emit('set-grid-columns', '2')"
+                :class="['row-btn', { active: gridColumns !== 'auto' }]"
+                @click="$emit('use-manual-columns')"
               >
-                2列
+                手动
               </button>
-              <button
-                :class="['row-btn', { active: gridColumns === '3' }]"
-                @click="$emit('set-grid-columns', '3')"
+            </div>
+            <div v-if="gridColumns !== 'auto'" class="manual-columns-select">
+              <select
+                :value="manualColumnCount"
+                @change="$emit('update-manual-columns', Number(($event.target as HTMLSelectElement).value))"
+                class="column-select"
               >
-                3列
-              </button>
-              <button
-                :class="['row-btn', { active: gridColumns === '4' }]"
-                @click="$emit('set-grid-columns', '4')"
-              >
-                4列
-              </button>
-              <button
-                :class="['row-btn', { active: gridColumns === '5' }]"
-                @click="$emit('set-grid-columns', '5')"
-              >
-                5列
-              </button>
+                <option v-for="n in 20" :key="n" :value="n">{{ n }}列</option>
+              </select>
             </div>
           </div>
         </div>
@@ -134,7 +125,8 @@ import { ref, onMounted, onUnmounted } from 'vue';
 interface Props {
   layout: 'grid' | 'list';
   groupThumbnailMax: number;
-  gridColumns: string | number;
+  gridColumns: string;
+  manualColumnCount: number;
 }
 
 const props = defineProps<Props>();
@@ -146,7 +138,10 @@ defineEmits<{
   'toggle-layout': [];
   'start-organize-mode': [];
   'set-group-thumbnail-max': [value: number];
-  'set-grid-columns': [value: string];
+  'set-grid-columns': [value: string | number];
+  'use-auto-columns': [];
+  'use-manual-columns': [];
+  'update-manual-columns': [value: number];
   'add-book': [];
 }>();
 
@@ -193,6 +188,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   padding: 16px 20px;
   background: white;
   border-bottom: 1px solid #e8e8e8;
@@ -202,12 +198,15 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
+  padding: 8px 16px;
   background: #f5f5f5;
-  border-radius: 8px;
+  border-radius: 20px;
   cursor: pointer;
   flex: 1;
-  max-width: 400px;
+  /* 占满剩余宽度，铺成一条长条状；只保留极小最小宽度避免在窄屏挤掉按钮 */
+  min-width: 0;
+  width: 100%;
+  max-width: none;
   transition: background 0.2s ease;
 }
 
@@ -216,8 +215,11 @@ onUnmounted(() => {
 }
 
 .search-icon {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+  margin-right: 8px;
+  transition: all 0.2s ease;
   color: #999;
 }
 
@@ -260,15 +262,36 @@ onUnmounted(() => {
 }
 
 .add-btn {
-  background: #1a90ff;
+  background: var(--primary-color, #FF6B35);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(255, 107, 53, 0.15);
 }
 
-.add-btn:hover {
-  background: #0d7be8;
+.settings-btn svg {
+  color: var(--primary-color, #FF6B35);
+  fill: var(--primary-color, #FF6B35);
+}
+
+.settings-btn:hover svg {
+  color: #e65a2f;
+  fill: #e65a2f;
 }
 
 .add-btn svg {
-  color: white;
+  color: #ffffff;
+  fill: #ffffff;
+  stroke: #ffffff;
+}
+
+.add-btn:hover {
+  background: #e65a2f;
+  box-shadow: 0 4px 12px rgba(255, 107, 53, 0.25);
+  transform: translateY(-1px);
+}
+
+.add-btn:active {
+  background: #cc5629;
+  box-shadow: 0 1px 4px rgba(255, 107, 53, 0.2);
 }
 
 .dropdown-menu {
@@ -342,8 +365,42 @@ onUnmounted(() => {
 }
 
 .row-btn.active {
-  background: #1a90ff;
-  border-color: #1a90ff;
+  background: var(--primary-color, #FF6B35);
+  border-color: var(--primary-color, #FF6B35);
   color: white;
+}
+
+/* 手动列数下拉框 */
+.manual-columns-select {
+  margin-top: 8px;
+}
+
+.column-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color, #e0e0e0);
+  border-radius: 6px;
+  background-color: #fff;
+  font-size: 14px;
+  color: var(--text-primary, #333);
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s ease;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23666'%3e%3cpath d='M7 10l5 5 5-5z'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 16px;
+  padding-right: 32px;
+}
+
+.column-select:hover {
+  border-color: var(--primary-color, #FF6B35);
+}
+
+.column-select:focus {
+  border-color: var(--primary-color, #FF6B35);
+  box-shadow: 0 0 0 2px rgba(255, 107, 53, 0.1);
 }
 </style>

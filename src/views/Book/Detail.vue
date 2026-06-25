@@ -26,7 +26,13 @@
       <!-- 书籍基本信息 -->
       <div class="book-hero">
         <div class="book-cover">
-          <img v-if="book.coverUrl" :src="book.coverUrl" :alt="book.title" />
+          <img
+            v-if="getBookCoverUrl(book)"
+            :src="getBookCoverUrl(book)"
+            :alt="book.title"
+            @load="handleImgLoad"
+            @error="handleImgError"
+          />
           <div v-else class="cover-placeholder">
             <span>{{ book.title.charAt(0) }}</span>
           </div>
@@ -71,13 +77,15 @@
           <div class="info-item" v-if="book.binding1 !== undefined">
             <span class="info-label">装帧</span>
             <span class="info-value">
-              {{ 
-                book.binding1 === 0 ? '电子书' : 
-                book.binding1 === 1 ? '平装' : 
-                book.binding1 === 2 ? '精装' : '特殊装帧' 
+              {{
+                book.binding1 === 0 ? '电子书' :
+                book.binding1 === 1 ? '平装' :
+                book.binding1 === 2 ? '精装' :
+                book.binding1 === 3 ? '特殊装帧' :
+                book.binding1 === 4 ? '套装' : '未设置'
               }}
               <span v-if="book.binding2 !== undefined && book.binding2 !== 0">
-                - {{ 
+                - {{
                   (book.binding1 === 0 && book.binding2 === 1) ? '精校版' :
                   (book.binding1 === 0 && book.binding2 === 2) ? '魔改版' :
                   (book.binding1 === 0 && book.binding2 === 3) ? '原版' :
@@ -93,7 +101,10 @@
                   (book.binding1 === 2 && book.binding2 === 6) ? '真皮精装（羊皮）' :
                   (book.binding1 === 2 && book.binding2 === 7) ? '仿皮（人造革）精装' :
                   (book.binding1 === 3 && book.binding2 === 1) ? '线装' :
-                  (book.binding1 === 3 && book.binding2 === 2) ? '经折装' : ''
+                  (book.binding1 === 3 && book.binding2 === 2) ? '经折装' :
+                  (book.binding1 === 4 && book.binding2 === 1) ? '套装精装' :
+                  (book.binding1 === 4 && book.binding2 === 2) ? '套装平装' :
+                  (book.binding1 === 4 && book.binding2 === 3) ? '套装其他' : ''
                 }}
               </span>
             </span>
@@ -264,8 +275,7 @@
             v-for="bookmark in filteredBookmarks.slice(0, 5)"
             :key="bookmark.id"
             class="bookmark-item"
-            :class="{ active: selectedBookmarkId === bookmark.id }"
-            @click="selectBookmark(bookmark)"
+            @click="goToBookmarkDetail(String(bookmark.id))"
           >
             <p class="bookmark-content">{{ bookmark.content }}</p>
             <div class="bookmark-meta">
@@ -412,6 +422,7 @@ import { bookmarkService } from '@/services/bookmark';
 import readingTrackingService from '@/services/readingTracking';
 import type { Book, BookGroup, ReadingState } from '@/services/book/types';
 import type { Bookmark } from '@/services/bookmark/types';
+import { useBookImage } from './composables/useBookImage';
 import ReadingProgressBarList from '@/components/ReadingProgressBarList/ReadingProgressBarList.vue';
 import RatingDisplay from '@/components/business/RatingDisplay.vue';
 
@@ -426,6 +437,7 @@ const book = ref<Book | null>(null);
 const bookmarks = ref<Bookmark[]>([]);
 const bookGroups = ref<BookGroup[]>([]);
 const bookCustomTags = ref<string[]>([]);
+const { handleImgLoad, handleImgError, getBookCoverUrl } = useBookImage();
 // 书摘联动相关状态
 const selectedBookmarkId = ref<string | number | null>(null);
 const selectedBookmark = computed<Bookmark | null>(() => {

@@ -57,7 +57,7 @@
             @click="goToBookDetail(book.id)"
           >
             <div class="book-cover">
-              <img v-if="book.coverUrl" :src="book.coverUrl" />
+              <img v-if="getBookCoverUrl(book)" :src="getBookCoverUrl(book)" @load="handleImgLoad" @error="handleImgError" />
               <span v-else>{{ book.title.charAt(0) }}</span>
             </div>
             <div class="result-info">
@@ -115,10 +115,12 @@ import { useBookStore } from '@/store/book';
 import { useBookmarkStore } from '@/store/bookmark';
 import { bookService } from '@/services/book';
 import { bookmarkService } from '@/services/bookmark';
+import { useBookImage } from '@/views/Book/composables/useBookImage';
 
 const router = useRouter();
 const bookStore = useBookStore();
 const bookmarkStore = useBookmarkStore();
+const { handleImgLoad, handleImgError, getBookCoverUrl } = useBookImage();
 
 const searchQuery = ref('');
 const activeTab = ref('books');

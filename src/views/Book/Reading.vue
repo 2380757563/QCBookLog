@@ -19,7 +19,13 @@
       <div class="book-card">
         <div class="book-info">
           <div class="book-cover">
-            <img v-if="book.coverUrl" :src="book.coverUrl" :alt="book.title" />
+            <img
+              v-if="getBookCoverUrl(book)"
+              :src="getBookCoverUrl(book)"
+              :alt="book.title"
+              @load="handleImgLoad"
+              @error="handleImgError"
+            />
             <div v-else class="cover-placeholder">{{ book.title.charAt(0) }}</div>
           </div>
           <div class="book-details">
@@ -118,6 +124,7 @@ import { bookmarkService } from '@/services/bookmark';
 import { bookService } from '@/services/book';
 import readingTrackingService from '@/services/readingTracking';
 import type { Book } from '@/services/book/types';
+import { useBookImage } from './composables/useBookImage';
 
 const router = useRouter();
 const route = useRoute();
@@ -127,6 +134,7 @@ const readerStore = useReaderStore();
 
 const book = ref<Book | null>(null);
 const bookmarkContent = ref('');
+const { handleImgLoad, handleImgError, getBookCoverUrl } = useBookImage();
 
 // 当前页码
 const currentPage = ref(0);

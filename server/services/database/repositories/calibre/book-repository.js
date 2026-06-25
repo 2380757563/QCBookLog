@@ -5,6 +5,7 @@
  */
 
 import BaseRepository from '../base-repository.js';
+import { normalizeBookTypeBindings } from '../../../../utils/bookBinding.js';
 
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_PAGE_SIZE = 100;
@@ -594,18 +595,25 @@ class BookRepository extends BaseRepository {
         `;
         const bookData = this.qcBooklogDb.prepare(bookDataQuery).all(...bookIds, currentLibraryUuid);
         bookData.forEach(item => {
+          // 修正常见的 binding1 历史脏数据：若 binding1=0 但载体是实体书，
+          // 按 book_type 重新判定：电子书→0，实体书→1
+          const { binding1, binding2 } = normalizeBookTypeBindings({
+            book_type: item.book_type,
+            binding1: item.binding1,
+            binding2: item.binding2
+          });
           bookDataMap.set(item.book_id, {
             page_count: item.page_count || 0,
             standard_price: item.standard_price || 0,
             purchase_price: item.purchase_price || 0,
             purchase_date: item.purchase_date,
-            binding1: item.binding1 || 0,
-            binding2: item.binding2 || 0,
+            binding1,
+            binding2,
             paper1: item.paper1 || 0,
             edge1: item.edge1 || 0,
             edge2: item.edge2 || 0,
             note: item.note || '',
-            book_type: item.book_type || 0,
+            book_type: item.book_type || 1,
             source: item.source || '',
             total_reading_time: 0,
             read_pages: 0,
@@ -665,17 +673,25 @@ class BookRepository extends BaseRepository {
         }
       }
       
+      const bookType = (bookTypeMap.get(book.id) !== undefined && bookTypeMap.get(book.id) !== null)
+        ? bookTypeMap.get(book.id)
+        : 1; // 默认实体书
+      const { binding1, binding2 } = normalizeBookTypeBindings({
+        book_type: bookType,
+        binding1: bookData.binding1,
+        binding2: bookData.binding2
+      });
       const enriched = {
         ...book,
         publishYear: publishYear,
-        book_type: bookTypeMap.get(book.id) !== undefined && bookTypeMap.get(book.id) !== null ? bookTypeMap.get(book.id) : 0,
+        book_type: bookType,
         groups: bookGroupsMap.get(book.id) || [],
         pages: bookData.page_count || 0,
         standardPrice: bookData.standard_price || 0,
         purchasePrice: bookData.purchase_price || 0,
         purchaseDate: bookData.purchase_date,
-        binding1: bookData.binding1 || 0,
-        binding2: bookData.binding2 || 0,
+        binding1,
+        binding2,
         paper1: bookData.paper1 || 0,
         edge1: bookData.edge1 || 0,
         edge2: bookData.edge2 || 0,
@@ -750,13 +766,19 @@ class BookRepository extends BaseRepository {
         `).get(book.id);
 
         if (bookData) {
+          // 按 book_type 修正 binding1 默认值（实体书→平装，电子书→电子书）
+          const { binding1, binding2 } = normalizeBookTypeBindings({
+            book_type: bookData.book_type,
+            binding1: bookData.binding1,
+            binding2: bookData.binding2
+          });
           extendedData = {
             pages: bookData.page_count || 0,
             standardPrice: bookData.standard_price || 0,
             purchasePrice: bookData.purchase_price || 0,
             purchaseDate: bookData.purchase_date,
-            binding1: bookData.binding1 || 0,
-            binding2: bookData.binding2 || 0,
+            binding1,
+            binding2,
             paper1: bookData.paper1 || 0,
             edge1: bookData.edge1 || 0,
             edge2: bookData.edge2 || 0,
@@ -784,13 +806,19 @@ class BookRepository extends BaseRepository {
         `).get(book.id);
         
         if (bookData) {
+          // talebook 表没有 book_type 列，按默认实体书处理
+          const { binding1, binding2 } = normalizeBookTypeBindings({
+            book_type: 1,
+            binding1: bookData.binding1,
+            binding2: bookData.binding2
+          });
           extendedData = {
             pages: bookData.page_count || 0,
             standardPrice: bookData.standard_price || 0,
             purchasePrice: bookData.purchase_price || 0,
             purchaseDate: bookData.purchase_date,
-            binding1: bookData.binding1 || 0,
-            binding2: bookData.binding2 || 0,
+            binding1,
+            binding2,
             paper1: 0,
             edge1: 0,
             edge2: 0,

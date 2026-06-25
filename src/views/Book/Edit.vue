@@ -87,6 +87,7 @@
               <option :value="1">平装</option>
               <option :value="2">精装</option>
               <option :value="3">特殊装帧</option>
+              <option :value="4">套装</option>
             </select>
           </div>
           <div class="form-item">
@@ -705,7 +706,8 @@ const binding1Options = [
   { value: 0, label: '电子书' },
   { value: 1, label: '平装' },
   { value: 2, label: '精装' },
-  { value: 3, label: '特殊装帧' }
+  { value: 3, label: '特殊装帧' },
+  { value: 4, label: '套装' }
 ];
 
 const binding2OptionsMap: Record<number, { value: number; label: string }[]> = {
@@ -736,6 +738,12 @@ const binding2OptionsMap: Record<number, { value: number; label: string }[]> = {
     { value: 0, label: '无细分（默认）' },
     { value: 1, label: '线装' },
     { value: 2, label: '经折装' }
+  ],
+  4: [
+    { value: 0, label: '无细分（默认）' },
+    { value: 1, label: '套装精装' },
+    { value: 2, label: '套装平装' },
+    { value: 3, label: '套装其他' }
   ]
 };
 
@@ -1072,6 +1080,17 @@ const handlePersonalRatingClick = (event: MouseEvent, starIndex: number) => {
 watch(() => form.personal_rating, (newVal) => {
   if (newVal !== undefined && newVal !== null) {
     personalRatingInput.value = newVal;
+  }
+});
+
+// 载体类型变化时，若 binding1 还是占位默认值（电子书=0/平装=1），按载体类型纠正
+// 用户已主动选择其它装帧（如 精装/特殊装帧/套装）则保持不动
+watch(() => form.book_type, (newType) => {
+  // 占位默认值：电子书 → binding1=0；实体书 → binding1=1
+  const placeholder = newType === 0 ? 0 : 1;
+  if (form.binding1 === 0 || form.binding1 === 1) {
+    form.binding1 = placeholder;
+    form.binding2 = 0;
   }
 });
 
@@ -1496,7 +1515,10 @@ const loadBookData = async () => {
       purchaseDate: book.purchaseDate ? new Date(book.purchaseDate).toISOString().split('T')[0] : '',
       readCompleteDate: book.readCompleteDate ? new Date(book.readCompleteDate).toISOString().split('T')[0] : '',
       book_type: book.book_type !== undefined && book.book_type !== null ? book.book_type : 1,
-      binding1: book.binding1 !== undefined && book.binding1 !== null ? book.binding1 : 0,
+      // binding1 默认值与载体类型联动：实体书默认平装，电子书默认电子书
+      binding1: (book.binding1 !== undefined && book.binding1 !== null)
+        ? book.binding1
+        : ((book.book_type === 0) ? 0 : 1),
       binding2: book.binding2 !== undefined && book.binding2 !== null ? book.binding2 : 0,
       favorite: book.favorite ?? 0,
       wants: book.wants ?? 0,
