@@ -823,7 +823,10 @@ const priceStats = computed(() => {
     电子书: { count: 0, spent: 0, standard: 0 },
     纸质书: { count: 0, spent: 0, standard: 0 },
   };
-  // 按 分组 聚合（按首分组分组）
+  // 按 分组 聚合（一本书可属于多个分组，按比例分摊金额，类似 tagAgg）
+  // - spent/standard: 一本书有 N 个分组时，每个分组记入 spent/N（金额按比例分摊）
+  // - count: 一本书的所有分组都计数（有 N 个分组则在 N 个分组里都 +1）
+  // - 这样所有分组的 spent 之和 = 总花费，count 是"包含此分组的书籍数"
   const groupAgg: Record<string, { count: number; spent: number; standard: number }> = {
     未分组: { count: 0, spent: 0, standard: 0 },
   };
@@ -841,16 +844,24 @@ const priceStats = computed(() => {
     typeAgg[typeKey].standard += b.standardPrice || 0;
 
     // b.groups 里存的是分组 ID（可能是数字或字符串），需要通过 groupIdToName 映射成显示名
-    const rawGroupKey = (b.groups && b.groups.length > 0) ? b.groups[0] : null;
-    const groupKey = rawGroupKey === null || rawGroupKey === undefined
-      ? '未分组'
-      : (groupIdToName.value[String(rawGroupKey)] || `分组#${rawGroupKey}`);
-    if (!groupAgg[groupKey]) {
-      groupAgg[groupKey] = { count: 0, spent: 0, standard: 0 };
+    // 一本书可属于多个分组：对所有分组按比例分摊金额（与 tagAgg 一致）
+    const rawGroupKeys: string[] = (b.groups && b.groups.length > 0)
+      ? b.groups.map(g => String(g))
+      : [];
+    const groupKeys: string[] = rawGroupKeys.length === 0
+      ? ['未分组']
+      : rawGroupKeys.map(g => groupIdToName.value[g] || `分组#${g}`);
+    const gN = groupKeys.length;
+    const splitSpentByGroup = (b.purchasePrice || 0) / gN;
+    const splitStandardByGroup = (b.standardPrice || 0) / gN;
+    for (const groupKey of groupKeys) {
+      if (!groupAgg[groupKey]) {
+        groupAgg[groupKey] = { count: 0, spent: 0, standard: 0 };
+      }
+      groupAgg[groupKey].count += 1;
+      groupAgg[groupKey].spent += splitSpentByGroup;
+      groupAgg[groupKey].standard += splitStandardByGroup;
     }
-    groupAgg[groupKey].count += 1;
-    groupAgg[groupKey].spent += b.purchasePrice || 0;
-    groupAgg[groupKey].standard += b.standardPrice || 0;
 
     // 标签聚合：合并多种标签源，并去重
     // 注意：book 类型可能不包含 customTags，用 (b as any) 兜底
@@ -1162,6 +1173,7 @@ function renderPriceCategoryChart(isInit: boolean) {
 
   console.log('[购书花费分类] priceType=', priceType.value, 'mode=', priceCategoryMode.value, 'groupKeys=', Object.keys(sourceAgg), 'values=', Object.entries(sourceAgg).map(([, v]) => [(v as any).value, v.count]));
   // 按花费排序，取前 7 个，其他归入"其他"
+  // 特殊处理：'未分组' 永远单独保留一个扇区（不并入"其他"），便于用户看到"未分组"书籍的占比和颜色
   const sorted = Object.entries(sourceAgg)
     .map(([k, v]) => {
       const vAny = v as any;
@@ -1174,12 +1186,27 @@ function renderPriceCategoryChart(isInit: boolean) {
     })
     .sort((a, b) => b.value - a.value);
 
+  // 找出"未分组"项（始终保留为独立扇区）
+  const unsortedIdx = sorted.findIndex(d => d.name === '未分组');
+  let ungroupedItem: typeof sorted[number] | null = null;
+  if (unsortedIdx !== -1) {
+    ungroupedItem = sorted[unsortedIdx];
+    sorted.splice(unsortedIdx, 1);
+  }
+
+  // 取排序后前 7 个为 "top"，其余合并为 "其他"
+  // 注意：未分组项已从 sorted 中移除，"其他" 中不会包含它
   const top = sorted.slice(0, 7);
   const rest = sorted.slice(7);
   if (rest.length > 0) {
     const sumRest = rest.reduce((s, x) => s + x.value, 0);
     const countRest = rest.reduce((s, x) => s + x.count, 0);
     top.push({ name: `其他(${rest.length}类)`, value: Math.round(sumRest * 100) / 100, count: countRest });
+  }
+
+  // 把 "未分组" 加到 top 末尾（若存在且有金额），保证它始终以独立色块显示
+  if (ungroupedItem && ungroupedItem.value > 0) {
+    top.push(ungroupedItem);
   }
 
   // 外环：分组/标签（带色）
@@ -1243,7 +1270,10 @@ function renderPriceCategoryChart(isInit: boolean) {
         type: 'pie',
         radius: ['50%', '72%'],
         center: ['38%', '50%'],
-        roseType: 'radius',
+        // 不再使用 roseType:'radius'（按数值映射半径导致极小占比扇区几乎不可见、颜色被吞掉）
+        // 改用普通环形图 + minAngle/minShowLabelAngle 来保证所有分类（包括"未分组"）的色块都可见
+        minAngle: 8,
+        minShowLabelAngle: 0,
         itemStyle: {
           borderRadius: 8,
           borderColor: '#fff',

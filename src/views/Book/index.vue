@@ -295,13 +295,29 @@
       :selected-group-id="selectedGroupId"
       :editing-group-id="editingGroupId"
       :editing-group-name="editingGroupName"
+      :initial-checked-group-ids="initialCheckedGroupIds"
+      :selected-count-in-group="selectedCountInGroup"
       @update:show="showGroupSelector = $event"
       @select="selectedGroupId = $event"
       @start-edit="startEditGroupName"
       @save-name="saveGroupName"
       @cancel-edit="cancelEditGroupName"
-      @create-new="() => { showGroupSelector = false; showAddGroup = true; }"
+      @create-new="openCreateGroup"
       @confirm="handleGroupConfirm"
+      @confirm-multi="handleGroupConfirmMulti"
+      @manage-group="openManageGroup"
+      @delete-group="onDeleteGroup"
+    />
+
+    <!-- 分组管理弹窗（管理某分组内的书籍） -->
+    <GroupManageDialog
+      v-if="showManageDialog"
+      :show="showManageDialog"
+      :group="managingGroup"
+      :books-in-group="managingGroup ? (groupBooks(managingGroup.id) || []) : []"
+      :removing="removingFromGroup"
+      @update:show="showManageDialog = $event"
+      @remove-books="onRemoveBooksFromGroup"
     />
 
     <!-- 添加/编辑分组弹窗 -->
@@ -419,7 +435,7 @@ import { useBindingBorderStore } from '@/store/bindingBorder';
 import { useBookViewSettings } from '@/composables/useBookViewSettings';
 
 import { bookService } from '@/services/book';
-import type { Book } from '@/services/book/types';
+import type { Book, BookGroup } from '@/services/book/types';
 import type { WishlistItem } from '@/services/wishlistService';
 import { BookStatus } from '@/store/bookBorder/types';
 import {
@@ -455,6 +471,7 @@ import AdvancedFilterDialog from './components/AdvancedFilterDialog.vue';
 import OrganizeModeBar from './components/OrganizeModeBar.vue';
 import GroupSelectorDialog from './components/GroupSelectorDialog.vue';
 import GroupEditDialog from './components/GroupEditDialog.vue';
+import GroupManageDialog from './components/GroupManageDialog.vue';
 import DeleteConfirmDialog from './components/DeleteConfirmDialog.vue';
 import WishlistPanel from './components/WishlistPanel.vue';
 
@@ -573,7 +590,11 @@ const {
   saveGroupName,
   handleUpdateGroupName,
   moveToGroup: openGroupSelector,
-  handleGroupConfirm
+  handleGroupConfirm,
+  handleGroupConfirmMulti,
+  getCommonGroupsForSelectedBooks,
+  getSelectedCountPerGroup,
+  removeBooksFromGroup
 } = useBookGroups({
   displayBooks,
   usePagination,
@@ -612,6 +633,7 @@ const {
   pinToTop,
   moveToStart,
   moveToEnd,
+  moveToGroup,
   changeStatus,
   confirmChangeStatus,
   deleteSelected
@@ -627,6 +649,63 @@ watch([selectedBookIds, selectedGroupIds], () => {
   _selectedBookIdsForGroups.value = selectedBookIds.value;
   _selectedGroupIdsForGroups.value = selectedGroupIds.value;
 }, { deep: true });
+
+// 计算已选书籍/分组的"共同所在分组"（用于初始化 GroupSelectorDialog 的勾选状态）
+const initialCheckedGroupIds = computed(() =>
+  getCommonGroupsForSelectedBooks(selectedBookIds.value, selectedGroupIds.value)
+);
+
+// 计算每个分组中所选书籍的数量（用于 GroupSelectorDialog 显示橙色徽章）
+const selectedCountInGroup = computed(() =>
+  getSelectedCountPerGroup(selectedBookIds.value, selectedGroupIds.value)
+);
+
+// ============ 分组管理弹窗（GroupManageDialog） ============
+const showManageDialog = ref(false);
+const managingGroup = ref<BookGroup | null>(null);
+const removingFromGroup = ref(false);
+
+const openManageGroup = (groupId: string) => {
+  const g = groups.value.find(gg => gg.id === groupId);
+  if (!g) return;
+  managingGroup.value = g;
+  showManageDialog.value = true;
+};
+
+const onRemoveBooksFromGroup = async (bookIds: number[]) => {
+  if (!managingGroup.value || !bookIds || bookIds.length === 0) return;
+  removingFromGroup.value = true;
+  try {
+    await removeBooksFromGroup(managingGroup.value.id, bookIds);
+    // 移出后 bookStore 已更新，groupBooksMap 也会自动重算（来自 bookStore.allBooks 的派生）
+    // loadGroups() 在 removeBooksFromGroup 内部已执行
+  } catch (error) {
+    console.error('移出分组失败:', error);
+  } finally {
+    removingFromGroup.value = false;
+  }
+};
+
+// ============ 分组选择弹窗的"创建新分组" ============
+const openCreateGroup = () => {
+  // 关闭 GroupSelectorDialog，打开 GroupEditDialog
+  // 编辑完成后（@save -> saveGroup）会自动 loadGroups() 刷新分组列表
+  showGroupSelector.value = false;
+  editingGroup.value = null;
+  groupName.value = '';
+  showAddGroup.value = true;
+};
+
+// 分组选择弹窗的"删除分组"
+const onDeleteGroup = async (groupId: string) => {
+  if (!groupId) return;
+  if (!confirm('确定要删除该分组吗？分组中的书籍不会被删除。')) return;
+  try {
+    await deleteGroup(groupId);
+  } catch (error) {
+    console.error('删除分组失败:', error);
+  }
+};
 
 // ============ 书单 ============
 const { wishlist, showAddWishlist, loadWishlist, addToWishlist, removeFromWishlist } = useWishlist();

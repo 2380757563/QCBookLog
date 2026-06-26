@@ -1,0 +1,3091 @@
+.book-container {
+  min-height: 100vh;
+  background-color: var(--bg-primary);
+
+}
+
+.book-container .toolbar {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background-color: var(--bg-secondary);
+  gap: 12px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+
+}
+
+.book-container .search-bar {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  background-color: #f5f5f5;
+  border-radius: 20px;
+  cursor: pointer;
+
+}
+
+.book-container .search-icon {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+  margin-right: 8px;
+  transition: all 0.2s ease;
+
+}
+
+.book-container .search-bar span {
+  color: var(--text-hint);
+  font-size: 14px;
+
+}
+
+.book-container .toolbar-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+
+}
+
+/* 标签快速筛选 - 始终可见输入框 */
+.book-container .tag-quick-filter {
+  position: relative;
+  margin: 8px 16px 0 16px;
+  z-index: 50;
+
+}
+
+.book-container .tag-quick-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px;
+  background: #fafafa;
+  border: 1px solid #e8e8e8;
+  border-radius: 10px;
+  min-height: 40px;
+  transition: border-color 0.2s ease, background 0.2s ease;
+
+}
+
+.book-container .tag-quick-row:focus-within {
+  border-color: #ff6b35;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.08);
+
+}
+
+.book-container .tag-quick-label {
+  font-size: 12px;
+  color: #888;
+  font-weight: 500;
+  flex-shrink: 0;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+
+}
+
+.book-container .tag-quick-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  background: #ff6b35;
+  color: #fff;
+  border-radius: 11px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  white-space: nowrap;
+
+}
+
+.book-container .tag-quick-chip:hover {
+  background: #e55a2b;
+  transform: translateY(-1px);
+
+}
+
+.book-container .tag-quick-input-wrap {
+  display: inline-flex;
+  align-items: center;
+  flex: 1;
+  min-width: 120px;
+  position: relative;
+
+}
+
+.book-container .tag-quick-input {
+  border: none;
+  outline: none;
+  padding: 4px 6px;
+  font-size: 13px;
+  color: #333;
+  background: transparent;
+  flex: 1;
+  min-width: 80px;
+
+}
+
+.book-container .tag-quick-input::placeholder {
+  color: #aaa;
+
+}
+
+.book-container .tag-quick-clear-all {
+  background: #f0f0f0;
+  border: none;
+  color: #999;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 8px;
+  white-space: nowrap;
+
+}
+
+.book-container .tag-quick-clear-all:hover {
+  background: #ffe8df;
+  color: #ff6b35;
+
+}
+
+.book-container .tag-quick-result {
+  font-size: 11px;
+  color: #ff6b35;
+  font-weight: 500;
+  white-space: nowrap;
+  margin-left: auto;
+  padding-left: 6px;
+
+}
+
+/* 候选下拉 */
+.book-container .tag-quick-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 16px;
+  right: 16px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.05);
+  z-index: 100;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px;
+  max-height: 240px;
+  overflow-y: auto;
+
+}
+
+.book-container .tag-quick-dropdown--empty {
+  color: #999;
+  font-size: 12px;
+  text-align: center;
+  padding: 12px;
+
+}
+
+.book-container .tag-quick-candidate {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: #f5f5f5;
+  color: #555;
+  border-radius: 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+
+}
+
+.book-container .tag-quick-candidate:hover {
+  background: #ff6b35;
+  color: #fff;
+  transform: translateY(-1px);
+
+}
+
+.book-container .tag-quick-candidate:hover .tag-quick-candidate-icon {
+  background: rgba(255, 255, 255, 0.3);
+  color: #fff;
+
+}
+
+.book-container .tag-quick-candidate-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  background: #fff;
+  color: #ff6b35;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+
+}
+
+.book-container .tag-quick-candidate mark {
+  background: #fff3e0;
+  color: #ff6b35;
+  padding: 0 1px;
+  border-radius: 2px;
+  font-weight: 600;
+
+}
+
+.book-container .tag-quick-meta {
+  font-size: 11px;
+  color: #999;
+  align-self: center;
+  margin-left: auto;
+  padding: 0 4px;
+
+}
+
+@media (max-width: 600px) {
+  .book-container .tag-quick-filter {
+    margin: 8px 12px 0 12px;
+
+}
+  .book-container .tag-quick-row {
+    padding: 6px 8px;
+
+}
+  .book-container .tag-quick-input {
+    min-width: 60px;
+
+}
+}
+
+.book-container .action-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background-color: #f5f5f5;
+  color: #555555;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  position: relative;
+  flex-shrink: 0;
+
+}
+
+.book-container .action-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+  transition: all 0.2s ease;
+  display: block;
+  flex-shrink: 0;
+
+}
+
+.book-container .action-btn:hover {
+  background-color: #e0e0e0;
+  color: #333333;
+  transform: scale(1.05);
+
+}
+
+.book-container .action-btn:active {
+  transform: scale(0.95);
+  background-color: #d0d0d0;
+  color: #333333;
+
+}
+
+.book-container .add-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.4);
+
+}
+
+/* 加载状态 */
+.book-container .loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+
+}
+
+.book-container .loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #e0e0e0;
+  border-top: 4px solid #333;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-bottom: 16px;
+
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.book-container .loading-state p {
+  color: #666;
+  font-size: 16px;
+
+}
+
+/* 加载更多指示器 */
+.book-container .loading-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  color: #666;
+  font-size: 14px;
+
+}
+
+.book-container .loading-spinner-small {
+  width: 20px;
+  height: 20px;
+  border: 3px solid #e0e0e0;
+  border-top: 3px solid #333;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+
+}
+
+/* 没有更多数据提示 */
+.book-container .no-more-data {
+  text-align: center;
+  padding: 20px;
+  color: #999;
+  font-size: 13px;
+
+}
+
+/* 滚动加载哨兵 */
+.book-container .load-more-sentinel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  color: #999;
+  font-size: 12px;
+  user-select: none;
+
+}
+
+.book-container .sentinel-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff6b35;
+  animation: sentinel-pulse 1.5s ease-in-out infinite;
+
+}
+
+@keyframes sentinel-pulse {
+  0%, 100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+/* 错误状态 */
+.book-container .error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  text-align: center;
+
+}
+
+.book-container .error-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+
+}
+
+.book-container .error-state p {
+  color: #666;
+  font-size: 16px;
+  margin-bottom: 16px;
+
+}
+
+.book-container .btn-retry {
+  padding: 10px 24px;
+  background-color: #FF6B35;
+  color: white;
+  border: none;
+  border-radius: 20px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+}
+
+.book-container .btn-retry:hover {
+  background-color: #e55a2b;
+  transform: scale(1.05);
+
+}
+
+/* 加载更多失败 */
+.book-container .load-more-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  color: #e74c3c;
+  font-size: 14px;
+
+}
+
+.book-container .btn-retry-small {
+  padding: 6px 16px;
+  background-color: #FF6B35;
+  color: white;
+  border: none;
+  border-radius: 16px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+}
+
+.book-container .btn-retry-small:hover {
+  background-color: #e55a2b;
+
+}
+
+/* 下拉菜单容器 */
+.book-container .dropdown-container {
+  position: relative;
+
+}
+
+/* 下拉菜单 */
+.book-container .dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  min-width: 160px;
+  z-index: 100;
+  padding: 4px 0;
+
+}
+
+/* 设置菜单更宽 */
+.book-container .settings-menu {
+  min-width: 220px;
+
+}
+
+/* 下拉菜单项 */
+.book-container .dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  font-size: 14px;
+  color: var(--text-primary);
+
+}
+
+.book-container .dropdown-item:hover {
+  background-color: #f5f5f5;
+
+}
+
+.book-container .dropdown-item:active {
+  background-color: #e0e0e0;
+
+}
+
+.book-container .dropdown-item svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+  transition: all 0.2s ease;
+
+}
+
+.book-container .dropdown-item:hover svg {
+  fill: var(--primary-color, #FF6B35);
+
+}
+
+/* 菜单分割线 */
+.book-container .menu-divider {
+  height: 1px;
+  background-color: var(--border-light);
+  margin: 4px 0;
+
+}
+
+/* 下拉菜单子项 */
+.book-container .dropdown-item-sub {
+  padding: 10px 16px;
+
+}
+
+.book-container .menu-label {
+  font-size: 12px;
+  color: var(--text-hint);
+  margin-bottom: 8px;
+  font-weight: 500;
+
+}
+
+/* 行数按钮组 */
+.book-container .row-count-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+
+}
+
+/* 手动列数选择框 */
+.book-container .manual-columns-select {
+  margin-top: 8px;
+
+}
+
+.book-container .column-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: #fff;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s ease;
+
+}
+
+.book-container .column-select:hover {
+  border-color: var(--primary-color, #FF6B35);
+
+}
+
+.book-container .column-select:focus {
+  border-color: var(--primary-color, #FF6B35);
+  box-shadow: 0 0 0 2px rgba(255, 107, 53, 0.2);
+
+}
+
+.book-container .row-btn {
+  flex: 1;
+  min-width: 50px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  background-color: #fff;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+
+}
+
+.book-container .row-btn:hover {
+  background-color: #f5f5f5;
+  border-color: var(--text-secondary);
+
+}
+
+.book-container .row-btn:active {
+  background-color: #e0e0e0;
+  transform: scale(0.98);
+
+}
+
+.book-container .row-btn.active {
+  background-color: var(--primary-color, #FF6B35);
+  color: #fff;
+  border-color: var(--primary-color, #FF6B35);
+  font-weight: 500;
+
+}
+
+.book-container .row-btn.active:hover {
+  background-color: #e65a2f;
+  border-color: #e65a2f;
+
+}
+
+.book-container .add-btn {
+  background-color: var(--primary-color, #FF6B35);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(255, 107, 53, 0.15);
+
+}
+
+.book-container .add-btn svg {
+  fill: currentColor;
+  stroke: none;
+  transition: all 0.2s ease;
+
+}
+
+.book-container .add-btn:hover {
+  background-color: #e65a2f;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(255, 107, 53, 0.25);
+  transform: translateY(-1px);
+
+}
+
+.book-container .add-btn:active {
+  background-color: #cc5629;
+  color: #ffffff;
+  box-shadow: 0 1px 4px rgba(255, 107, 53, 0.2);
+  transform: translateY(0);
+
+}
+
+.book-container .tabs {
+  display: flex;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-light);
+  padding: 0 16px;
+  margin-top: 60px;
+
+}
+
+.book-container .tab-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 16px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.3s;
+
+}
+
+.book-container .tab-item.active {
+  color: var(--primary-color);
+  border-bottom-color: var(--primary-color);
+  font-weight: 500;
+
+}
+
+.book-container .tab-count {
+  font-size: 12px;
+  padding: 2px 6px;
+  background-color: #f0f0f0;
+
+}
+
+.book-container .tab-item.active .tab-count {
+  background-color: rgba(255, 107, 53, 0.1);
+  color: var(--primary-color);
+
+}
+
+.book-container .filter-bar {
+  display: flex;
+  gap: 12px;
+  padding: 12px 16px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-light);
+
+}
+
+.book-container .filter-select {
+  padding: 6px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background-color: #fff;
+  font-size: 13px;
+  color: var(--text-primary);
+  outline: none;
+
+}
+
+.book-container .content {
+  padding: 16px;
+
+}
+
+/* 书籍网格布局 */
+.book-container .book-grid {
+  display: grid;
+  gap: 16px;
+
+}
+
+.book-container .book-grid--grid {
+  /* 默认按内容自然撑开，列数变多时不被同行其他卡片拉伸 - 避免信息区被裁切 */
+  align-items: start;
+  justify-items: center; /* 居中卡片，避免拉伸 */
+
+}
+
+/* 根据列数动态调整 gap 和卡片样式 */
+/* 自动模式：智能填满容器宽度
+   - minmax(160px, 1fr): 最小 160px 不让卡片太小，最大 1fr 让列数尽可能多
+   - 1fr 作为 max 让列可以"按比例分摊"剩余宽度
+   - 例如 1100px 容器：5 列时每列 207px，6 列时每列 170px（都能完美填满） */
+.book-container .book-grid--grid.book-grid-cols-auto {
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  justify-content: start;
+
+}
+
+/* 5-8列：中等密度 */
+.book-container .book-grid--grid[class*="grid-cols-5"], .book-container .book-grid--grid[class*="grid-cols-6"], .book-container .book-grid--grid[class*="grid-cols-7"], .book-container .book-grid--grid[class*="grid-cols-8"] {
+  gap: 12px;
+
+}
+
+/* 9-12列：高密度 */
+.book-container .book-grid--grid[class*="grid-cols-9"], .book-container .book-grid--grid[class*="grid-cols-10"], .book-container .book-grid--grid[class*="grid-cols-11"], .book-container .book-grid--grid[class*="grid-cols-12"] {
+  gap: 10px;
+
+}
+
+/* 13-20列：超高密度 */
+.book-container .book-grid--grid[class*="grid-cols-13"], .book-container .book-grid--grid[class*="grid-cols-14"], .book-container .book-grid--grid[class*="grid-cols-15"], .book-container .book-grid--grid[class*="grid-cols-16"], .book-container .book-grid--grid[class*="grid-cols-17"], .book-container .book-grid--grid[class*="grid-cols-18"], .book-container .book-grid--grid[class*="grid-cols-19"], .book-container .book-grid--grid[class*="grid-cols-20"] {
+  gap: 8px;
+
+}
+
+/* 手动列数设置 - 使用 minmax 确保卡片等宽 */
+.book-container .book-grid--grid.book-grid-cols-1 {
+  grid-template-columns: repeat(1, minmax(0, 220px));
+  justify-content: center;
+
+}
+
+.book-container .book-grid--grid.book-grid-cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 220px));
+  justify-content: center;
+
+}
+
+.book-container .book-grid--grid.book-grid-cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 220px));
+  justify-content: center;
+
+}
+
+.book-container .book-grid--grid.book-grid-cols-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+
+}
+
+.book-container .book-grid--grid.book-grid-cols-5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+
+}
+
+.book-container .book-grid--grid.book-grid-cols-6 {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+
+}
+
+.book-container .book-grid--grid.book-grid-cols-7 {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+
+}
+
+.book-container .book-grid--grid.book-grid-cols-8 {
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+
+}
+
+.book-container .book-grid--grid.book-grid-cols-9 {
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+
+}
+
+.book-container .book-grid--grid.book-grid-cols-10 {
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+
+}
+
+.book-container .book-grid--grid.book-grid-cols-11 {
+  grid-template-columns: repeat(11, minmax(0, 1fr));
+
+}
+
+.book-container .book-grid--grid.book-grid-cols-12 {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+
+}
+
+.book-container .book-grid--grid.book-grid-cols-13 {
+  grid-template-columns: repeat(13, minmax(0, 1fr));
+
+}
+
+.book-container .book-grid--grid.book-grid-cols-14 {
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+
+}
+
+.book-container .book-grid--grid.book-grid-cols-15 {
+  grid-template-columns: repeat(15, minmax(0, 1fr));
+
+}
+
+.book-container .book-grid--grid.book-grid-cols-16 {
+  grid-template-columns: repeat(16, minmax(0, 1fr));
+
+}
+
+.book-container .book-grid--grid.book-grid-cols-17 {
+  grid-template-columns: repeat(17, minmax(0, 1fr));
+
+}
+
+.book-container .book-grid--grid.book-grid-cols-18 {
+  grid-template-columns: repeat(18, minmax(0, 1fr));
+
+}
+
+.book-container .book-grid--grid.book-grid-cols-19 {
+  grid-template-columns: repeat(19, minmax(0, 1fr));
+
+}
+
+.book-container .book-grid--grid.book-grid-cols-20 {
+  grid-template-columns: repeat(20, minmax(0, 1fr));
+
+}
+
+.book-container .book-grid--list {
+  grid-template-columns: 1fr;
+
+}
+
+.book-container .book-card {
+  background-color: var(--bg-card);
+  border-radius: var(--radius-lg);
+  overflow: visible;
+  cursor: pointer;
+  transition: all 0.3s;
+  position: relative;
+  width: 100%;
+  /* 不在 book-card 外层设置固定 aspect-ratio，
+     避免列数变多时内部信息区被裁切。
+     封面内部使用 3:4 固定比例保证图片不变形，book-info 区域使用自然高度。 */
+
+}
+
+.book-container .book-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+
+}
+
+.book-container .book-card--grid {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  min-width: 0;
+
+}
+
+/* 确保所有书籍卡片在网格中保持统一高度 */
+.book-container .book-grid--grid .book-card {
+  display: flex;
+  flex-direction: column;
+  /* 不使用 height: 100%，让 book-card 按内容（封面 3:4 + 信息区）自然撑开 */
+  align-self: start;
+  width: 100%;
+  min-width: 0;
+
+}
+
+.book-container .book-grid--grid .book-card-inner {
+  display: flex;
+  flex-direction: column;
+  /* 不使用 flex: 1，避免 inner 拉伸撑满父级，保证信息区按自然高度显示 */
+  flex: 0 0 auto;
+  min-height: 0;
+
+}
+
+.book-container .book-grid--grid .book-info {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+
+}
+
+.book-container .book-card--list {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  /* 列表模式取消固定宽高比，让内容自然撑开 */
+  aspect-ratio: auto;
+
+}
+
+.book-container .book-card-inner {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-card);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  position: relative;
+  z-index: 1;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+
+}
+
+.book-container .book-card--list .book-card-inner {
+  flex-direction: row;
+  align-items: center;
+  overflow: visible;
+
+}
+
+.book-container .book-cover {
+  position: relative;
+  overflow: hidden;
+  z-index: 0;
+  flex-shrink: 0;
+
+}
+
+.book-container .book-card--grid .book-card-inner .book-cover {
+  width: 100%;
+  padding-top: 133.33%; /* 3:4 比例 - 封面固定比例 */
+
+}
+
+.book-container .book-card--list .book-card-inner .book-cover {
+  width: 60px;
+  height: 80px;
+  flex-shrink: 0;
+  margin-right: 12px;
+
+}
+
+.book-container .book-cover img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+
+}
+
+.book-container .book-cover img.loaded {
+  opacity: 1;
+
+}
+
+.book-container .book-card--list .book-card-inner .book-cover img {
+  position: static;
+  border-radius: 4px;
+
+}
+
+.book-container .cover-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  font-size: 36px;
+  font-weight: 500;
+
+}
+
+.book-container .book-card--list .cover-placeholder {
+  position: static;
+  width: 60px;
+  height: 80px;
+  font-size: 24px;
+  border-radius: 4px;
+
+}
+
+.book-container .read-status {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  color: #fff;
+
+}
+
+.book-container .read-status--未读 {
+   background-color: #9e9e9e; 
+}
+.book-container .read-status--在读 {
+   background-color: var(--primary-color); 
+}
+.book-container .read-status--已读 {
+   background-color: #4caf50; 
+}
+
+.book-container .favorite-badge, .book-container .wants-badge {
+  position: absolute;
+  bottom: 8px;
+  font-size: 16px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+}
+
+.book-container .favorite-badge {
+  left: 8px;
+
+}
+
+.book-container .wants-badge {
+  left: 36px;
+
+}
+
+.book-container .book-info {
+  padding: 12px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  /* 防止子元素内容撑大导致卡片拉伸 */
+  min-width: 0;
+
+}
+
+.book-container .book-card--list .book-card-inner .book-info {
+  padding: 0;
+
+}
+
+.book-container .book-title {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+  letter-spacing: 0.01em;
+  color: var(--text-primary, #2c3e50);
+  margin: 0 0 4px 0;
+  /* 单行省略号：避免长标题换行造成卡片高度不一致 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: break-word;
+  /* 防止超长无空格文本撑破布局 */
+  overflow-wrap: anywhere;
+  /* 标题的视觉过渡 */
+  transition: color 0.2s ease;
+  /* 保证高度一致：行数固定后由 line-height 控制最小高度 */
+  min-height: calc(1.45em);
+  max-height: calc(1.45em);
+
+}
+
+.book-container .book-card:hover .book-title {
+  color: var(--primary-color, #FF6B35);
+
+}
+
+.book-container .book-card--list .book-title {
+  /* 列表模式同样使用单行省略号（保持一致） */
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+
+}
+
+.book-container .book-author {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  color: var(--text-hint, #909399);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+  /* 即使有超长文本也不撑破容器 */
+  min-width: 0;
+
+}
+
+/* 根据列数调整卡片内部元素样式 */
+/* 5-8列：中等密度 */
+.book-container .book-grid--grid[class*="grid-cols-5"] .book-info, .book-container .book-grid--grid[class*="grid-cols-6"] .book-info, .book-container .book-grid--grid[class*="grid-cols-7"] .book-info, .book-container .book-grid--grid[class*="grid-cols-8"] .book-info {
+  padding: 10px;
+
+}
+
+.book-container .book-grid--grid[class*="grid-cols-5"] .book-title, .book-container .book-grid--grid[class*="grid-cols-6"] .book-title, .book-container .book-grid--grid[class*="grid-cols-7"] .book-title, .book-container .book-grid--grid[class*="grid-cols-8"] .book-title {
+  font-size: 13px;
+  margin-bottom: 2px;
+
+}
+
+.book-container .book-grid--grid[class*="grid-cols-5"] .book-author, .book-container .book-grid--grid[class*="grid-cols-6"] .book-author, .book-container .book-grid--grid[class*="grid-cols-7"] .book-author, .book-container .book-grid--grid[class*="grid-cols-8"] .book-author {
+  font-size: 11px;
+
+}
+
+/* 9-12列：高密度 */
+.book-container .book-grid--grid[class*="grid-cols-9"] .book-info, .book-container .book-grid--grid[class*="grid-cols-10"] .book-info, .book-container .book-grid--grid[class*="grid-cols-11"] .book-info, .book-container .book-grid--grid[class*="grid-cols-12"] .book-info {
+  padding: 8px;
+
+}
+
+.book-container .book-grid--grid[class*="grid-cols-9"] .book-title, .book-container .book-grid--grid[class*="grid-cols-10"] .book-title, .book-container .book-grid--grid[class*="grid-cols-11"] .book-title, .book-container .book-grid--grid[class*="grid-cols-12"] .book-title {
+  font-size: 12px;
+  margin-bottom: 2px;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+
+}
+
+.book-container .book-grid--grid[class*="grid-cols-9"] .book-author, .book-container .book-grid--grid[class*="grid-cols-10"] .book-author, .book-container .book-grid--grid[class*="grid-cols-11"] .book-author, .book-container .book-grid--grid[class*="grid-cols-12"] .book-author {
+  font-size: 10px;
+
+}
+
+/* 13-16列：超高密度 - 缩小信息区但保留显示 */
+.book-container .book-grid--grid[class*="grid-cols-13"] .book-info, .book-container .book-grid--grid[class*="grid-cols-14"] .book-info, .book-container .book-grid--grid[class*="grid-cols-15"] .book-info, .book-container .book-grid--grid[class*="grid-cols-16"] .book-info {
+  padding: 6px;
+
+}
+
+.book-container .book-grid--grid[class*="grid-cols-13"] .book-title, .book-container .book-grid--grid[class*="grid-cols-14"] .book-title, .book-container .book-grid--grid[class*="grid-cols-15"] .book-title, .book-container .book-grid--grid[class*="grid-cols-16"] .book-title {
+  font-size: 11px;
+  margin-bottom: 1px;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+
+}
+
+.book-container .book-grid--grid[class*="grid-cols-13"] .book-author, .book-container .book-grid--grid[class*="grid-cols-14"] .book-author, .book-container .book-grid--grid[class*="grid-cols-15"] .book-author, .book-container .book-grid--grid[class*="grid-cols-16"] .book-author {
+  font-size: 9px;
+  opacity: 0.8;
+
+}
+
+/* 17-20列：极端密度 - 隐藏文字信息，只显示封面，避免卡片被拉成"细长" */
+.book-container .book-grid--grid[class*="grid-cols-17"] .book-info,
+.book-container .book-grid--grid[class*="grid-cols-18"] .book-info,
+.book-container .book-grid--grid[class*="grid-cols-19"] .book-info,
+.book-container .book-grid--grid[class*="grid-cols-20"] .book-info {
+  display: none; /* 完全隐藏信息区，卡片只显示封面，保持 3:4 固定比例 */
+
+}
+
+.book-container .book-grid--grid[class*="grid-cols-17"] .book-card--grid .book-card-inner,
+.book-container .book-grid--grid[class*="grid-cols-18"] .book-card--grid .book-card-inner,
+.book-container .book-grid--grid[class*="grid-cols-19"] .book-card--grid .book-card-inner,
+.book-container .book-grid--grid[class*="grid-cols-20"] .book-card--grid .book-card-inner {
+  /* 17+列时封面独占卡片高度 */
+  height: 100%;
+
+}
+
+.book-container .rating {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+
+}
+
+.book-container .rating-stars {
+  color: #ffc107;
+  font-size: 12px;
+
+}
+
+.book-container .rating-value {
+  font-size: 12px;
+  color: var(--text-hint);
+
+}
+
+.book-container .actions {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  z-index: 10;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 4px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+
+}
+
+.book-container .book-card--organize .actions {
+  opacity: 1;
+  transform: translateY(0);
+
+}
+
+.book-container .book-card--list .actions {
+  position: static;
+  opacity: 1;
+  transform: translateY(0);
+  margin-left: auto;
+  background: none;
+  padding: 0;
+  box-shadow: none;
+
+}
+
+.book-container .action-btn-sm {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.9);
+  color: #555555;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  flex-shrink: 0;
+
+}
+
+.book-container .action-btn-sm svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+  transition: all 0.2s ease;
+  display: block;
+  flex-shrink: 0;
+
+}
+
+.book-container .action-btn-sm:hover {
+  background-color: #fff;
+  color: #333333;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  transform: scale(1.05);
+
+}
+
+.book-container .action-btn-sm:active {
+  transform: scale(0.95);
+  background-color: #f0f0f0;
+
+}
+
+.book-container .action-btn-sm:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(102, 102, 102, 0.3);
+
+}
+
+/* 空状态 */
+.book-container .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 48px 24px;
+  color: var(--text-hint);
+
+}
+
+.book-container .empty-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+
+}
+
+.book-container .empty-state p {
+  margin-bottom: 16px;
+
+}
+
+.book-container .btn-primary {
+  padding: 10px 24px;
+  background-color: var(--primary-color);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s;
+
+}
+
+.book-container .btn-primary:hover {
+  background-color: var(--primary-dark);
+
+}
+
+/* 分组区域和面包屑导航 */
+.book-container .groups-section {
+  margin-bottom: 24px;
+  background: linear-gradient(135deg, #f0f7ff 0%, #e8f4fd 100%);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  border: 1px solid rgba(33, 150, 243, 0.1);
+
+}
+
+.book-container .groups-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  color: #1565c0;
+  font-size: 14px;
+
+}
+
+.book-container .groups-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  color: #e53935;
+  font-size: 14px;
+  background: rgba(229, 57, 53, 0.1);
+  border-radius: var(--radius-md);
+
+}
+
+.book-container .groups-error .error-icon {
+  font-size: 16px;
+
+}
+
+.book-container .btn-retry--small {
+  padding: 4px 12px;
+  font-size: 12px;
+  margin-left: 8px;
+
+}
+
+.book-container .section-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin: 0 0 12px 0;
+
+}
+
+.book-container .groups-section .section-title {
+  color: #1565c0;
+  position: relative;
+  padding-left: 12px;
+
+}
+
+.book-container .groups-section .section-title::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 18px;
+  background: linear-gradient(180deg, #2196f3 0%, #1976d2 100%);
+  border-radius: 2px;
+
+}
+
+/* 可折叠标题样式 */
+.book-container .section-title--collapsible {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  margin: -8px -12px 12px -12px;
+  border-radius: var(--radius-md);
+  transition: background-color 0.2s ease;
+
+}
+
+.book-container .section-title--collapsible:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+
+}
+
+.book-container .section-title--collapsible:active {
+  background-color: rgba(0, 0, 0, 0.08);
+
+}
+
+/* 折叠箭头图标 */
+.book-container .collapse-icon {
+  width: 20px;
+  height: 20px;
+  transition: transform 0.3s ease;
+  flex-shrink: 0;
+
+}
+
+.book-container .collapse-icon--collapsed {
+  transform: rotate(-90deg);
+
+}
+
+/* 折叠内容区域 */
+.book-container .section-content {
+  overflow: visible;
+  transition: max-height 0.3s ease-out, opacity 0.2s ease-out;
+  max-height: none;
+  opacity: 1;
+
+}
+
+.book-container .section-content--collapsed {
+  max-height: 0;
+  opacity: 0;
+  transition: max-height 0.3s ease-out, opacity 0.2s ease-out;
+
+}
+
+.book-container .groups-grid {
+  display: grid;
+  gap: 12px;
+  align-items: stretch;
+  justify-items: center; /* 居中卡片，避免拉伸 */
+
+}
+
+.book-container .groups-grid.book-grid-cols-auto {
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  justify-content: start;
+
+}
+
+.book-container .groups-grid.book-grid-cols-1 {
+  grid-template-columns: repeat(1, minmax(0, 220px));
+  justify-content: center;
+
+}
+
+.book-container .groups-grid.book-grid-cols-2 {
+  grid-template-columns: repeat(2, minmax(0, 220px));
+  justify-content: center;
+
+}
+
+.book-container .groups-grid.book-grid-cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+
+}
+
+.book-container .groups-grid.book-grid-cols-4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+
+}
+
+.book-container .groups-grid.book-grid-cols-5 {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+
+}
+
+.book-container .groups-grid.book-grid-cols-6 {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+
+}
+
+.book-container .groups-grid.book-grid-cols-7 {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+
+}
+
+.book-container .groups-grid.book-grid-cols-8 {
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+
+}
+
+.book-container .groups-grid.book-grid-cols-9 {
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+
+}
+
+.book-container .groups-grid.book-grid-cols-10 {
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+
+}
+
+.book-container .groups-grid.book-grid-cols-11 {
+  grid-template-columns: repeat(11, minmax(0, 1fr));
+
+}
+
+.book-container .groups-grid.book-grid-cols-12 {
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+
+}
+
+.book-container .groups-grid.book-grid-cols-13 {
+  grid-template-columns: repeat(13, minmax(0, 1fr));
+
+}
+
+.book-container .groups-grid.book-grid-cols-14 {
+  grid-template-columns: repeat(14, minmax(0, 1fr));
+
+}
+
+.book-container .groups-grid.book-grid-cols-15 {
+  grid-template-columns: repeat(15, minmax(0, 1fr));
+
+}
+
+.book-container .groups-grid.book-grid-cols-16 {
+  grid-template-columns: repeat(16, minmax(0, 1fr));
+
+}
+
+.book-container .groups-grid.book-grid-cols-17 {
+  grid-template-columns: repeat(17, minmax(0, 1fr));
+
+}
+
+.book-container .groups-grid.book-grid-cols-18 {
+  grid-template-columns: repeat(18, minmax(0, 1fr));
+
+}
+
+.book-container .groups-grid.book-grid-cols-19 {
+  grid-template-columns: repeat(19, minmax(0, 1fr));
+
+}
+
+.book-container .groups-grid.book-grid-cols-20 {
+  grid-template-columns: repeat(20, minmax(0, 1fr));
+
+}
+
+/* 分组卡片和缩略图比例由 BookGroupCard 内部 padding-top 控制
+   - 缩略图区 3:4 (与 BookCard 封面一致)
+   - 缩略图单元格 3:4 (3:4 容器被 2x2 / 3x3 等分)
+   - 卡片整体 = 3:4 缩略图区 + 52px 信息区
+   这里不再按列数覆盖 min-height / height，避免破坏固定比例。*/
+
+/* 整理模式下的分组框网格 */
+.book-container .groups-grid--organize {
+  gap: 16px;
+  margin-bottom: 24px;
+
+}
+
+.book-container .books-section {
+  margin-top: 16px;
+  background: linear-gradient(135deg, #fff8f0 0%, #ffefde 100%);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  border: 1px solid rgba(255, 152, 0, 0.1);
+
+}
+
+.book-container .books-section .section-title {
+  color: #e65100;
+  position: relative;
+  padding-left: 12px;
+
+}
+
+.book-container .books-section .section-title::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 18px;
+  background: linear-gradient(180deg, #ff9800 0%, #f57c00 100%);
+  border-radius: 2px;
+
+}
+
+.book-container .books-section .breadcrumb-nav {
+  margin-bottom: 12px;
+
+}
+
+.book-container .breadcrumb-nav {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 14px;
+
+}
+
+.book-container .breadcrumb-item {
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.3s ease;
+
+}
+
+.book-container .breadcrumb-item:hover {
+  color: var(--primary-color, #FF6B35);
+
+}
+
+.book-container .breadcrumb-item--current {
+  color: var(--text-primary);
+  cursor: default;
+  font-weight: 500;
+
+}
+
+.book-container .breadcrumb-separator {
+  margin: 0 8px;
+  color: var(--text-hint);
+
+}
+
+/* 分组列表 */
+.book-container .groups-header, .book-container .wishlist-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+
+}
+
+.book-container .groups-header h3, .book-container .wishlist-header h3 {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin: 0;
+
+}
+
+.book-container .btn-text {
+  background: none;
+  border: none;
+  color: var(--primary-color);
+  font-size: 14px;
+  cursor: pointer;
+
+}
+
+.book-container .groups-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+
+}
+
+.book-container .group-item {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  background-color: var(--bg-card);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.3s;
+
+}
+
+.book-container .group-item:hover {
+  background-color: #f5f5f5;
+
+}
+
+.book-container .group-icon {
+  font-size: 24px;
+  margin-right: 12px;
+
+}
+
+.book-container .group-info {
+  flex: 1;
+
+}
+
+.book-container .group-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  display: block;
+
+}
+
+.book-container .group-count {
+  font-size: 12px;
+  color: var(--text-hint);
+
+}
+
+.book-container .group-actions {
+  display: flex;
+  gap: 8px;
+
+}
+
+/* 书单 */
+.book-container .wishlist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+}
+
+.book-container .wishlist-item {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  background-color: var(--bg-card);
+  border-radius: var(--radius-md);
+  gap: 12px;
+
+}
+
+.book-container .wishlist-title {
+  flex: 1;
+  font-size: 14px;
+  color: var(--text-primary);
+
+}
+
+.book-container .wishlist-author {
+  font-size: 12px;
+  color: var(--text-hint);
+
+}
+
+/* 弹窗 */
+.book-container .dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+
+}
+
+.book-container .dialog {
+  background-color: var(--bg-card);
+  border-radius: var(--radius-lg);
+  width: 320px;
+  max-width: 90%;
+
+}
+
+.book-container .dialog-group-selector {
+  width: 380px;
+  max-width: 90%;
+
+}
+
+.book-container .dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid var(--border-light);
+  font-size: 16px;
+  font-weight: 500;
+
+}
+
+.book-container .dialog-close {
+  font-size: 24px;
+  color: var(--text-hint);
+  cursor: pointer;
+
+}
+
+.book-container .dialog-body {
+  padding: 24px 16px;
+
+}
+
+.book-container .dialog-body p {
+  margin: 0;
+  color: var(--text-secondary);
+
+}
+
+.book-container .dialog-body--group-selector {
+  padding: 16px 0;
+  max-height: 400px;
+  overflow-y: auto;
+
+}
+
+.book-container .input {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  outline: none;
+
+}
+
+.book-container .input:focus {
+  border-color: var(--primary-color);
+
+}
+
+.book-container .dialog-footer {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  border-top: 1px solid var(--border-light);
+
+}
+
+.book-container .btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s;
+
+}
+
+.book-container .btn-default {
+  background-color: #f5f5f5;
+  color: var(--text-secondary);
+
+}
+
+.book-container .btn-danger {
+  background-color: #f44336;
+  color: #fff;
+
+}
+
+/* 分组选择器样式 */
+.book-container .group-selector-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+}
+
+.book-container .group-selector-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin: 0;
+  background-color: transparent;
+
+}
+
+.book-container .group-selector-item:hover {
+  background-color: #f5f5f5;
+
+}
+
+.book-container .group-selector-item--selected {
+  background-color: #e3f2fd;
+
+}
+
+.book-container .group-selector-item--selected .group-name-text {
+  color: #2196f3;
+
+}
+
+.book-container .group-selector-item--create {
+  border: 1px dashed #2196f3;
+  color: #2196f3;
+
+}
+
+.book-container .group-selector-item--create:hover {
+  background-color: #f0f8ff;
+
+}
+
+.book-container .group-item-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+
+}
+
+.book-container .folder-icon {
+  font-size: 20px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+}
+
+.book-container .folder-icon--create {
+  font-size: 24px;
+  width: 28px;
+  height: 28px;
+  font-weight: bold;
+
+}
+
+.book-container .group-item-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+
+}
+
+.book-container .group-name-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: text;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s ease;
+
+}
+
+.book-container .group-name-text:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+
+}
+
+.book-container .group-name-input {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  padding: 4px 8px;
+  border: 2px solid var(--primary-color, #FF6B35);
+  border-radius: 6px;
+  outline: none;
+  background-color: #fff;
+  min-width: 80px;
+  max-width: 150px;
+
+}
+
+.book-container .group-name-input:focus {
+  box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.2);
+
+}
+
+.book-container .group-count-text {
+  font-size: 12px;
+  color: var(--text-hint);
+
+}
+
+.book-container .check-icon {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #2196f3;
+  color: #fff;
+  border-radius: 50%;
+  font-size: 12px;
+
+}
+
+/* 状态选择器样式 */
+.book-container .status-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+
+}
+
+.book-container .status-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  background-color: #fff;
+  font-size: 14px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+}
+
+.book-container .status-btn:hover {
+  border-color: var(--primary-color);
+  background-color: #f5f5f5;
+
+}
+
+.book-container .status-btn.active {
+  border-color: var(--primary-color);
+  background-color: rgba(255, 107, 53, 0.05);
+  color: var(--primary-color);
+  font-weight: 500;
+
+}
+
+.book-container .status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+
+}
+
+.book-container .status-dot--未读 {
+  background-color: #9e9e9e;
+
+}
+
+.book-container .status-dot--在读 {
+  background-color: var(--primary-color);
+
+}
+
+.book-container .status-dot--已读 {
+  background-color: #4caf50;
+
+}
+
+/* 响应式设计 - 移除对列数的强制限制，让用户选择优先 */
+@media (max-width: 640px) {
+  .book-container .settings-menu {
+    min-width: 200px;
+
+}
+
+  .book-container .row-count-buttons {
+    gap: 4px;
+
+}
+
+  .book-container .row-btn {
+    min-width: 40px;
+    padding: 6px 8px;
+    font-size: 12px;
+
+}
+}
+
+@media (max-width: 480px) {
+  .book-container .dropdown-menu {
+    right: -8px;
+    min-width: 160px;
+
+}
+
+  .book-container .settings-menu {
+    min-width: 180px;
+
+}
+}
+
+/* 整理模式样式 */
+.book-container .organize-mode-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  pointer-events: none;
+
+}
+
+.book-container .organize-top-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  z-index: 2000;
+  pointer-events: auto;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+
+}
+
+.book-container .organize-top-left, .book-container .organize-top-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+}
+
+.book-container .organize-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background-color: #f5f5f5;
+  border: none;
+  border-radius: 20px;
+  color: #555555;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+}
+
+.book-container .organize-action-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+
+}
+
+.book-container .organize-action-btn:hover {
+  background-color: #e0e0e0;
+  color: #333333;
+  transform: scale(1.02);
+
+}
+
+.book-container .organize-action-btn:active {
+  transform: scale(0.98);
+  background-color: #d0d0d0;
+
+}
+
+.book-container .selected-count {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-weight: 500;
+
+}
+
+.book-container .organize-bottom-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: calc(72px + env(safe-area-inset-bottom, 0));
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  background-color: var(--bg-secondary);
+  border-top: 1px solid var(--border-light);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px 12px;
+  z-index: 3000;
+  pointer-events: auto;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.15);
+  overflow-x: auto;
+
+}
+
+.book-container .organize-tool-btn {
+  width: 52px;
+  height: 52px;
+  border: none;
+  border-radius: 50%;
+  background-color: #f5f5f5;
+  color: #555555;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  min-width: 52px;
+  min-height: 52px;
+
+}
+
+.book-container .organize-tool-btn svg {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+  transition: all 0.2s ease;
+
+}
+
+.book-container .organize-tool-btn:hover {
+  background-color: #e0e0e0;
+  color: #333333;
+  transform: translateY(-3px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.18);
+
+}
+
+.book-container .organize-tool-btn:active {
+  transform: translateY(-1px) scale(0.92);
+  background-color: #d0d0d0;
+
+}
+
+.book-container .organize-btn-delete {
+  background-color: #ffebee;
+  color: #d32f2f;
+
+}
+
+.book-container .organize-btn-delete:hover {
+  background-color: #ffcdd2;
+  color: #c62828;
+  box-shadow: 0 6px 12px rgba(211, 47, 47, 0.3);
+
+}
+
+.book-container .organize-btn-delete svg {
+  fill: currentColor;
+
+}
+
+.book-container .organize-btn-exit {
+  background-color: var(--primary-color, #FF6B35);
+  color: #fff;
+
+}
+
+.book-container .organize-btn-exit:hover {
+  background-color: #e65a2f;
+  box-shadow: 0 6px 16px rgba(255, 107, 53, 0.35);
+
+}
+
+.book-container .organize-btn-exit:active {
+  background-color: #cc5629;
+
+}
+
+.book-container .organize-btn-exit svg {
+  fill: currentColor;
+
+}
+
+/* 书籍卡片选择状态 */
+.book-container .book-card--organize {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+
+}
+
+.book-container .book-card--organize:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+
+}
+
+.book-container .book-card--selected {
+  border-color: var(--primary-color, #FF6B35) !important;
+  box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.15);
+
+}
+
+.book-container .book-card--organize:active {
+  transform: scale(0.98);
+
+}
+
+/* 整理模式下的书籍选择复选框 - 定位在封面左上角 */
+.book-container .book-select-checkbox {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 22px;
+  height: 22px;
+  z-index: 20;
+  background-color: rgba(255, 255, 255, 0.95);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  pointer-events: none;
+  color: var(--primary-color, #FF6B35);
+}
+
+.book-container .book-select-checkbox svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+}
+
+/* 列表模式下的复选框位置微调 */
+.book-container .book-card--list .book-select-checkbox {
+  top: 6px;
+  left: 6px;
+  width: 20px;
+  height: 20px;
+}
+
+.book-container .book-card--list .book-select-checkbox svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* 整理模式下的编辑/删除操作按钮 - 定位在封面右上角 */
+.book-container .book-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 6px;
+  z-index: 20;
+}
+
+.book-container .book-card--list .book-actions {
+  top: 6px;
+  right: 6px;
+  gap: 4px;
+}
+
+.book-container .action-btn-sm {
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 50%;
+  background-color: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #555;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.book-container .action-btn-sm:hover {
+  background-color: #fff;
+  color: var(--primary-color, #FF6B35);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.2);
+}
+
+.book-container .action-btn-sm:active {
+  transform: translateY(0);
+}
+
+.book-container .action-btn-sm svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+
+.book-container .book-card--list .action-btn-sm {
+  width: 24px;
+  height: 24px;
+}
+
+.book-container .book-card--list .action-btn-sm svg {
+  width: 12px;
+  height: 12px;
+}
+
+.book-container .select-checkbox {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 24px;
+  height: 24px;
+  z-index: 10;
+  background-color: rgba(255, 255, 255, 0.95);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  pointer-events: none;
+
+}
+
+.book-container .select-checkbox svg {
+  width: 20px;
+  height: 20px;
+  fill: var(--primary-color, #FF6B35);
+
+}
+
+/* 整理模式下内容区域下移，避免被顶部栏遮挡 */
+.book-container .container:has(.organize-mode-overlay) .content {
+  padding-top: 60px;
+  padding-bottom: 80px;
+
+}
+
+@media (max-width: 640px) {
+  .book-container .container:has(.organize-mode-overlay) .content {
+    padding-bottom: 72px;
+
+}
+}
+
+@media (max-width: 480px) {
+  .book-container .container:has(.organize-mode-overlay) .content {
+    padding-bottom: 64px;
+
+}
+}
+
+/* 响应式设计 */
+@media (max-width: 640px) {
+  .book-container .actions {
+    bottom: 6px;
+    right: 6px;
+    padding: 3px;
+    gap: 3px;
+
+}
+
+  .book-container .action-btn-sm {
+    width: 24px;
+    height: 24px;
+
+}
+
+  .book-container .action-btn-sm svg {
+    width: 12px;
+    height: 12px;
+
+}
+
+  .book-container .organize-bottom-bar {
+    height: calc(64px + env(safe-area-inset-bottom, 0));
+    gap: 8px;
+    padding: 6px 10px;
+
+}
+
+  .book-container .organize-tool-btn {
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    min-height: 48px;
+
+}
+
+  .book-container .organize-tool-btn svg {
+    width: 22px;
+    height: 22px;
+
+}
+
+  .book-container .organize-tool-btn:hover {
+    transform: translateY(-2px);
+
+}
+
+  .book-container .organize-action-btn {
+    padding: 6px 12px;
+    font-size: 13px;
+
+}
+
+  .book-container .organize-action-btn svg {
+    width: 16px;
+    height: 16px;
+
+}
+
+  .book-container .select-checkbox {
+    width: 20px;
+    height: 20px;
+
+}
+
+  .book-container .select-checkbox svg {
+    width: 16px;
+    height: 16px;
+
+}
+}
+
+@media (max-width: 480px) {
+  .book-container .organize-bottom-bar {
+    height: calc(56px + env(safe-area-inset-bottom, 0));
+    gap: 6px;
+    padding: 4px 8px;
+
+}
+
+  .book-container .organize-tool-btn {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+
+}
+
+  .book-container .organize-tool-btn svg {
+    width: 20px;
+    height: 20px;
+
+}
+
+  .book-container .organize-tool-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+
+}
+
+  .book-container .organize-top-bar {
+    padding: 0 12px;
+
+}
+
+  .book-container .organize-action-btn {
+    padding: 5px 10px;
+    font-size: 12px;
+
+}
+}
+
+/* 整理模式下隐藏全局底部导航栏 */
+.book-container .container:has(.organize-mode-overlay) ~ .bottom-nav {
+  display: none !important;
+
+}
+
+/* ==================== 高级筛选样式 ==================== */
+
+.book-container .filter-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 2000;
+
+}
+
+.book-container .filter-dialog {
+  background-color: #fff;
+  border-radius: 16px 16px 0 0;
+  width: 100%;
+  max-width: 600px;
+  max-height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+
+}
+
+.book-container .filter-header {
+  display: flex;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-light);
+  gap: 12px;
+
+}
+
+.book-container .filter-title {
+  flex: 1;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+
+}
+
+.book-container .filter-count {
+  font-size: 12px;
+  color: var(--text-hint);
+  padding: 4px 8px;
+  background-color: rgba(255, 107, 53, 0.1);
+  border-radius: 12px;
+
+}
+
+.book-container .filter-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+
+}
+
+.book-container .filter-section {
+  margin-bottom: 24px;
+
+}
+
+.book-container .filter-section:last-child {
+  margin-bottom: 0;
+
+}
+
+.book-container .filter-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+
+}
+
+.book-container .filter-options {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+
+}
+
+.book-container .filter-option-btn {
+  padding: 6px 16px;
+  border: 1px solid var(--border-color);
+  background-color: #fff;
+  border-radius: 20px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+}
+
+.book-container .filter-option-btn:hover {
+  background-color: #f5f5f5;
+  border-color: var(--primary-color, #FF6B35);
+
+}
+
+.book-container .filter-option-btn--active {
+  background-color: rgba(255, 107, 53, 0.1);
+  border-color: var(--primary-color, #FF6B35);
+  color: var(--primary-color, #FF6B35);
+  font-weight: 500;
+
+}
+
+.book-container .tags-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+
+}
+
+.book-container .tags-filter-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 4px 0 8px 0;
+  padding: 6px 10px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background: #fafafa;
+  transition: border-color 0.2s ease, background 0.2s ease;
+
+}
+
+.book-container .tags-filter-search:focus-within {
+  border-color: #ff6b35;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.08);
+
+}
+
+.book-container .tags-filter-search-icon {
+  width: 14px;
+  height: 14px;
+  color: #999;
+  flex-shrink: 0;
+
+}
+
+.book-container .tags-filter-search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  padding: 0 8px;
+  font-size: 13px;
+  color: #333;
+  background: transparent;
+
+}
+
+.book-container .tags-filter-search-input::placeholder {
+  color: #aaa;
+
+}
+
+.book-container .tags-filter-search-clear {
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: #e0e0e0;
+  color: #999;
+  border-radius: 50%;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+}
+
+.book-container .tags-filter-search-clear:hover {
+  background: #ff6b35;
+  color: #fff;
+
+}
+
+.book-container .filter-tag {
+  padding: 6px 14px;
+  border: 1px solid var(--border-color);
+  background-color: #fff;
+  border-radius: 16px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+}
+
+.book-container .filter-tag:hover {
+  border-color: var(--primary-color, #FF6B35);
+
+}
+
+.book-container .filter-tag--active {
+  background-color: rgba(255, 107, 53, 0.1);
+  border-color: var(--primary-color, #FF6B35);
+  color: var(--primary-color, #FF6B35);
+
+}
+
+.book-container .no-tags {
+  color: var(--text-hint);
+  font-size: 13px;
+  padding: 8px 0;
+
+}
+
+.book-container .filter-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: #fff;
+
+}
+
+.book-container .search-icon-small {
+  width: 16px;
+  height: 16px;
+  fill: var(--text-hint);
+  flex-shrink: 0;
+
+}
+
+.book-container .filter-input {
+  flex: 1;
+  padding: 8px;
+  border: none;
+  outline: none;
+  font-size: 14px;
+  color: var(--text-primary);
+  min-width: 0;
+
+}
+
+.book-container .filter-input::placeholder {
+  color: var(--text-hint);
+
+}
+
+.book-container .clear-input-btn {
+  width: 20px;
+  height: 20px;
+  border: none;
+  background-color: #f0f0f0;
+  border-radius: 50%;
+  color: var(--text-hint);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  transition: all 0.2s ease;
+
+}
+
+.book-container .clear-input-btn:hover {
+  background-color: #e0e0e0;
+  color: var(--text-primary);
+
+}
+
+.book-container .filter-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: #fff;
+  font-size: 14px;
+  color: var(--text-primary);
+  outline: none;
+  cursor: pointer;
+
+}
+
+.book-container .filter-select:focus {
+  border-color: var(--primary-color, #FF6B35);
+
+}
+
+.book-container .filter-footer {
+  display: flex;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-light);
+
+}
+
+/* ==================== 筛选按钮样式 ==================== */
+
+.book-container .filter-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px solid var(--border-color);
+  background-color: #fff;
+  border-radius: 20px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+
+}
+
+.book-container .filter-btn:hover {
+  background-color: #f5f5f5;
+  border-color: var(--primary-color, #FF6B35);
+
+}
+
+.book-container .filter-btn--active {
+  background-color: rgba(255, 107, 53, 0.1);
+  border-color: var(--primary-color, #FF6B35);
+  color: var(--primary-color, #FF6B35);
+  font-weight: 500;
+
+}
+
+.book-container .filter-icon {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+
+}
+
+.book-container .filter-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  background-color: var(--primary-color, #FF6B35);
+  color: #fff;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 18px;
+
+}
+
+/* 返回顶部按钮 */
+.book-container .back-to-top-btn {
+  position: fixed;
+  right: 20px;
+  bottom: calc(80px + env(safe-area-inset-bottom, 0));
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ff6b35 0%, #ff8c5a 100%);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(255, 107, 53, 0.3);
+  z-index: 500;
+  transition: all 0.3s ease;
+
+}
+
+.book-container .back-to-top-btn:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 6px 16px rgba(255, 107, 53, 0.4);
+
+}
+
+.book-container .back-to-top-btn:active {
+  transform: translateY(-1px);
+
+}
+
+.book-container .back-to-top-btn svg {
+  width: 28px;
+  height: 28px;
+  fill: currentColor;
+
+}
+
+/* 返回顶部按钮过渡动画 */
+.book-container .fade-enter-active, .book-container .fade-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+
+}
+
+.book-container .fade-enter-from, .book-container .fade-leave-to {
+  opacity: 0;
+  transform: translateY(20px);
+
+}
+
+/* 筛选条件 chip 展示（"全部书籍"标题左侧） */
+.book-container .books-section .section-title .filter-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-left: 12px;
+  font-weight: normal;
+  font-size: 12px;
+}
+
+.book-container .books-section .section-title .filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 10px;
+  background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+  color: #e65100;
+  border: 1px solid #ffcc80;
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 18px;
+  max-width: 240px;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.book-container .books-section .section-title .filter-chip:hover {
+  background: linear-gradient(135deg, #ffe0b2 0%, #ffcc80 100%);
+  border-color: #ff9800;
+}
+
+.book-container .books-section .section-title .filter-chip__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.book-container .books-section .section-title .filter-chip__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: #e65100;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.book-container .books-section .section-title .filter-chip__close:hover {
+  background: rgba(230, 81, 0, 0.15);
+  color: #bf360c;
+}

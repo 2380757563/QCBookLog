@@ -19,6 +19,7 @@ RUN npm install --prefer-offline --no-audit --no-fund --legacy-peer-deps --ignor
 
 # 复制源代码（排除 server 目录）
 COPY src/ ./src/
+COPY public/ ./public/
 COPY index.html ./
 COPY vite.config.ts ./
 COPY tsconfig.json ./
