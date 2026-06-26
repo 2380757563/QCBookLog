@@ -556,6 +556,19 @@ const formatDate = (dateStr: string): string => {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 };
 
+// 格式化日期时间（保留以备未来精确到时分秒的字段使用）
+const formatDateTime = (dateStr: string): string => {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return '';
+  const y = date.getFullYear();
+  const mo = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  const h = String(date.getHours()).padStart(2, '0');
+  const mi = String(date.getMinutes()).padStart(2, '0');
+  return `${y}-${mo}-${d} ${h}:${mi}`;
+};
+
 // 书籍来源显示映射
 const sourceLabelMap: Record<string, string> = {
   douban: '豆瓣读书',

@@ -1640,6 +1640,19 @@ onMounted(async () => {
       }
     }
 });
+
+// 将 ISO / DATETIME 字符串转换为 <input type="datetime-local"> 需要的本地时间格式（YYYY-MM-DDTHH:mm）
+const toDatetimeLocalValue = (dateStr: string): string => {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const h = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `${y}-${mo}-${day}T${h}:${mi}`;
+};
 </script>
 
 <style scoped>
