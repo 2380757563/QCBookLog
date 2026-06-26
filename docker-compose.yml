@@ -1,7 +1,7 @@
 services:
   # 前端服务 - Nginx
   frontend:
-    image: crpi-bpk9dy6331fn5ymt.cn-hangzhou.personal.cr.aliyuncs.com/unripora/qc-booklog-frontend:v0.9.91
+    image: crpi-bpk9dy6331fn5ymt.cn-hangzhou.personal.cr.aliyuncs.com/unripora/qc-booklog-frontend:v0.9.12
     container_name: qc-booklog-frontend
     ports:
      - "7403:80"
@@ -41,7 +41,7 @@ services:
 
   # 后端服务保持不变
   backend:
-    image: crpi-bpk9dy6331fn5ymt.cn-hangzhou.personal.cr.aliyuncs.com/unripora/qc-booklog-backend:v0.9.91
+    image: crpi-bpk9dy6331fn5ymt.cn-hangzhou.personal.cr.aliyuncs.com/unripora/qc-booklog-backend:v0.9.12
     container_name: qc-booklog-backend
     networks:
       - qc-booklog-network

@@ -83,6 +83,7 @@ class QcBooklogQcBookdataRepository extends BaseRepository {
           updates.push('purchase_date = ?');
           values.push(data.purchase_date);
         }
+
         if (data.binding1 !== undefined) {
           updates.push('binding1 = ?');
           values.push(normalizedBindings ? normalizedBindings.binding1 : data.binding1);
