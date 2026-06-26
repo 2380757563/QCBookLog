@@ -3,7 +3,7 @@
     <!-- 用户信息卡片 -->
     <div class="user-card">
       <div class="avatar">
-        <span>📚</span>
+        <img src="/logo.png" alt="青橙读书记录" class="avatar-logo" />
       </div>
       <div class="user-info">
         <h2 class="username">青橙读书记录</h2>
@@ -230,7 +230,7 @@
       </div>
 
       <div class="version-info">
-        <p>青橙读书记录 v0.9.90</p>
+        <p>青橙读书记录 v0.9.91</p>
         <p>Made with ❤️ for readers</p>
       </div>
     </div>
@@ -471,6 +471,16 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   font-size: 32px;
+  overflow: hidden;
+}
+
+.avatar-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  /* 适配深色背景：保持 logo 颜色与卡片风格一致 */
+  border-radius: 50%;
 }
 
 .user-info {

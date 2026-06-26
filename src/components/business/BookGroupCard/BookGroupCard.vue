@@ -227,9 +227,9 @@ const displayBooks = computed(() => {
   return props.books.slice(0, props.maxThumbnails);
 });
 
-// 显示的书籍数量（优先使用后端返回的 bookCount）
+// 显示的书籍数量（优先使用实际 books 数组长度，响应式反映最新数据；仅在 books 为空时回退到后端 bookCount）
 const displayBookCount = computed(() => {
-  return props.group.bookCount ?? props.books.length;
+  return props.books.length > 0 ? props.books.length : (props.group.bookCount ?? 0);
 });
 
 // 缩略图加载成功
