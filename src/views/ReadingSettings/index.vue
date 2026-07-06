@@ -134,6 +134,47 @@
         </div>
       </div>
 
+      <!-- 年份书签设置 -->
+      <div class="settings-section">
+        <h2 class="section-title">📑 年份书签</h2>
+        <p class="section-desc">配置热力图顶部书签标签的显示范围</p>
+
+        <div class="bookmark-range-options">
+          <button
+            v-for="opt in bookmarkRangeOptions"
+            :key="opt.value"
+            :class="['range-btn', { active: bookmarkRange === opt.value }]"
+            @click="setBookmarkRange(opt.value)"
+          >
+            {{ opt.label }}
+          </button>
+        </div>
+
+        <div class="setting-item">
+          <div class="setting-header">
+            <label class="setting-label">热力图起始年份</label>
+            <span class="setting-value">{{ startYear }}年</span>
+          </div>
+          <input
+            type="number"
+            class="year-input"
+            :min="minStartYear"
+            :max="currentYear"
+            :value="startYear"
+            @input="onStartYearInput"
+            @change="onStartYearCommit"
+          />
+          <p class="setting-desc">
+            最早显示的年份（范围 {{ minStartYear }} ~ {{ currentYear }}），输入后失焦或回车即可保存
+          </p>
+          <div v-if="showPerfWarning" class="setting-warning">
+            ⚠️ 起始年份 {{ startYear }} 到 {{ currentYear }} 跨度为 {{ startYearSpan }} 年，
+            渲染列数过多可能导致浏览器卡顿，建议设置不超过 15 年。
+            <button class="warning-action" @click="resetStartYearToSafe">恢复推荐值</button>
+          </div>
+        </div>
+      </div>
+
       <!-- 其他阅读设置 -->
       <div class="settings-section">
         <h2 class="section-title">其他设置</h2>
@@ -263,6 +304,73 @@ const applyPreset = (preset: 'veryLow' | 'low' | 'medium' | 'high') => {
 const resetHeatmapSettings = () => {
   heatmapSettingsStore.resetToDefaults();
   currentPreset.value = 'medium';
+};
+
+// ==================== 年份书签 ====================
+const bookmarkRangeOptions = [
+  { value: '3y', label: '近3年' },
+  { value: '5y', label: '近5年' },
+  { value: '10y', label: '近10年' },
+  { value: 'all', label: '全部' }
+] as const;
+
+const bookmarkRange = computed({
+  get: () => heatmapSettingsStore.bookmarkRange,
+  set: (v: '3y' | '5y' | '10y' | 'all') => {
+    heatmapSettingsStore.setBookmarkRange(v);
+  }
+});
+
+const setBookmarkRange = (v: '3y' | '5y' | '10y' | 'all') => {
+  heatmapSettingsStore.setBookmarkRange(v);
+};
+
+// 起始年份：受 store 双向控制
+const startYear = computed({
+  get: () => heatmapSettingsStore.startYear,
+  set: (v: number) => {
+    heatmapSettingsStore.setStartYear(v);
+  }
+});
+const currentYear = new Date().getFullYear();
+const minStartYear = computed(() => heatmapSettingsStore.minStartYear);
+const startYearSpan = computed(() => heatmapSettingsStore.startYearSpan);
+const showPerfWarning = computed(() => heatmapSettingsStore.shouldWarnPerformance);
+
+/**
+ * input 阶段：只暂存用户原始输入到 dataset.pendingValue，
+ * 不直接修改 store，避免 NaN 触发 Vue 警告 / 渲染错误。
+ * 真正提交在 onStartYearCommit（change 事件：失焦 / 回车 / 滚轮 / 上下箭头）。
+ */
+const onStartYearInput = (e: Event) => {
+  const target = e.target as HTMLInputElement;
+  target.dataset.pendingValue = target.value; // 保留原始字符串（含空、负数、小数等）
+};
+
+/**
+ * 提交：校验 + 持久化
+ * - 空 / NaN / 越界 → 自动 clamp 到 [minStartYear, currentYear]
+ * - 合法 → 立即写入 store（saveToStorage 内部完成持久化）
+ */
+const onStartYearCommit = (e: Event) => {
+  const target = e.target as HTMLInputElement;
+  const raw = target.dataset.pendingValue ?? target.value;
+  const parsed = parseInt(raw, 10);
+  const safe = isNaN(parsed)
+    ? heatmapSettingsStore.startYear
+    : Math.max(minStartYear.value, Math.min(parsed, currentYear));
+  // 同步 UI 数值（若用户输入非法，强制恢复成合法值）
+  target.value = String(safe);
+  target.dataset.pendingValue = '';
+  startYear.value = safe;
+};
+
+/**
+ * 恢复推荐起始年份：当前年 - 5 年（保证 < 15 年安全跨度）
+ */
+const resetStartYearToSafe = () => {
+  const safe = Math.max(minStartYear.value, currentYear - 5);
+  startYear.value = safe;
 };
 
 const saveSettings = () => {
@@ -658,6 +766,94 @@ onMounted(() => {
 
 .action-section {
   padding: 1rem 0 0 0;
+}
+
+.bookmark-range-options {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.range-btn {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  background-color: #fff;
+  color: #333;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.range-btn:hover {
+  border-color: #8FA4B8;
+  background-color: #f5f8fb;
+}
+
+.range-btn.active {
+  border-color: #6B8E7A;
+  background-color: #6B8E7A;
+  color: #F5F0E1;
+}
+
+.year-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  margin-top: 0.5rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 500;
+  color: #333;
+  background-color: #fff;
+  transition: border-color 0.2s ease;
+  -moz-appearance: textfield;
+}
+
+.year-input::-webkit-outer-spin-button,
+.year-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.year-input:focus {
+  outline: none;
+  border-color: #6B8E7A;
+}
+
+/* 性能警告提示框 */
+.setting-warning {
+  margin-top: 12px;
+  padding: 12px 16px;
+  background-color: #fff7e6;
+  border: 1px solid #ffd591;
+  border-left: 4px solid #ff8800;
+  border-radius: 6px;
+  color: #874d00;
+  font-size: 13px;
+  line-height: 1.6;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.warning-action {
+  margin-left: auto;
+  padding: 4px 12px;
+  background-color: #ff8800;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.warning-action:hover {
+  background-color: #e67700;
 }
 
 .btn-primary {

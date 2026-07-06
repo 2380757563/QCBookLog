@@ -41,7 +41,7 @@ services:
 
   # 后端服务保持不变
   backend:
-    image: crpi-bpk9dy6331fn5ymt.cn-hangzhou.personal.cr.aliyuncs.com/unripora/qc-booklog-backend:v0.9.12
+    image: crpi-bpk9dy6331fn5ymt.cn-hangzhou.personal.cr.aliyuncs.com/unripora/qc-booklog-backend:v0.9.13
     container_name: qc-booklog-backend
     networks:
       - qc-booklog-network
@@ -63,9 +63,9 @@ services:
       - QCBOOKLOG_DB_PATH=/app/data/qc-booklog.db
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - LOG_PATH=/app/data/logs
-      - TANSHU_API_KEY=bc621345d6f1908f5fff0c062708ed1d
-      - DOUBAN_API_KEY=0ac44ae016490db2204ce0a042db2916
-      - ISBN_WORK_API_KEY=ae1718d4587744b0b79f940fbef69e77
+      - TANSHU_API_KEY=${TANSHU_API_KEY}
+      - DOUBAN_API_KEY=${DOUBAN_API_KEY}
+      - ISBN_WORK_API_KEY=${ISBN_WORK_API_KEY}
       - MAX_FILE_SIZE=${MAX_FILE_SIZE:-20}
       - CORS_ORIGIN=${CORS_ORIGIN:-*}
       - SYNC_INTERVAL=${SYNC_INTERVAL:-300000}

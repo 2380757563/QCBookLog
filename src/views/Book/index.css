@@ -3089,3 +3089,65 @@
   background: rgba(230, 81, 0, 0.15);
   color: #bf360c;
 }
+
+/* ============================================ */
+/* 移动端自动模式多列布局修复                       */
+/* ============================================ */
+@media (max-width: 640px) {
+  /* 自动模式：降低 minmax 最小宽度，让小屏能容纳 2 列 */
+  .book-container .book-grid--grid.book-grid-cols-auto {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 10px;
+  }
+  /* 自动模式：分组网格也降低最小宽度 */
+  .book-container .groups-grid.book-grid-cols-auto {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 10px;
+  }
+  /* 单列时缩小到 2 列布局，避免单一整列占满屏幕 */
+  .book-container .book-grid--grid.book-grid-cols-1 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  /* 2列时仍保持 2 列但卡片更紧凑 */
+  .book-container .book-grid--grid.book-grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  /* 3列及以上保持用户设置 */
+  .book-container .book-grid--grid.book-grid-cols-3,
+  .book-container .book-grid--grid.book-grid-cols-4,
+  .book-container .book-grid--grid.book-grid-cols-5,
+  .book-container .book-grid--grid.book-grid-cols-6 {
+    gap: 8px;
+  }
+  .book-container .groups-grid.book-grid-cols-1 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .book-container .groups-grid.book-grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  /* 极窄屏：自动模式进一步压缩到 2 列 */
+  .book-container .book-grid--grid.book-grid-cols-auto {
+    grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
+    gap: 8px;
+  }
+  .book-container .groups-grid.book-grid-cols-auto {
+    grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
+    gap: 8px;
+  }
+  /* 高列数（如 3-4 列）在极窄屏降为 2 列 */
+  .book-container .book-grid--grid.book-grid-cols-3,
+  .book-container .book-grid--grid.book-grid-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+  .book-container .groups-grid.book-grid-cols-3,
+  .book-container .groups-grid.book-grid-cols-4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+}

@@ -230,7 +230,7 @@
       </div>
 
       <div class="version-info">
-        <p>青橙读书记录 v0.9.12</p>
+        <p>青橙读书记录 v0.9.13</p>
         <p>Made with ❤️ for readers</p>
       </div>
     </div>

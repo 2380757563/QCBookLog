@@ -13,54 +13,88 @@
       </div>
 
       <div class="scroll-heatmap-content-wrapper">
-        <div class="scroll-heatmap-container" ref="scrollHeatmapContainer">
-          <!-- 卷轴格子主体（列优先排列：N列×7行） -->
-          <div
-            class="scroll-heatmap-wrapper"
-            ref="scrollHeatmapWrapper"
-            @scroll="handleScrollHeatmapScroll"
-          >
-            <!-- 列上方时间标注 -->
-            <div class="scroll-heatmap-months">
-              <div
-                v-for="(monthInfo, colIndex) in scrollHeatmapMonths"
-                :key="`month-${colIndex}`"
-                class="scroll-month-label"
-              >
-                <div class="scroll-month-year">{{ monthInfo.year }}</div>
-                <div class="scroll-month-name">{{ monthInfo.month }}</div>
-              </div>
-            </div>
+        <!-- 年份书签：贴在热力图框顶部左侧，底部与框线连接，类似文件夹标签 -->
+        <div class="heatmap-bookmark-bar">
+          <YearBookmark
+            ref="yearBookmarkRef"
+            :years="bookmarkYears"
+            @select="handleBookmarkYearSelect"
+            @scroll="handleBookmarkScroll"
+            @toggle="handleBookmarkToggle"
+          />
+        </div>
 
-            <div class="scroll-heatmap-grid" :style="{ '--total-columns': heatmapMaxColumns }">
-              <!-- 热力图格子（列优先：每列从上到下填充7天） -->
+        <div class="scroll-heatmap-container" ref="scrollHeatmapContainer">
+          <!-- 月份标签条：放在卷轴格子之上，与格子共享同一水平滚动，
+               通过独立的列宽映射与格子严格对齐，避免遮挡热力图内容 -->
+          <div class="scroll-month-rail-wrapper">
+            <div
+              class="scroll-month-rail"
+              :style="{ '--total-columns': heatmapMaxColumns }"
+            >
               <div
-                  v-for="(column, colIndex) in scrollHeatmapColumnsData"
-                  :key="`col-${colIndex}`"
-                  class="heatmap-column"
-                >
-                <div
-                  v-for="(day, rowIndex) in column"
-                  :key="`${day.date}-${colIndex}-${rowIndex}`"
-                  class="scroll-heatmap-cell"
-                  :class="[
-                    getHeatmapClass(day.count),
-                    { 'scroll-cell--today': day.isToday }
-                  ]"
-                  :title="`${day.date}: ${day.count}条记录`"
-                  @click="handleScrollHeatmapCellClick(day)"
-                >
-                  <div class="scroll-cell-content"></div>
+                v-for="(monthGroup, groupIndex) in scrollHeatmapMonths"
+                :key="`month-group-${groupIndex}`"
+                class="scroll-month-group"
+                :style="{
+                  '--group-start': monthGroup.startCol + 1,
+                  '--group-span': monthGroup.span
+                }"
+              >
+                <div class="scroll-month-label">
+                  <div class="scroll-month-year">{{ monthGroup.year }}</div>
+                  <div class="scroll-month-name">{{ monthGroup.month }}</div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      </div>
 
-      <!-- 右侧固定星期标识栏 -->
-      <div class="scroll-heatmap-weekdays-sidebar">
-        <span v-for="day in ['日', '一', '二', '三', '四', '五', '六']" :key="day" class="scroll-weekday-sidebar">{{ day }}</span>
+          <!-- 卷轴格子主体 + 右侧固定星期标识栏（行布局） -->
+          <div class="scroll-heatmap-body">
+            <div
+              class="scroll-heatmap-wrapper"
+              :class="{ 'is-scrolling': isScrolling }"
+              ref="scrollHeatmapWrapper"
+              @scroll="handleScrollHeatmapScroll"
+            >
+              <!-- 热力图格子（列优先：每列从上到下填充7天）；
+                   列与列之间有 8px（桌面）/ 4px（移动）gap，避免方格黏连 -->
+              <div
+                class="scroll-heatmap-grid"
+                :style="{
+                  '--total-columns': heatmapMaxColumns,
+                  '--cell-size': getScrollCellWidthPx,
+                  '--column-gap': getScrollColumnGapPx
+                }"
+              >
+                <div
+                    v-for="(column, colIndex) in scrollHeatmapColumnsData"
+                    :key="`col-${colIndex}`"
+                    class="heatmap-column"
+                  >
+                  <div
+                    v-for="(day, rowIndex) in column"
+                    :key="`${day.date}-${colIndex}-${rowIndex}`"
+                    class="scroll-heatmap-cell"
+                    :class="[
+                      getHeatmapClass(day.count),
+                      { 'scroll-cell--today': day.isToday }
+                    ]"
+                    :title="`${day.date}: ${day.count}条记录`"
+                    @click="handleScrollHeatmapCellClick(day)"
+                  >
+                    <div class="scroll-cell-content"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 右侧固定星期标识栏 -->
+            <div class="scroll-heatmap-weekdays-sidebar">
+              <span v-for="day in ['日', '一', '二', '三', '四', '五', '六']" :key="day" class="scroll-weekday-sidebar">{{ day }}</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- 右侧透明大箭头 -->
@@ -89,6 +123,7 @@ import { useBookmarkStore } from '@/store/bookmark';
 import activityService from '@/services/activity';
 import { useEventBus } from '@/utils/eventBus';
 import { useHeatmapSettingsStore } from '@/store/heatmapSettings';
+import YearBookmark from '@/components/YearBookmark/YearBookmark.vue';
 
 const router = useRouter();
 const bookmarkStore = useBookmarkStore();
@@ -100,13 +135,120 @@ const scrollHeatmapOffset = ref(0);
 const scrollHeatmapScrollLeft = ref(0);
 const scrollHeatmapContainer = ref<HTMLElement | null>(null);
 const scrollHeatmapWrapper = ref<HTMLElement | null>(null);
+const yearBookmarkRef = ref<InstanceType<typeof import('@/components/YearBookmark/YearBookmark.vue').default> | null>(null);
+
+/**
+ * 滚动状态标记（性能优化）
+ * - true：父级 wrapper 加 .is-scrolling 类，禁用 cell transition、降低合成压力
+ * - false：恢复 hover transition
+ * 触发：scroll 事件开始时设 true，100ms 内无 scroll 事件则 reset false
+ */
+const isScrolling = ref(false);
+let scrollIdleTimer: number | null = null;
+const SCROLL_IDLE_MS = 100;
 const scrollHeatmapYearMonth = ref('');
 const heatmapStartYear = ref(new Date().getFullYear() - 1);
 const heatmapEndYear = ref(new Date().getFullYear());
-const HEATMAP_MIN_YEAR = 2018;
+// 起始年份默认下界（防止未设置时无限回溯），可在 store 中由用户自定义更低
+const HEATMAP_DEFAULT_MIN_YEAR = 2000;
 const allActivities = ref<any[]>([]);
 const loadingActivities = ref(false);
 const scrollHeatmapColumnsData = ref<any[]>([]);
+
+// ==================== 年份书签 ====================
+
+/**
+ * 根据 bookmarkRange 配置计算要显示的年份列表（从小到大排序）
+ */
+const bookmarkYears = computed((): number[] => {
+  const currentYear = new Date().getFullYear();
+  const range = heatmapSettingsStore.bookmarkRange;
+  // 用户自定义起始年份（无 2018 硬编码限制）
+  const userStart = heatmapSettingsStore.startYear || HEATMAP_DEFAULT_MIN_YEAR;
+  let startYear: number;
+
+  switch (range) {
+    case '3y':
+      startYear = currentYear - 2; // 近3年（含今年）
+      break;
+    case '5y':
+      startYear = currentYear - 4; // 近5年
+      break;
+    case '10y':
+      startYear = currentYear - 9; // 近10年
+      break;
+    case 'all':
+    default:
+      startYear = HEATMAP_DEFAULT_MIN_YEAR;
+      break;
+  }
+
+  // 用户自定义起始年份取较新值（即用户设置 = 锚定下界）
+  startYear = Math.max(startYear, userStart);
+  const years: number[] = [];
+  for (let y = startYear; y <= currentYear; y++) {
+    years.push(y);
+  }
+  return years;
+});
+
+/**
+ * 点击书签跳转到对应年份（1月1日所在列居中）
+ */
+const handleBookmarkYearSelect = (year: number) => {
+  const wrapper = scrollHeatmapWrapper.value;
+  if (!wrapper) return;
+
+  const columns = scrollHeatmapColumnsData.value;
+  if (columns.length === 0) return;
+
+  // 找到该年 1 月第一列的索引
+  let targetIdx = -1;
+  for (let i = 0; i < columns.length; i++) {
+    const col = columns[i];
+    if (col.length === 0) continue;
+    const firstDate = new Date(col[0].date);
+    if (firstDate.getFullYear() === year) {
+      targetIdx = i;
+      break;
+    }
+  }
+
+  if (targetIdx === -1) return;
+
+  const isMobile = window.innerWidth <= 768;
+  const cellWidth = isMobile ? 20 : 48;
+  const scrollTo = Math.max(0, targetIdx * cellWidth - wrapper.offsetWidth / 2);
+  wrapper.scrollTo({ left: scrollTo, behavior: 'smooth' });
+};
+
+/**
+ * 书签划动时同步热力图 scrollLeft（仅在书签展开态有意义）
+ * @param scrollLeftPx 书签 track 的偏移量（px）
+ */
+const handleBookmarkScroll = (scrollLeftPx: number) => {
+  const wrapper = scrollHeatmapWrapper.value;
+  if (!wrapper) return;
+  // 书签步进宽 = 40 + 4 = 44；热力图 cell 宽 = 48(桌面) / 20(移动) + 8/4 gap
+  // 比例换算：scrollLeftHeatmap ≈ scrollLeftBookmark * (heatmapStep / bookmarkStep)
+  const isMobile = window.innerWidth <= 768;
+  const heatmapCellW = isMobile ? 20 : 48;
+  const heatmapGap = isMobile ? 4 : 8;
+  const heatmapStep = heatmapCellW + heatmapGap;
+  const ratio = heatmapStep / 44;
+  wrapper.scrollTo({
+    left: scrollLeftPx * ratio,
+    behavior: 'auto'
+  });
+};
+
+/**
+ * 书签展开/收起状态变化（占位：可用于埋点 / 调整布局）
+ */
+const handleBookmarkToggle = (_expanded: boolean) => {
+  // 暂不处理，后续可在此处调整 month-rail / wrapper 高度
+  void _expanded;
+};
 
 // 计算热力图数据
 const computeHeatmapColumns = () => {
@@ -195,40 +337,90 @@ const computeHeatmapColumnsOptimized = () => {
   }
 };
 
-// 计算列上方的时间标注（月份和年份）
-const scrollHeatmapMonths = computed(() => {
+// 计算列上方的时间标注（按月分组合并，避免标签重叠遮挡）
+interface MonthGroup {
+  year: string;
+  month: string;
+  /** 起始列索引 */
+  startCol: number;
+  /** 跨越列数 */
+  span: number;
+}
+const scrollHeatmapMonths = computed<MonthGroup[]>(() => {
   const columns = scrollHeatmapColumnsData.value;
   if (columns.length === 0) return [];
 
-  const monthLabels: Array<{ year: string; month: string }> = [];
-  let lastMonth = '';
+  // 先识别出每个月的列范围（按该列的"主月"作为月分界）
+  // 主月：取该列中日期最多的月份；若并列则取第一行所属月份
+  const groups: MonthGroup[] = [];
+  let currentGroupKey = '';
+  let currentGroupStart = 0;
+  let currentGroupMonthLabel = '';
+  let currentGroupYearLabel = '';
+  let currentGroupMonthCount = 0;
 
-  columns.forEach((column, colIndex) => {
+  const flushGroup = (endCol: number) => {
+    if (currentGroupMonthCount === 0) return;
+    groups.push({
+      year: currentGroupYearLabel,
+      month: currentGroupMonthLabel,
+      startCol: currentGroupStart,
+      span: Math.max(1, endCol - currentGroupStart)
+    });
+  };
+
+  for (let colIndex = 0; colIndex < columns.length; colIndex++) {
+    const column = columns[colIndex];
     if (column.length === 0) {
-      monthLabels.push({ year: '', month: '' });
-      return;
+      // 空列，结束当前组
+      flushGroup(colIndex);
+      currentGroupKey = '';
+      currentGroupMonthCount = 0;
+      continue;
     }
 
-    // 获取该列第一个日期
-    const firstDate = new Date(column[0].date);
-    const year = firstDate.getFullYear();
-    const month = firstDate.getMonth() + 1;
-    const monthKey = `${year}-${month}`;
+    // 统计该列中每个月出现的次数
+    const monthCounter = new Map<string, number>();
+    let firstDate: Date | null = null;
+    for (const day of column) {
+      const d = new Date(day.date);
+      if (!firstDate) firstDate = d;
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      monthCounter.set(key, (monthCounter.get(key) || 0) + 1);
+    }
+    if (!firstDate) continue;
 
-    // 判断是否需要显示年份（只在1月份显示年份）
-    const showYear = month === 1;
-    const yearLabel = showYear ? `${year}` : '';
-    const monthLabel = `${month}月`;
+    // 找到出现次数最多的月份
+    let mainKey = '';
+    let maxCount = 0;
+    for (const [key, count] of monthCounter) {
+      if (count > maxCount) {
+        maxCount = count;
+        mainKey = key;
+      }
+    }
+    if (!mainKey) mainKey = `${firstDate.getFullYear()}-${firstDate.getMonth()}`;
 
-    monthLabels.push({
-      year: yearLabel,
-      month: monthLabel
-    });
+    if (mainKey !== currentGroupKey) {
+      // 月份变化，结束上一个组
+      flushGroup(colIndex);
+      const [y, m] = mainKey.split('-').map(Number);
+      currentGroupKey = mainKey;
+      currentGroupStart = colIndex;
+      currentGroupMonthLabel = `${m + 1}月`;
+      // 仅在 1 月或第一个组显示年份，避免信息冗余
+      currentGroupYearLabel = m === 0 ? `${y}` : '';
+      currentGroupMonthCount = maxCount;
+    } else {
+      currentGroupMonthCount += maxCount;
+    }
+  }
 
-    lastMonth = monthKey;
-  });
+  // 处理最后一组
+  flushGroup(columns.length);
 
-  return monthLabels;
+  // 过滤掉过窄的组（span < 1 几乎不可见），保留占位为空
+  return groups.filter(g => g.span >= 1);
 });
 
 // 计算热力图的最大列数
@@ -266,9 +458,9 @@ const updateScrollHeatmapYearMonth = () => {
 
     // 根据屏幕宽度计算格子宽度（与CSS保持一致）
     // 桌面端：40px（格子宽度）+ 8px（列之间的gap）= 48px
-    // 移动端：28px（格子宽度）+ 8px（列之间的gap）= 36px
+    // 移动端：16px（格子宽度）+ 4px（列之间的gap）= 20px
     const isMobile = window.innerWidth <= 768;
-    const cellWidth = isMobile ? 36 : 48;
+    const cellWidth = isMobile ? 20 : 48;
 
     // 计算可见的列范围
     const startColumnIndex = Math.floor(wrapper.scrollLeft / cellWidth);
@@ -301,14 +493,70 @@ const updateScrollHeatmapYearMonth = () => {
         scrollHeatmapYearMonth.value = formatScrollHeatmapYearMonth(firstDate);
       }
     }
+
+    // 根据可见区中心位置的列，计算当前展示的年份，同步到书签高亮
+    const centerColumnIndex = Math.floor(
+      (startColumnIndex + endColumnIndex) / 2
+    );
+    if (centerColumnIndex >= 0 && centerColumnIndex < columns.length) {
+      const centerCol = columns[centerColumnIndex];
+      if (centerCol && centerCol.length > 0 && centerCol[0].date) {
+        const centerYear = new Date(centerCol[0].date).getFullYear();
+        if (centerYear !== heatmapSettingsStore.selectedYear) {
+          heatmapSettingsStore.setSelectedYear(centerYear);
+        }
+      }
+    }
   });
 };
 
 // 卷轴热力图滚动处理
+/**
+ * 性能优化：滚动处理使用 rAF 节流
+ * - 同步月份标签条（高频）：用 rAF 合并多次滚动事件，每帧最多执行一次
+ * - 更新年月显示（低频）：已有 throttle，无需重复
+ * - 滚动状态标记：scroll 开始时设 true，停止 100ms 后设 false
+ */
+let scrollSyncFrameId: number | null = null;
 const handleScrollHeatmapScroll = (event: Event) => {
   const target = event.target as HTMLElement;
   scrollHeatmapScrollLeft.value = target.scrollLeft;
+
+  // 标记为滚动中（用于禁用 cell transition）
+  if (!isScrolling.value) {
+    isScrolling.value = true;
+  }
+  if (scrollIdleTimer != null) {
+    clearTimeout(scrollIdleTimer);
+  }
+  scrollIdleTimer = window.setTimeout(() => {
+    isScrolling.value = false;
+    scrollIdleTimer = null;
+  }, SCROLL_IDLE_MS);
+
+  // 同步月份标签条（rAF 节流：每帧最多一次）
+  if (scrollSyncFrameId === null) {
+    scrollSyncFrameId = requestAnimationFrame(() => {
+      scrollSyncFrameId = null;
+      syncMonthRailScroll();
+    });
+  }
+
+  // 更新年月显示（内部已节流）
   updateScrollHeatmapYearMonth();
+};
+
+/**
+ * 同步月份标签条的横向滚动位置
+ * 性能优化：使用 CSS 变量传递 scrollLeft，浏览器可在 compositor 线程处理，
+ * 避免 layout thrashing。
+ */
+const syncMonthRailScroll = () => {
+  const wrapper = scrollHeatmapWrapper.value;
+  const rail = document.querySelector('.scroll-month-rail-wrapper > .scroll-month-rail') as HTMLElement | null;
+  if (!wrapper || !rail) return;
+  // 用 CSS 变量触发 transform 更新（GPU 合成，不触发重排）
+  rail.style.setProperty('--rail-translate-x', `-${wrapper.scrollLeft}px`);
 };
 
 // 处理热力图滚轮事件，将垂直滚轮转换为水平滚动
@@ -522,23 +770,46 @@ const initHeatmapEventListeners = () => {
   });
 };
 
+// 计算当前设备下的格子宽度（桌面48 / 移动20）
+const getScrollCellWidth = () => (window.innerWidth <= 768 ? 20 : 48);
+
+/**
+ * 返回格子本身宽度（不含列间隙），用于 CSS 变量配置 grid 列宽；
+ * 注意：返回带 px 单位的字符串，否则 calc(var(--cell-size) + var(--column-gap))
+ * 会因无单位数字与带单位 px 相加类型不匹配而被浏览器解析为 0，导致所有列宽为 0、格子不可见。
+ * 桌面：40px；移动：16px
+ *
+ * 性能优化：改为 computed，依赖窗口宽度（响应式 + 缓存），避免每次重渲染调用函数
+ */
+const isMobileView = ref(typeof window !== 'undefined' && window.innerWidth <= 768);
+const handleViewportResize = () => {
+  isMobileView.value = window.innerWidth <= 768;
+};
+const getScrollCellWidthPx = computed(() => (isMobileView.value ? '16px' : '40px'));
+
+/**
+ * 返回列间距（带 px 单位的字符串），用于 CSS 变量 --column-gap；
+ * 桌面 8px；移动 4px
+ */
+const getScrollColumnGapPx = computed(() => (isMobileView.value ? '4px' : '8px'));
+
 // 卷轴热力图向左滚动（查看更早的数据）
 const scrollHeatmapLeftStep = () => {
   const wrapper = scrollHeatmapWrapper.value;
   if (!wrapper) return;
 
-  const cellWidth = 48; // 格子宽度40px + gap 8px
+  const cellWidth = getScrollCellWidth();
   const visibleColumns = Math.ceil(wrapper.offsetWidth / cellWidth);
-  
+
   // 平滑滚动，每次滚动可见列数的80%
   const scrollStep = Math.max(1, Math.floor(visibleColumns * 0.8));
   const newScrollLeft = Math.max(0, wrapper.scrollLeft - cellWidth * scrollStep);
-  
+
   wrapper.scrollTo({
     left: newScrollLeft,
     behavior: 'smooth'
   });
-  
+
   updateScrollHeatmapYearMonth();
 };
 
@@ -548,7 +819,7 @@ const scrollHeatmapRightStep = () => {
   if (!wrapper) return;
 
   const maxColumns = heatmapMaxColumns.value;
-  const cellWidth = 48; // 格子宽度40px + gap 8px
+  const cellWidth = getScrollCellWidth();
   const maxScrollLeft = maxColumns * cellWidth - wrapper.offsetWidth;
 
   const visibleColumns = Math.ceil(wrapper.offsetWidth / cellWidth);
@@ -596,9 +867,9 @@ const initHeatmapScrollToToday = () => {
   if (todayColumn >= 0) {
     // 根据屏幕宽度计算格子宽度（与CSS保持一致）
     // 桌面端：40px（格子宽度）+ 8px（列之间的gap）= 48px
-    // 移动端：28px（格子宽度）+ 8px（列之间的gap）= 36px
+    // 移动端：16px（格子宽度）+ 4px（列之间的gap）= 20px
     const isMobile = window.innerWidth <= 768;
-    const cellWidth = isMobile ? 36 : 48;
+    const cellWidth = isMobile ? 20 : 48;
 
     // 计算滚动位置，让今天在视图中居中
     const scrollToToday = Math.max(0, todayColumn * cellWidth - wrapper.offsetWidth / 2);
@@ -618,6 +889,8 @@ const getHeatmapClass = (count: number): string => {
 
 // 监听窗口大小变化，自适应热力图列数
 const handleResize = () => {
+  // 更新移动端标记
+  isMobileView.value = window.innerWidth <= 768;
   // 强制重新计算列数
   if (scrollHeatmapWrapper.value) {
     updateScrollHeatmapYearMonth();
@@ -642,6 +915,31 @@ onMounted(async () => {
   setTimeout(() => {
     initHeatmapScrollToToday();
   }, 300);
+});
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize);
+  // 清理所有未完成的 rAF
+  if (updateYearMonthThrottleId !== null) {
+    cancelAnimationFrame(updateYearMonthThrottleId);
+    updateYearMonthThrottleId = null;
+  }
+  if (wheelAnimationId !== null) {
+    cancelAnimationFrame(wheelAnimationId);
+    wheelAnimationId = null;
+  }
+  if (animationFrameId !== null) {
+    cancelAnimationFrame(animationFrameId);
+    animationFrameId = null;
+  }
+  if (scrollSyncFrameId !== null) {
+    cancelAnimationFrame(scrollSyncFrameId);
+    scrollSyncFrameId = null;
+  }
+  if (scrollIdleTimer !== null) {
+    clearTimeout(scrollIdleTimer);
+    scrollIdleTimer = null;
+  }
 });
 
 // 加载操作记录数据
@@ -678,6 +976,29 @@ const loadActivities = async () => {
 watch([heatmapStartYear, heatmapEndYear], () => {
   loadActivities();
 });
+
+// 监听书签范围变化，同步更新热力图数据范围
+watch(
+  () => heatmapSettingsStore.bookmarkRange,
+  () => {
+    const years = bookmarkYears.value;
+    if (years.length > 0) {
+      heatmapStartYear.value = years[0];
+      heatmapEndYear.value = years[years.length - 1];
+    }
+  },
+  { immediate: true }
+);
+
+// 监听用户自定义起始年份变化
+watch(
+  () => heatmapSettingsStore.startYear,
+  (newStart) => {
+    if (typeof newStart === 'number' && newStart > 0) {
+      heatmapStartYear.value = newStart;
+    }
+  }
+);
 
 // 验证热力图数据与日期对应是否准确
 const validateHeatmapData = () => {
@@ -818,6 +1139,54 @@ defineExpose({
   color: var(--text-secondary);
 }
 
+.card-header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* 热力图框顶部的书签条：贴在框上方，底部与框线连接 */
+.heatmap-bookmark-bar {
+  display: flex;
+  align-items: flex-end;
+  margin-bottom: -10px;        /* 让书签底部与热力图框线贴齐 */
+  position: relative;
+  /* 关键修复：z-index 提到 11（> 热力图大按钮的 10），让书签条+书签按钮浮在大按钮之上 */
+  z-index: 11;
+  height: 57px;                /* 容纳书签组件 47px + 上下溢出空间 */
+  overflow: visible;
+  width: 100%;
+}
+
+.heatmap-bookmark-bar > .year-bookmarks {
+  width: 100%;
+  align-items: flex-end;
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+/* 展开态：让书签条横跨整个 nav 容器（含左右大按钮列）
+ *  - 60 = 48 (大按钮宽) + 12 (gap)
+ *  - 这样 .nav-arrow 锚定到书签条左右两端 = 对齐大按钮列
+ *  - 默认（折叠态）不延伸，保持书签在热力图主体左侧 */
+.year-bookmarks.is-expanded {
+  margin-left: -60px;
+  margin-right: -60px;
+  width: calc(100% + 120px);
+}
+
+.heatmap-bookmark-bar .bookmark-tag {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  padding-bottom: 6px;
+}
+
+/* 在 card-header 中的年份书签：覆盖 absolute 定位，改为正常流显示 */
+.card-header-right .year-bookmarks {
+  position: static;
+  padding: 0;
+}
+
 /* 卷轴热力图导航 */
 .scroll-heatmap-nav {
   display: flex;
@@ -825,14 +1194,18 @@ defineExpose({
   margin: 16px 0;
   position: relative;
   max-height: 480px;
-  overflow: hidden;
+  /* 关键修复：让书签按钮（absolute 浮于大按钮之上）不被裁切 */
+  overflow: visible;
 }
 
 @media (max-width: 768px) {
   .scroll-heatmap-nav {
-    max-height: 320px;
-    gap: 8px;
-    margin: 12px 0;
+    /* 移动端：让热力图呈现"宽长高短"的横向长方形
+       高度 = 月份标签(24) + 间距(8) + 7行格子(7*16+6*4=136) + 容器内边距(8*2=16) = 184px
+       预留一点空间设为 200px，确保 7 行全部显示 */
+    max-height: 200px;
+    gap: 4px;
+    margin: 10px 0;
   }
 }
 
@@ -841,7 +1214,8 @@ defineExpose({
   align-items: center;
   justify-content: center;
   width: 48px;
-  height: calc(40px * 7 + 6px * 6 + 40px + 8px + 16px * 2);
+  /* 桌面端：高度 = 容器 max-height (440px)，与热力图主体视觉一致 */
+  height: 440px;
   background: rgba(255, 255, 255, 0.3);
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.4);
@@ -856,13 +1230,14 @@ defineExpose({
 
 @media (max-width: 768px) {
   .scroll-arrow-large {
-    width: 32px;
-    height: calc(32px * 7 + 4px * 6 + 32px + 4px + 12px * 2);
+    /* 移动端：高度 = 容器 max-height (200px) ，保持与热力图主体视觉一致 */
+    width: 24px;
+    height: 200px;
   }
 
   .scroll-arrow-large svg {
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
   }
 }
 
@@ -884,40 +1259,59 @@ defineExpose({
 
 .scroll-heatmap-container {
   flex: 1;
-  overflow: hidden;
+  overflow: visible; /* 允许书签横向超出框线显示 */
   background-color: #fafafa;
   border-radius: 12px;
   padding: 16px;
   box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.05);
   position: relative;
   display: flex;
-  gap: 12px;
-  max-height: 440px;
+  flex-direction: column; /* 修复：rail 在上、wrapper 在下，月份标签外置于卷轴之上 */
+  gap: 8px;
+  max-height: 480px;
 }
 
 @media (max-width: 768px) {
   .scroll-heatmap-container {
     padding: 8px;
-    gap: 8px;
-    max-height: 280px;
+    gap: 4px;
+    max-height: 200px;
+    border-radius: 8px;
   }
 }
 
 .scroll-heatmap-content-wrapper {
   flex: 1;
   display: flex;
-  gap: 12px;
-  overflow: hidden;
+  flex-direction: column; /* 修复：content-wrapper 内为纵向，月份 rail 在上、滚动 wrapper 在下 */
+  gap: 8px;
+  /* 关键修复：允许书签按钮（absolute 跨越边界）不被裁切 */
+  overflow: visible;
   min-width: 0;
 }
 
-.scroll-heatmap-wrapper {
+@media (max-width: 768px) {
+  .scroll-heatmap-content-wrapper {
+    gap: 4px;
+  }
+}
+
+.scroll-heatmap-body {
   flex: 1;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  min-height: 0;
+}
+
+.scroll-heatmap-wrapper {
+  flex: 1 1 0;
+  min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
+  /* 不再使用 flex column，因为 flex 父级会让 grid 的 width: max-content 计算为 0；
+     改用 block 布局，让 grid 作为块级元素自然撑开 */
+  display: block;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-x;
   scrollbar-width: thin;
@@ -925,11 +1319,11 @@ defineExpose({
   position: relative;
   scroll-behavior: auto;
   overscroll-behavior-x: contain;
-  will-change: scroll-position;
+  /* 关键优化：让 wrapper 走 compositor 线程
+   *  - will-change: scroll-position 在主流浏览器已废弃，改用 transform 触发
+   *  - 父级层面仅 1 个合成层（vs 1000+ cell 各自一个） */
   transform: translateZ(0);
   -webkit-transform: translateZ(0);
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
 }
 
 .scroll-heatmap-wrapper::-webkit-scrollbar {
@@ -951,67 +1345,133 @@ defineExpose({
   background-color: #999;
 }
 
-.scroll-heatmap-months {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
-  min-width: max-content;
-}
-
-.scroll-month-label {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-width: 40px;
-  height: 40px;
-  gap: 2px;
-  flex-shrink: 0;
-}
-
-@media (max-width: 768px) {
-  .scroll-month-label {
-    min-width: 28px;
-    height: 28px;
-  }
-}
-
-.scroll-month-year {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.scroll-month-name {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
 .scroll-heatmap-grid {
-  display: flex;
-  gap: 8px;
+  display: grid;
+  /* 列宽 = 格子宽 (--cell-size) + 列间距 (--column-gap)；
+     使用 calc 让列宽包含 gap，避免方格"黏连" */
+  grid-template-columns: repeat(var(--total-columns, 1), calc(var(--cell-size, 40px) + var(--column-gap, 8px)));
+  grid-auto-rows: auto;
+  /* 父级为 block 布局，grid 自身用 width: max-content 撑开自然宽度 */
+  width: max-content;
   min-width: max-content;
-}
-
-@media (max-width: 768px) {
-  .scroll-heatmap-grid {
-    gap: 8px;
-  }
+  position: relative;
+  column-gap: 0;
+  row-gap: 0;
+  align-content: start;
+  /* 性能优化：CSS containment 让 grid 内部变化不触发外层重排 */
+  contain: layout style;
+  /* 关键优化：去掉 will-change: transform
+   *  原：grid 强制合成层，移动端显存压力大
+   *  新：依赖父级 scroll-heatmap-wrapper 的 scroll-position promotion */
 }
 
 .heatmap-column {
+  /* 列从第 1 行开始（月份标签已移到独立 rail 中） */
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  /* 性能优化：每列成为独立渲染单元（paint/layout 不影响相邻列） */
+  contain: layout style;
+  /* 关键优化：content-visibility: auto 让视口外的列跳过渲染
+   *  - 浏览器自动 lazy render：滚动到视口附近才渲染
+   *  - contain-intrinsic-size 给浏览器一个"占位尺寸"防止布局抖动 */
+  content-visibility: auto;
+  contain-intrinsic-size: 0 var(--cell-size, 40px);
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* 月份标签条：放在卷轴格子之上，与下方的卷轴 wrapper 等宽 */
+.scroll-month-rail-wrapper {
+  flex: 0 0 auto;
+  /* 修复：必须显式 width: 100%（或与 body 同宽），否则 grid 列会被挤压
+     显示在一年的区域内无法水平滚动 */
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+  height: 38px;
+  margin-bottom: 8px;
+  border-bottom: 1px dashed #e6e6e6;
+  padding-bottom: 4px;
+}
+
+@media (max-width: 768px) {
+  .scroll-month-rail-wrapper {
+    height: 26px;
+    margin-bottom: 4px;
+    padding-bottom: 2px;
+  }
+}
+
+.scroll-month-rail {
+  display: grid;
+  /* 与 scroll-heatmap-grid 完全相同的列宽定义，确保标签和格子对齐 */
+  grid-template-columns: repeat(var(--total-columns, 1), calc(var(--cell-size, 40px) + var(--column-gap, 8px)));
+  width: max-content;
+  flex-shrink: 0;
+  position: relative;
+  height: 100%;
+  will-change: transform;
+  transition: transform 0.05s linear;
+  /* 性能优化：transform 用 CSS 变量驱动，由 GPU 合成线程处理 */
+  transform: translateX(var(--rail-translate-x, 0));
+}
+
+.scroll-month-group {
+  /* 通过 CSS Grid 列定位月份组，避免重叠 */
+  grid-column: var(--group-start, 1) / span var(--group-span, 1);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
+  overflow: visible;
+  padding-right: 0;
+}
+
+.heatmap-column {
+  /* 列从第 1 行开始（月份标签已移到独立 rail 中） */
+  grid-row: 1;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-width: 40px;
   flex-shrink: 0;
 }
 
 @media (max-width: 768px) {
   .heatmap-column {
-    min-width: 28px;
-    gap: 6px;
+    gap: 4px;
+  }
+}
+
+.scroll-month-label {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  min-width: 40px;
+  height: 32px;
+  gap: 1px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .scroll-month-label {
+    /* 移动端：月份标签压缩到一列宽 */
+    min-width: 16px;
+    height: 22px;
+    gap: 0;
+    overflow: visible;
+  }
+
+  .scroll-month-year {
+    font-size: 7px;
+    line-height: 1;
+  }
+
+  .scroll-month-name {
+    font-size: 8px;
+    line-height: 1;
   }
 }
 
@@ -1020,10 +1480,12 @@ defineExpose({
   flex-direction: column;
   gap: 6px;
   padding-left: 8px;
-  padding-top: 48px;
+  /* 修复：月份标签已移到独立 rail 中，sidebar 不再需要为月份让位高度；
+     与 scroll-heatmap-body 同高，自动 stretch */
+  padding-top: 0;
   border-left: 1px solid #e0e0e0;
   flex-shrink: 0;
-  min-height: calc(40px * 7 + 6px * 6);
+  justify-content: flex-start; /* 第一个"日"与首行格子顶部对齐 */
   overflow: hidden;
 }
 
@@ -1038,27 +1500,58 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .scroll-heatmap-weekdays-sidebar {
+    gap: 4px;
+    padding-left: 4px;
+    padding-top: 0;
+    min-height: calc(16px * 7 + 4px * 6);
+  }
+
+  .scroll-weekday-sidebar {
+    font-size: 9px;
+    padding: 2px;
+    min-width: 16px;
+    min-height: 16px;
+  }
 }
 
 .scroll-heatmap-cell {
   aspect-ratio: 1;
   border-radius: 4px;
-  min-width: 40px;
-  min-height: 40px;
-  transition: transform 0.15s ease-out, box-shadow 0.15s ease-out;
-  cursor: pointer;
+  width: var(--cell-size, 40px);
+  height: var(--cell-size, 40px);
+  min-width: var(--cell-size, 40px);
+  min-height: var(--cell-size, 40px);
+  /* 关键优化：去掉 will-change + translateZ 反模式
+   *  原版：每个 cell 强制提升为独立合成层，1000+ cell → 显存爆炸 + 滚动掉帧
+   *  新版：只依靠 contain + scroll-position promotion，compositor 自动处理 */
+  contain: layout style paint;
   position: relative;
+  cursor: pointer;
+  /* 关键优化：滚动期间父级添加 .is-scrolling 时禁用 transition
+   *  滚动是连续手势，transition 会让 transform 跟不上 → 视觉延迟 → 掉帧 */
+  transition: none;
+}
+
+/* 仅在非滚动状态下显示 transition（hover 时） */
+.scroll-heatmap-wrapper:not(.is-scrolling) .scroll-heatmap-cell.is-hovered {
+  transition: transform 0.15s ease-out, box-shadow 0.15s ease-out;
   will-change: transform;
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
+  z-index: 1;
 }
 
 @media (max-width: 768px) {
   .scroll-heatmap-cell {
-    min-width: 28px;
-    min-height: 28px;
+    /* 移动端：压缩为16x16正方形，配合4px gap形成横向长方形 */
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    min-height: 16px;
+    border-radius: 2px;
   }
 }
 

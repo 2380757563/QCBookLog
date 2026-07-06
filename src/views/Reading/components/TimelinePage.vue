@@ -27,10 +27,53 @@
         <button class="calendar-btn" @click="showCalendarPicker = true">
           <svg viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM9 10H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zm-8 4H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2z"/></svg>
         </button>
+        <button ref="settingsButtonRef" class="calendar-settings-top-btn" :class="{ active: showCalendarSettings }" @click.stop="showCalendarSettings = !showCalendarSettings" title="日历设置">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94 0 .31.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" fill="currentColor"/></svg>
+        </button>
       </div>
     </div>
     <!-- 小日历 -->
     <div class="mini-calendar">
+      <!-- 日历设置面板（作为下拉浮层） -->
+      <div ref="settingsPanelRef" v-if="showCalendarSettings" class="calendar-settings-panel calendar-settings-panel--dropdown" @click.stop>
+        <div class="settings-panel-header">
+          <span class="settings-panel-title">日历显示设置</span>
+          <button class="settings-panel-close" @click="showCalendarSettings = false">×</button>
+        </div>
+        <div class="settings-panel-body">
+          <div class="setting-item">
+            <div class="setting-item-label">
+              <span>单元格显示书籍封面</span>
+            </div>
+            <div class="setting-item-control">
+              <label class="switch">
+                <input type="checkbox" v-model="calendarShowBookCover" @change="handleCoverToggleChange" />
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+          <div v-if="calendarShowBookCover" class="setting-item setting-item--slider">
+            <div class="setting-item-label">
+              <span>封面透明度</span>
+              <span class="setting-value">{{ calendarCoverOpacity }}%</span>
+            </div>
+            <div class="setting-item-control">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                v-model.number="calendarCoverOpacity"
+                class="opacity-slider"
+                @input="handleOpacityChange"
+              />
+            </div>
+          </div>
+          <div class="settings-hint">
+            <span>当某本书的阅读记录占当天记录超过50%，或为当天最多记录时，该日期单元格背景将显示该书封面。</span>
+          </div>
+        </div>
+      </div>
+
       <div class="calendar-weekdays">
         <span v-for="day in ['日', '一', '二', '三', '四', '五', '六']" :key="day" class="mini-weekday">{{ day }}</span>
       </div>
@@ -40,6 +83,7 @@
           :key="`${date.year}-${date.month}-${date.day}`"
           class="mini-calendar-day"
           :class="getTimelineDayClass(date)"
+          :style="getDayCoverStyle(date)"
           @click="date.day > 0 ? selectTimelineDate(date) : null"
         >
           <span class="mini-day-number">{{ date.day > 0 ? date.day : '' }}</span>
@@ -252,6 +296,143 @@ const timelineCalendarDays = ref<any[]>([]);
 const loadingCalendarDays = ref(false);
 const eventBus = useEventBus();
 
+// 日历封面设置
+const CALENDAR_SETTINGS_KEY = 'timeline_calendar_settings';
+const showCalendarSettings = ref(false);
+const calendarShowBookCover = ref(false);
+const calendarCoverOpacity = ref(30);
+// 每日书籍封面缓存：{ dateString: { coverUrl, count, ratio } }
+const dailyBookCoverMap = ref<Map<string, { coverUrl: string; title: string }>>(new Map());
+
+// 加载日历设置
+const loadCalendarSettings = () => {
+  try {
+    const saved = localStorage.getItem(CALENDAR_SETTINGS_KEY);
+    if (saved) {
+      const settings = JSON.parse(saved);
+      if (typeof settings.showBookCover === 'boolean') {
+        calendarShowBookCover.value = settings.showBookCover;
+      }
+      if (typeof settings.coverOpacity === 'number') {
+        calendarCoverOpacity.value = settings.coverOpacity;
+      }
+    }
+  } catch (e) {
+    console.warn('加载日历设置失败:', e);
+  }
+};
+
+// 保存日历设置
+const saveCalendarSettings = () => {
+  try {
+    localStorage.setItem(CALENDAR_SETTINGS_KEY, JSON.stringify({
+      showBookCover: calendarShowBookCover.value,
+      coverOpacity: calendarCoverOpacity.value
+    }));
+  } catch (e) {
+    console.warn('保存日历设置失败:', e);
+  }
+};
+
+const handleCoverToggleChange = () => {
+  saveCalendarSettings();
+};
+
+const handleOpacityChange = () => {
+  saveCalendarSettings();
+};
+
+// 点击外部关闭设置面板
+const settingsPanelRef = ref<HTMLElement | null>(null);
+const settingsButtonRef = ref<HTMLElement | null>(null);
+const onDocumentClick = (event: MouseEvent) => {
+  if (!showCalendarSettings.value) return;
+  const target = event.target as Node;
+  if (settingsPanelRef.value && settingsPanelRef.value.contains(target)) return;
+  if (settingsButtonRef.value && settingsButtonRef.value.contains(target)) return;
+  showCalendarSettings.value = false;
+};
+
+// 计算每天的主要书籍封面
+interface BookCount {
+  count: number;
+  coverUrl: string;
+  title: string;
+}
+
+const computeDailyBookCovers = (activities: any[]) => {
+  const dayBookMap = new Map<string, Map<number, BookCount>>();
+
+  // 统计每天每本书的记录数（只统计与书籍相关的记录）
+  const bookRelatedTypes = ['reading_record', 'reading_started', 'reading_ended', 'bookmark_added', 'bookmark_updated'];
+
+  activities.forEach(activity => {
+    if (!activity.bookId || !bookRelatedTypes.includes(activity.type)) return;
+    const date = activity.createdAt.split(' ')[0];
+    if (!date) return;
+
+    if (!dayBookMap.has(date)) {
+      dayBookMap.set(date, new Map<number, BookCount>());
+    }
+    const bookMap = dayBookMap.get(date)!;
+
+    if (!bookMap.has(activity.bookId)) {
+      bookMap.set(activity.bookId, {
+        count: 0,
+        coverUrl: activity.bookCover || '',
+        title: activity.bookTitle || ''
+      });
+    }
+    const existing = bookMap.get(activity.bookId)!;
+    existing.count++;
+  });
+
+  // 找出每天的主要书籍
+  const finalResult = new Map<string, { coverUrl: string; title: string }>();
+
+  for (const [date, bookMap] of dayBookMap.entries()) {
+    let totalCount = 0;
+    let maxCount = 0;
+    let topBook: BookCount | null = null;
+
+    for (const book of bookMap.values()) {
+      totalCount += book.count;
+      if (book.count > maxCount) {
+        maxCount = book.count;
+        topBook = book;
+      }
+    }
+
+    if (topBook && topBook.coverUrl && totalCount > 0) {
+      const ratio = topBook.count / totalCount;
+      if (ratio >= 0.5 || maxCount > 0) {
+        finalResult.set(date, { coverUrl: topBook.coverUrl, title: topBook.title });
+      }
+    }
+  }
+
+  dailyBookCoverMap.value = finalResult;
+};
+
+// 获取日期封面样式
+const getDayCoverStyle = (date: any): Record<string, string> => {
+  if (!hasDayCover(date)) {
+    return {};
+  }
+  const coverInfo = dailyBookCoverMap.value.get(date.fullDate);
+  if (!coverInfo || !coverInfo.coverUrl) {
+    return {};
+  }
+
+  const opacity = calendarCoverOpacity.value / 100;
+  return {
+    backgroundImage: `linear-gradient(rgba(255,255,255,${1 - opacity}), rgba(255,255,255,${1 - opacity})), url(${coverInfo.coverUrl})`,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    backgroundRepeat: 'no-repeat'
+  };
+};
+
 // 处理路由参数中的日期
 const handleRouteDate = async () => {
   const dateParam = route.query.date as string;
@@ -459,6 +640,9 @@ const loadCalendarDays = async () => {
       dateMap.set(date, (dateMap.get(date) || 0) + 1);
     });
 
+    // 计算每日封面
+    computeDailyBookCovers(activities);
+
     for (let day = 1; day <= daysInMonth; day++) {
       const fullDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       const recordCount = dateMap.get(fullDate) || 0;
@@ -504,6 +688,7 @@ const loadCalendarDays = async () => {
 };
 
 onMounted(() => {
+  loadCalendarSettings();
   loadCalendarDays();
   
   // 处理路由参数中的日期
@@ -527,6 +712,12 @@ onMounted(() => {
       selectTimelineDate(selectedTimelineDate.value);
     }
   });
+
+  document.addEventListener('click', onDocumentClick);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('click', onDocumentClick);
 });
 
 // 监听路由参数变化
@@ -539,6 +730,8 @@ const getTimelineDayClass = (date: any): string => {
 
   if (!date.isCurrentMonth) {
     classes.push('calendar-day--other-month');
+  } else if (hasDayCover(date)) {
+    classes.push('calendar-day--with-cover');
   } else if (date.hasAnyRecord) {
     classes.push('calendar-day--with-record');
   } else {
@@ -550,6 +743,14 @@ const getTimelineDayClass = (date: any): string => {
   }
 
   return classes.join(' ');
+};
+
+// 判断该日期是否显示书籍封面
+const hasDayCover = (date: any): boolean => {
+  if (!calendarShowBookCover.value || !date.isCurrentMonth || !date.fullDate) return false;
+  if (selectedTimelineDate.value && selectedTimelineDate.value.fullDate === date.fullDate) return false;
+  const coverInfo = dailyBookCoverMap.value.get(date.fullDate);
+  return !!(coverInfo && coverInfo.coverUrl);
 };
 
 const getDayIndicatorClass = (date: any): string => {
@@ -904,6 +1105,36 @@ const getMetadataInfo = (record: any): string => {
       }
     }
   }
+
+  .calendar-settings-top-btn {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: all 0.3s ease;
+
+    svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    &:hover {
+      background-color: var(--bg-tertiary);
+      color: var(--primary-color);
+    }
+
+    &.active {
+      background-color: var(--primary-color);
+      border-color: var(--primary-color);
+      color: white;
+    }
+  }
 }
 
 .mini-calendar {
@@ -912,6 +1143,191 @@ const getMetadataInfo = (record: any): string => {
   padding: 16px;
   margin-bottom: 16px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  position: relative;
+
+  .calendar-settings-panel {
+    background-color: var(--bg-card);
+    border-radius: var(--radius-md);
+    padding: 12px 16px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border-light);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    animation: slideDown 0.2s ease;
+
+    &--dropdown {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 50;
+      min-width: 260px;
+      max-width: 320px;
+    }
+
+    @keyframes slideDown {
+      from {
+        opacity: 0;
+        transform: translateY(-8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .settings-panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+
+      .settings-panel-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+      }
+
+      .settings-panel-close {
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: none;
+        background: transparent;
+        color: var(--text-secondary);
+        font-size: 20px;
+        cursor: pointer;
+        line-height: 1;
+
+        &:hover {
+          color: var(--text-primary);
+        }
+      }
+    }
+
+    .settings-panel-body {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .setting-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+
+      &--slider {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+      }
+
+      .setting-item-label {
+        font-size: 13px;
+        color: var(--text-primary);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+
+        .setting-value {
+          font-weight: 600;
+          color: var(--primary-color);
+        }
+      }
+
+      .setting-item-control {
+        flex-shrink: 0;
+        width: 100%;
+
+        .opacity-slider {
+          width: 100%;
+          height: 6px;
+          -webkit-appearance: none;
+          appearance: none;
+          background: var(--bg-tertiary);
+          border-radius: 3px;
+          outline: none;
+
+          &::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: var(--primary-color);
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+          }
+
+          &::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            background: var(--primary-color);
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+          }
+        }
+      }
+    }
+
+    /* 开关样式 */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 40px;
+      height: 22px;
+
+      input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+
+      .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: 0.3s;
+        border-radius: 22px;
+
+        &::before {
+          position: absolute;
+          content: "";
+          height: 16px;
+          width: 16px;
+          left: 3px;
+          bottom: 3px;
+          background-color: white;
+          transition: 0.3s;
+          border-radius: 50%;
+        }
+      }
+
+      input:checked + .slider {
+        background-color: var(--primary-color);
+      }
+
+      input:checked + .slider::before {
+        transform: translateX(18px);
+      }
+    }
+
+    .settings-hint {
+      font-size: 12px;
+      color: var(--text-hint);
+      line-height: 1.5;
+      padding-top: 4px;
+      border-top: 1px solid var(--border-light);
+    }
+  }
 
   .calendar-weekdays {
     display: grid;
@@ -969,6 +1385,16 @@ const getMetadataInfo = (record: any): string => {
       }
     }
 
+    &.calendar-day--with-cover {
+      color: #ff9800;
+      font-weight: 500;
+      background-color: transparent;
+
+      &:hover {
+        opacity: 0.9;
+      }
+    }
+
     &.calendar-day--selected {
       background-color: var(--primary-color);
       color: white !important;
@@ -977,12 +1403,21 @@ const getMetadataInfo = (record: any): string => {
 
     .mini-day-number {
       font-size: 14px;
-      z-index: 1;
+      font-weight: 600;
+      z-index: 2;
+      position: relative;
+      text-shadow: 0 0 3px rgba(255, 255, 255, 0.9), 0 0 6px rgba(255, 255, 255, 0.6);
+    }
+
+    &.calendar-day--with-cover .mini-day-number,
+    &.calendar-day--with-record .mini-day-number {
+      text-shadow: 0 0 2px rgba(255, 255, 255, 0.9);
     }
 
     .mini-day-indicator {
       position: absolute;
       bottom: 4px;
+      z-index: 2;
     }
 
     .indicator-dot {
@@ -990,6 +1425,7 @@ const getMetadataInfo = (record: any): string => {
       height: 6px;
       border-radius: 50%;
       background-color: currentColor;
+      box-shadow: 0 0 2px rgba(255, 255, 255, 0.9);
     }
   }
 }
