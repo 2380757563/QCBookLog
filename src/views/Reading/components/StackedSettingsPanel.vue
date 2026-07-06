@@ -113,34 +113,38 @@ onUnmounted(() => {
   pointer-events: auto;
 }
 
-/* 半透明遮罩：覆盖图表并轻微模糊，营造"推至前方"的视觉 */
+/* 半透明遮罩：覆盖图表并轻微模糊，营造"推至前方"的视觉
+   透明度受父级 --card-opacity 控制（0=完全透明可看图表，1=原始 0.82 半透明） */
 .stacked-settings-panel__backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, calc(0.82 * var(--card-opacity, 1)));
   backdrop-filter: blur(4px) saturate(140%);
   -webkit-backdrop-filter: blur(4px) saturate(140%);
+  transition: background 0.15s ease;
 }
 
-/* 实际面板：完全填充父卡片 */
+/* 实际面板：完全填充父卡片
+   面板底色也跟随 --card-opacity 变化（0=全透，1=原始不透明） */
 .stacked-settings-panel__sheet {
   position: relative;
   z-index: 1;
   flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  background: var(--bg-card, #fff);
+  background: rgba(255, 255, 255, var(--card-opacity, 1));
   border-radius: inherit;
   overflow: hidden;
   will-change: transform, opacity;
+  transition: background 0.15s ease;
 }
 
 .dark .stacked-settings-panel__sheet {
-  background: #1f1f1f;
+  background: rgba(31, 31, 31, var(--card-opacity, 1));
   color: #eee;
 }
 .dark .stacked-settings-panel__backdrop {
-  background: rgba(20, 20, 20, 0.6);
+  background: rgba(20, 20, 20, calc(0.6 * var(--card-opacity, 1)));
 }
 
 /* 头部 */

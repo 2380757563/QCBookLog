@@ -586,9 +586,11 @@ class BookRepository extends BaseRepository {
     if (this.qcBooklogDb) {
       try {
         const currentLibraryUuid = this.getCurrentLibraryUuid ? this.getCurrentLibraryUuid() : null;
+        // 修复：必须把阅读统计字段也 select 出来，否则前端"阅读时间最多 Top N"图表全部为 0
         const bookDataQuery = `
           SELECT m.calibre_book_id as book_id, bd.page_count, bd.standard_price, bd.purchase_price, bd.purchase_date,
-                 bd.binding1, bd.binding2, bd.paper1, bd.edge1, bd.edge2, bd.note, bd.book_type, bd.source
+                 bd.binding1, bd.binding2, bd.paper1, bd.edge1, bd.edge2, bd.note, bd.book_type, bd.source,
+                 bd.total_reading_time, bd.read_pages, bd.reading_count, bd.last_read_date, bd.last_read_duration
           FROM qc_bookdata bd
           JOIN qc_book_mapping m ON bd.mapping_id = m.id
           WHERE m.calibre_book_id IN (${placeholders}) AND m.library_uuid = ?
@@ -615,10 +617,10 @@ class BookRepository extends BaseRepository {
             note: item.note || '',
             book_type: item.book_type || 1,
             source: item.source || '',
-            total_reading_time: 0,
-            read_pages: 0,
-            reading_count: 0,
-            last_read_date: null,
+            total_reading_time: item.total_reading_time || 0,
+            read_pages: item.read_pages || 0,
+            reading_count: item.reading_count || 0,
+            last_read_date: item.last_read_date || null,
             last_read_duration: 0
           });
         });

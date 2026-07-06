@@ -1,5 +1,5 @@
 <template>
-  <div class="stats-page">
+  <div class="stats-page" :style="{ '--card-opacity': cardOpacity / 100 }">
     <!-- 阅读概览（5 张数据卡片 + 1 张"全部图表"快捷卡片） -->
     <div class="stats-overview">
       <div
@@ -169,6 +169,12 @@
                 />
               </div>
             </div>
+            <div class="settings-section">
+              <CardOpacityControl
+                :modelValue="cardOpacity"
+                @update:modelValue="setCardOpacity"
+              />
+            </div>
           </StackedSettingsPanel>
         </div>
       </div>
@@ -214,6 +220,12 @@
                 <span class="settings-range-sep">至</span>
                 <input type="date" v-model="customEndDate" :min="customStartDate" :max="todayStr" class="settings-date-input" />
               </div>
+            </div>
+            <div class="settings-section">
+              <CardOpacityControl
+                :modelValue="cardOpacity"
+                @update:modelValue="setCardOpacity"
+              />
             </div>
           </StackedSettingsPanel>
         </div>
@@ -261,6 +273,12 @@
                 <input type="date" v-model="customEndDate" :min="customStartDate" :max="todayStr" class="settings-date-input" />
               </div>
             </div>
+            <div class="settings-section">
+              <CardOpacityControl
+                :modelValue="cardOpacity"
+                @update:modelValue="setCardOpacity"
+              />
+            </div>
           </StackedSettingsPanel>
         </div>
       </div>
@@ -307,6 +325,12 @@
                 <input type="date" v-model="customEndDate" :min="customStartDate" :max="todayStr" class="settings-date-input" />
               </div>
             </div>
+            <div class="settings-section">
+              <CardOpacityControl
+                :modelValue="cardOpacity"
+                @update:modelValue="setCardOpacity"
+              />
+            </div>
           </StackedSettingsPanel>
         </div>
       </div>
@@ -352,6 +376,12 @@
                 <span class="settings-range-sep">至</span>
                 <input type="date" v-model="customEndDate" :min="customStartDate" :max="todayStr" class="settings-date-input" />
               </div>
+            </div>
+            <div class="settings-section">
+              <CardOpacityControl
+                :modelValue="cardOpacity"
+                @update:modelValue="setCardOpacity"
+              />
             </div>
           </StackedSettingsPanel>
         </div>
@@ -420,6 +450,12 @@
                 <span class="settings-range-sep">至</span>
                 <input type="date" v-model="customEndDate" :min="customStartDate" :max="todayStr" class="settings-date-input" />
               </div>
+            </div>
+            <div class="settings-section">
+              <CardOpacityControl
+                :modelValue="cardOpacity"
+                @update:modelValue="setCardOpacity"
+              />
             </div>
           </StackedSettingsPanel>
         </div>
@@ -512,6 +548,12 @@
                 />
               </div>
             </div>
+            <div class="settings-section">
+              <CardOpacityControl
+                :modelValue="cardOpacity"
+                @update:modelValue="setCardOpacity"
+              />
+            </div>
           </StackedSettingsPanel>
         </div>
       </div>
@@ -568,6 +610,12 @@
                   class="settings-date-input"
                 />
               </div>
+            </div>
+            <div class="settings-section">
+              <CardOpacityControl
+                :modelValue="cardOpacity"
+                @update:modelValue="setCardOpacity"
+              />
             </div>
           </StackedSettingsPanel>
         </div>
@@ -626,6 +674,12 @@
                 <input type="date" v-model="customEndDate" :min="customStartDate" :max="todayStr" class="settings-date-input" />
               </div>
             </div>
+            <div class="settings-section">
+              <CardOpacityControl
+                :modelValue="cardOpacity"
+                @update:modelValue="setCardOpacity"
+              />
+            </div>
           </StackedSettingsPanel>
         </div>
       </div>
@@ -683,6 +737,12 @@
                 />
               </div>
             </div>
+            <div class="settings-section">
+              <CardOpacityControl
+                :modelValue="cardOpacity"
+                @update:modelValue="setCardOpacity"
+              />
+            </div>
           </StackedSettingsPanel>
         </div>
       </div>
@@ -739,6 +799,12 @@
                 <span class="settings-range-sep">至</span>
                 <input type="date" v-model="customEndDate" :min="customStartDate" :max="todayStr" class="settings-date-input" />
               </div>
+            </div>
+            <div class="settings-section">
+              <CardOpacityControl
+                :modelValue="cardOpacity"
+                @update:modelValue="setCardOpacity"
+              />
             </div>
           </StackedSettingsPanel>
         </div>
@@ -904,6 +970,12 @@
                 <span>{{ excludeZeroPaid ? '已排除购买价为 0 的书' : '排除购买价为 0 的书' }}</span>
               </label>
             </div>
+            <div class="settings-section">
+              <CardOpacityControl
+                :modelValue="cardOpacity"
+                @update:modelValue="setCardOpacity"
+              />
+            </div>
           </StackedSettingsPanel>
         </div>
       </div>
@@ -993,6 +1065,12 @@
                 />
               </div>
             </div>
+            <div class="settings-section">
+              <CardOpacityControl
+                :modelValue="cardOpacity"
+                @update:modelValue="setCardOpacity"
+              />
+            </div>
           </StackedSettingsPanel>
         </div>
       </div>
@@ -1074,6 +1152,35 @@
                 >标准价格</button>
               </div>
             </div>
+            <div class="settings-section">
+              <div class="settings-section-title">图表类型</div>
+              <div class="settings-options">
+                <button
+                  :class="['settings-opt', { active: priceTrendChartType === 'bar' }]"
+                  @click="priceTrendChartType = 'bar'"
+                >柱状图</button>
+                <button
+                  :class="['settings-opt', { active: priceTrendChartType === 'line' }]"
+                  @click="priceTrendChartType = 'line'"
+                >折线图</button>
+              </div>
+            </div>
+            <div v-if="priceTrendChartType === 'bar'" class="settings-section">
+              <div class="settings-section-title">数据表格设置</div>
+              <label class="settings-checkbox-row">
+                <input
+                  type="checkbox"
+                  v-model="priceTrendShowGridLines"
+                />
+                <span class="settings-checkbox-label">显示网格线（横向+纵向）</span>
+              </label>
+            </div>
+            <div class="settings-section">
+              <CardOpacityControl
+                :modelValue="cardOpacity"
+                @update:modelValue="setCardOpacity"
+              />
+            </div>
           </StackedSettingsPanel>
         </div>
       </div>
@@ -1092,6 +1199,7 @@ import { useBookmarkStore } from '@/store/bookmark';
 import { bookService } from '@/services/book';
 import type { BookGroup } from '@/services/book/types';
 import StackedSettingsPanel from './StackedSettingsPanel.vue';
+import CardOpacityControl from './CardOpacityControl.vue';
 
 const bookStore = useBookStore();
 const bookmarkStore = useBookmarkStore();
@@ -1352,6 +1460,17 @@ type PriceTrendGranularity = typeof PRICE_TREND_GRANULARITY_OPTIONS[number]['val
 const priceTrendGranularity = ref<PriceTrendGranularity>('month');
 // 时间趋势图柱状/折线类型
 const priceTrendChartType = ref<'bar' | 'line'>('bar');
+// 时间趋势图柱状图数据表格设置
+const priceTrendShowGridLines = ref<boolean>(true); // 是否显示网格线（横/竖）
+
+// 图表卡片透明度（0-100，默认 100 不透明）
+// 用户通过设置面板中的滑块调整，使卡片下方的内容根据透明度显现
+const cardOpacity = ref<number>(100);
+const setCardOpacity = (v: number) => {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return;
+  cardOpacity.value = Math.max(0, Math.min(100, Math.round(n)));
+};
 
 // 词云图：显示前 N 个标签（按添加频次）
 const WORDCLOUD_COUNT_OPTIONS = [10, 20, 30, 50] as const;
@@ -1814,13 +1933,20 @@ function renderPriceTrendChart(forceRecreate = false) {
       type: 'category',
       data: xLabels,
       axisLine: { lineStyle: { color: '#ddd' } },
-      axisLabel: { color: '#666', interval: 'auto', rotate: priceTrendGranularity.value === 'day' ? 45 : 0 }
+      axisLabel: { color: '#666', interval: 'auto', rotate: priceTrendGranularity.value === 'day' ? 45 : 0 },
+      // 柱状图：纵向网格线（沿 x 轴方向延伸的线）由 splitLine 控制
+      splitLine: useBar
+        ? { show: priceTrendShowGridLines.value, lineStyle: { color: '#f5f5f5', type: 'dashed' } }
+        : { show: false }
     },
     yAxis: {
       type: 'value',
       axisLine: { show: false },
       axisLabel: { color: '#666', formatter: '¥{value}' },
-      splitLine: { lineStyle: { color: '#f0f0f0' } }
+      // 柱状图：横向网格线（沿 y 轴方向延伸的线）由 splitLine 控制
+      splitLine: useBar
+        ? { show: priceTrendShowGridLines.value, lineStyle: { color: '#f0f0f0' } }
+        : { show: true, lineStyle: { type: 'dashed', color: '#eee' } }
     },
     series: [{
       name: priceType.value === 'paid' ? '实际花费' : '标准价格',
@@ -2766,6 +2892,15 @@ watch(priceTrendGranularity, async () => {
   await nextTick();
   renderPriceTrendChart(false);
 });
+watch(priceTrendChartType, async () => {
+  await nextTick();
+  renderPriceTrendChart(false);
+});
+// 柱状图网格线显示设置变化时重渲染
+watch(priceTrendShowGridLines, async () => {
+  await nextTick();
+  renderPriceTrendChart(false);
+});
 
 // 词云图改为响应式 computed（topN / 字号预设 / 时间范围变更会自动重算），无需 watch 触发 ECharts 重渲染
 // 字号预设变更时 Vue 模板自动响应，无须手动触发刷新
@@ -2856,6 +2991,17 @@ watch([customStartDate, customEndDate], async () => {
   }
 });
 
+// 当 bookStore 中书籍的阅读时长/次数等更新时，刷新依赖这些字段的图表
+// 修复：阅读结束后 bookStore.total_reading_time 实时同步，统计页 Top 图表需同步重渲染
+watch(
+  () => bookStore.allBooks.map((b: any) => `${b.id}:${b.total_reading_time || 0}:${b.reading_count || 0}`).join('|'),
+  async () => {
+    await nextTick();
+    // 阅读时长 TOP 图表：核心修复目标
+    if (topReadTimeChartRef.value) renderTopReadTimeChart(false);
+  }
+);
+
 // watchEffect 自动追踪 priceStats 内的所有依赖（groupAgg/tagAgg 内任何字段变化都会触发）
 watchEffect(() => {
   // 读取 groupIdToName / groupAgg / tagAgg 以建立追踪
@@ -2944,10 +3090,23 @@ function attachCoverOverlay(chart: any, rows: any[]) {
 // 已读完 - 阅读时间最多 Top N（横向柱状图 + 封面）
 function renderTopReadTimeChart(forceRecreate = false) {
   if (!topReadTimeChartRef.value) return;
-  const books = filterBooksByTimeRange(bookStore.allBooks);
-  const ranked = books
-    .filter((b: any) => b.readStatus === '已读' && (b.total_reading_time || 0) > 0)
-    .sort((a: any, b: any) => (b.total_reading_time || 0) - (a.total_reading_time || 0))
+  // 修复：阅读时间最多 Top N 是"全量总排行"，不应被 filterBooksByTimeRange 过滤。
+  // 之前用 createTime/purchaseDate 过滤会漏掉"未填购买日期"或"字段缺失"的书，
+  // 导致短时长（2 分钟）刚读的书被错误排除。
+  const ranked = bookStore.allBooks
+    .filter((b: any) => {
+      // 任何阅读时长 > 0 的书都参与排行（含在读 / 已读 / 状态未设置等）
+      // 兜底：如果 total_reading_time 缺失但 reading_count > 0，也保留（防止老数据字段未填）
+      const time = Number(b.total_reading_time) || 0;
+      const count = Number(b.reading_count) || 0;
+      return time > 0 || count > 0;
+    })
+    .map((b: any) => ({
+      ...b,
+      // 排序键：使用 max(total_reading_time, reading_count * 1) 兜底
+      _sortTime: Number(b.total_reading_time) || 0
+    }))
+    .sort((a: any, b: any) => b._sortTime - a._sortTime)
     .slice(0, topReadTimeN.value);
 
   let chart = echarts.getInstanceByDom(topReadTimeChartRef.value) as any;
@@ -3077,6 +3236,8 @@ function renderTopBookmarksChart(forceRecreate = false) {
   width: 100%;
   padding: 16px;
   background-color: var(--bg-primary);
+  /* 卡片透明度变量（0-1），由 cardOpacity 控制 */
+  --card-opacity: 1;
 }
 
 .stats-overview {
@@ -3266,7 +3427,8 @@ function renderTopBookmarksChart(forceRecreate = false) {
 }
 
 .card {
-  background-color: var(--bg-card);
+  /* 背景透明度由用户通过设置滑块控制（0-1） */
+  background-color: rgba(255, 255, 255, var(--card-opacity, 1));
   border-radius: var(--radius-lg);
   padding: 16px;
   margin-bottom: 16px;
@@ -3274,6 +3436,7 @@ function renderTopBookmarksChart(forceRecreate = false) {
   /* 堆叠设置面板的定位锚点（让浮层充满卡片） */
   position: relative;
   overflow: hidden;
+  transition: background-color 0.15s ease;
 }
 
 .card-header {
@@ -3456,6 +3619,87 @@ function renderTopBookmarksChart(forceRecreate = false) {
   }
 }
 
+/* 数据表格设置中的复选框行 */
+.settings-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 0;
+
+  input[type='checkbox'] {
+    cursor: pointer;
+    accent-color: #ff6b35;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+}
+
+.settings-checkbox-label {
+  flex: 1;
+  line-height: 1.4;
+}
+
+/* 卡片透明度滑块 */
+.settings-section-value {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-range-slider {
+  width: 100%;
+  height: 4px;
+  background: linear-gradient(to right, #ff6b35 0%, #ff6b35 var(--slider-progress, 100%), #e8e8e8 var(--slider-progress, 100%), #e8e8e8 100%);
+  border-radius: 2px;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  margin: 6px 0 4px 0;
+
+  &::-webkit-slider-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #ff6b35;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  &::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+    box-shadow: 0 2px 6px rgba(255, 107, 53, 0.4);
+  }
+
+  &::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #ff6b35;
+    border: 2px solid #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+    cursor: pointer;
+  }
+}
+
+.settings-range-hint {
+  font-size: 11px;
+  color: var(--text-tertiary, #999);
+  line-height: 1.5;
+  margin-top: 4px;
+}
+
 /* 特定标签模式：搜索 + 候选 + 已选 */
 .specific-tag-block {
   margin-top: 8px;
@@ -3625,6 +3869,9 @@ function renderTopBookmarksChart(forceRecreate = false) {
 .chart-container {
   width: 100%;
   height: 250px;
+  /* 防止图表在某些情况下被容器裁切 */
+  min-height: 0;
+  position: relative;
 }
 
 .chart-container--tall {
@@ -3681,10 +3928,10 @@ function renderTopBookmarksChart(forceRecreate = false) {
 .wordcloud-empty-title { font-size: 14px; color: #888; }
 .wordcloud-empty-hint { font-size: 12px; color: #b5b5b5; }
 @media (max-width: 600px) {
-  .wordcloud-container { height: 280px; }
+  .wordcloud-container { height: 300px; }
 }
 @media (max-width: 400px) {
-  .wordcloud-container { height: 240px; }
+  .wordcloud-container { height: 260px; }
 }
 
 .card-subtitle {
@@ -3756,11 +4003,10 @@ function renderTopBookmarksChart(forceRecreate = false) {
   .price-charts-row {
     flex-direction: column;
   }
-  .chart-container--tall {
-    height: 280px;
-  }
   .card {
-    padding: 12px;
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 10px;
   }
   .card-title {
     font-size: 13px;
@@ -3769,12 +4015,49 @@ function renderTopBookmarksChart(forceRecreate = false) {
     font-size: 11px;
   }
   .stats-page {
-    padding: 8px;
+    padding: 6px;
   }
   /* 图表设置按钮在小屏下保留 32x32 触摸区 */
   .chart-settings-btn {
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
+  }
+  /* 移动端统一卡片宽度与图表尺寸，确保排列整齐 */
+  .all-charts-wrapper {
+    gap: 10px;
+  }
+  .all-charts-wrapper > .card {
+    width: 100%;
+    box-sizing: border-box;
+  }
+  /* 图表容器：紧凑高度，确保小屏能显示更多内容 */
+  .chart-container {
+    height: 240px;
+  }
+  .chart-container--tall {
+    height: 280px;
+  }
+  /* 概览卡片网格在小屏下保持 2 列一致尺寸 */
+  .stats-overview {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .stat-card {
+    padding: 10px 6px;
+  }
+  .stat-icon {
+    font-size: 22px;
+    margin-bottom: 4px;
+  }
+  .stat-value {
+    font-size: 16px;
+  }
+  .stat-value--dual {
+    font-size: 12px;
+  }
+  .stat-label {
+    font-size: 10px;
   }
 }
 
@@ -3786,6 +4069,29 @@ function renderTopBookmarksChart(forceRecreate = false) {
   }
   .card-header-actions {
     margin-left: auto;
+  }
+  /* 极窄屏：图表更紧凑 */
+  .chart-container {
+    height: 220px;
+  }
+  .chart-container--tall {
+    height: 260px;
+  }
+  .stat-value {
+    font-size: 15px;
+  }
+  .stat-value--dual {
+    font-size: 11px;
+  }
+  /* 小卡片标题字号调整，避免折行突兀 */
+  .card-title-tag {
+    font-size: 11px;
+  }
+  .card-title-sep {
+    margin: 0 4px;
+  }
+  .card {
+    padding: 8px;
   }
 }
 </style>

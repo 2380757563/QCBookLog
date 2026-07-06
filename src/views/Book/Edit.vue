@@ -1156,6 +1156,20 @@ const handleViewRecords = async () => {
       records = (fallback || []).filter((r) => r && r.startTime && r.endTime);
     }
 
+    // 修复：对 (startTime, endTime, bookId) 进行去重，保留第一条（id 最小 / startTime 最早）
+    // 原因：createReadingRecord 会同时写入 qc_reading_records 和 activity_log，
+    // 历史上 endReading 幂等锁未生效时可能造成数据库中存在重复记录，
+    // 导致"时长重复计算"（duration 在 qc_bookdata 中被累加多次）。
+    const seen = new Set<string>();
+    const dedup: any[] = [];
+    for (const r of records) {
+      const key = `${r.bookId ?? bookId}|${r.startTime}|${r.endTime}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      dedup.push(r);
+    }
+    records = dedup;
+
     // 按开始时间倒序排序（最新在前）
     readingRecords.value = records.slice().sort((a, b) => {
       return new Date(b.startTime).getTime() - new Date(a.startTime).getTime();

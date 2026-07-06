@@ -52,10 +52,25 @@ class ReadingTrackingService {
 
     try {
       console.log(`📝 准备插入阅读记录: bookId=${bookId}, readerId=${readerId}`);
-      
+
+      // 先把 actualReaderId 计算出来，防重复检查要用
+      const actualReaderId = readerId !== undefined && readerId !== null ? readerId : 0;
+
+      // 防重复：相同 (bookId, readerId, startTime) 的记录已存在则直接返回（前端 endReading 幂等锁失败时的兜底）
+      const existing = qcBooklogDb.prepare(
+        `SELECT id FROM qc_reading_records WHERE book_id = ? AND reader_id = ? AND start_time = ? LIMIT 1`
+      ).get(bookId, actualReaderId, startTime);
+      if (existing) {
+        console.log(`♻️ 检测到重复阅读记录 (id=${existing.id})，跳过插入以避免重复`);
+        return {
+          id: existing.id,
+          ...recordData,
+          duplicate: true
+        };
+      }
+
       // 确保用户存在（处理外键约束）
       // 支持 readerId >= 0 的情况
-      const actualReaderId = readerId !== undefined && readerId !== null ? readerId : 0;
       const existingUser = qcBooklogDb.prepare('SELECT id FROM qc_users WHERE id = ?').get(actualReaderId);
       if (!existingUser) {
         qcBooklogDb.prepare(`

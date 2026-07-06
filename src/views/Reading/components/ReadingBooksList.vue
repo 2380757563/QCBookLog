@@ -20,7 +20,22 @@
           <div class="book-info">
             <div class="book-title">{{ book.title }}</div>
             <div class="book-author">{{ book.author }}</div>
-            <ReadingProgressBarList v-if="book.read_pages && book.pages" :book="{ ...book, read_pages: book.read_pages }" :show-duration="true" />
+            <div v-if="book.read_pages !== undefined && book.pages && book.pages > 0" class="book-progress">
+              <!-- 进度条 -->
+              <div class="progress-track">
+                <div class="progress-fill" :style="{ width: getProgressPercent(book) + '%' }"></div>
+              </div>
+              <!-- 已读/总页数 + 百分比 -->
+              <div class="progress-meta">
+                <span class="progress-pages">已读{{ book.read_pages || 0 }}页/共{{ book.pages }}页</span>
+                <span class="progress-percent">{{ getProgressPercent(book) }}%</span>
+              </div>
+              <!-- 阅读时长/次数（如果有） -->
+              <div v-if="book.total_reading_time || book.last_read_date" class="progress-extra">
+                <span v-if="book.total_reading_time" class="extra-item">⏱ {{ formatDuration(book.total_reading_time) }}</span>
+                <span v-if="book.last_read_date" class="extra-item">📅 {{ formatDate(book.last_read_date) }}</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -37,7 +52,6 @@ import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useBookImage } from '@/views/Book/composables/useBookImage';
 import { useBookStore } from '@/store/book';
-import ReadingProgressBarList from '@/components/ReadingProgressBarList/ReadingProgressBarList.vue';
 
 // 书籍接口
 interface Book {
@@ -49,6 +63,8 @@ interface Book {
   readStatus: string;
   read_pages?: number;
   pages?: number;
+  total_reading_time?: number;
+  last_read_date?: string | null;
 }
 
 const router = useRouter();
@@ -59,6 +75,39 @@ const bookStore = useBookStore();
 const readingBooks = computed(() => {
   return bookStore.allBooks.filter((b: Book) => b.readStatus === '在读');
 });
+
+// 计算阅读进度百分比
+const getProgressPercent = (book: Book): number => {
+  if (!book.pages || book.pages === 0) return 0;
+  const readPages = book.read_pages || 0;
+  return Math.min(100, Math.round((readPages / book.pages) * 100));
+};
+
+// 格式化阅读时长
+const formatDuration = (minutes: number): string => {
+  if (!minutes) return '';
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours > 0) {
+    return `${hours}小时${mins > 0 ? mins + '分钟' : ''}`;
+  }
+  return `${mins}分钟`;
+};
+
+// 格式化日期
+const formatDate = (dateStr: string | null): string => {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffTime = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return '今天';
+  if (diffDays === 1) return '昨天';
+  if (diffDays < 7) return `${diffDays}天前`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)}周前`;
+  return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
+};
 
 // 查看全部
 const handleViewAll = () => {
@@ -178,6 +227,57 @@ const handleBookClick = (id: number) => {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+      }
+
+      .book-progress {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-top: auto;
+
+        .progress-track {
+          width: 100%;
+          height: 6px;
+          background-color: var(--bg-tertiary);
+          border-radius: 3px;
+          overflow: hidden;
+
+          .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff8c5a 0%, #ff6b35 100%);
+            border-radius: 3px;
+            transition: width 0.3s ease;
+          }
+        }
+
+        .progress-meta {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          font-size: 12px;
+
+          .progress-pages {
+            color: var(--text-secondary);
+          }
+
+          .progress-percent {
+            font-weight: 600;
+            color: #ff6b35;
+          }
+        }
+
+        .progress-extra {
+          display: flex;
+          gap: 12px;
+          font-size: 11px;
+          color: var(--text-hint);
+
+          .extra-item {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+          }
+        }
       }
     }
   }

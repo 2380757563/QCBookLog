@@ -217,7 +217,10 @@
                 <div class="book-info">
                   <h3 class="book-title">{{ book.title || '未知书名' }}</h3>
                   <p class="book-author">{{ book.author || '未知作者' }}</p>
-                  <ReadingProgressBarList v-if="readingStore.progressDisplayMode === 'progress' && book.read_pages && book.pages" :book="book" :show-duration="true" />
+                  <template v-if="readingStore.progressDisplayMode === 'progress'">
+                    <ReadingProgressBarList v-if="book.pages" :book="book" :show-duration="true" />
+                    <div v-else :class="['read-status', `read-status--${book.readStatus}`]">{{ book.readStatus }}</div>
+                  </template>
                   <div v-if="book.rating" class="book-rating">
                     <RatingDisplay :value="book.rating" :show-value="true" size="small" />
                   </div>
