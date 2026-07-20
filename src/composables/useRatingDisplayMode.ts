@@ -12,7 +12,7 @@
  */
 
 import { ref, type Ref } from 'vue';
-import userSettingsService from '@/services/userSettings';
+import userSettingsService from '@/api/userSettings';
 
 export type RatingDisplayMode = '5' | '10';
 

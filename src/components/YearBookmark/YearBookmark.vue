@@ -87,7 +87,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
-import { useHeatmapSettingsStore } from '@/store/heatmapSettings';
+import { useHeatmapSettingsStore } from '@/stores/heatmapSettings';
 
 // 马卡龙色系（Macaron Palette）
 // 10 种柔和明亮的粉彩色，所有配对均通过 WCAG AA 4.5:1 对比度验证

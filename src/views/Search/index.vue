@@ -111,10 +111,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { useBookStore } from '@/store/book';
-import { useBookmarkStore } from '@/store/bookmark';
-import { bookService } from '@/services/book';
-import { bookmarkService } from '@/services/bookmark';
+import { useBookStore } from '@/stores/book';
+import { useBookmarkStore } from '@/stores/bookmark';
+import { bookService } from '@/api/book';
+import { bookmarkService } from '@/api/bookmark';
 import { useBookImage } from '@/views/Book/composables/useBookImage';
 
 const router = useRouter();

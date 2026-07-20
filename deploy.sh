@@ -92,6 +92,10 @@ docker run -d \
   -v /home/project/QCBookLog/server/middlewares:/app/middlewares \
   -v /home/project/QCBookLog/server/utils:/app/utils \
   -v /home/project/QCBookLog/server/config:/app/config \
+  -v /home/project/QCBookLog/server/infrastructure:/app/infrastructure \
+  -v /home/project/QCBookLog/server/repositories:/app/repositories \
+  -v /home/project/QCBookLog/server/handlers:/app/handlers \
+  -v /home/project/QCBookLog/server/plugins:/app/plugins \
   -v /home/project/QCBookLog/data:/app/data \
   -e TANSHU_API_KEY=$TANSHU_API_KEY \
   -e DOUBAN_API_KEY=$DOUBAN_API_KEY \

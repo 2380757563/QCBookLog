@@ -15,7 +15,7 @@ import {
   validateTalebook as apiValidateTalebook,
   createDatabase as apiCreateDatabase,
   setDefault as apiSetDefault
-} from '@/services/config/configService';
+} from '@/api/config/configService';
 
 export type SelectedType = 'sync-status' | 'calibre' | 'talebook';
 export type ConfigMode = 'existing' | 'new';

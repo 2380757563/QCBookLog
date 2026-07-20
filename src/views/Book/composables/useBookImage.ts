@@ -6,7 +6,7 @@
  * - 加载失败处理（生成占位图）
  * - 封面 URL 解析
  */
-import type { Book } from '@/services/book/types';
+import type { Book } from '@/api/book/types';
 import { generatePlaceholderImage } from '@/utils/imageUtils';
 
 export function useBookImage() {

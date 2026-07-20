@@ -119,10 +119,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { useBookmarkStore } from '@/store/bookmark';
-import activityService from '@/services/activity';
+import { useBookmarkStore } from '@/stores/bookmark';
+import activityService from '@/api/activity';
 import { useEventBus } from '@/utils/eventBus';
-import { useHeatmapSettingsStore } from '@/store/heatmapSettings';
+import { useHeatmapSettingsStore } from '@/stores/heatmapSettings';
 import YearBookmark from '@/components/YearBookmark/YearBookmark.vue';
 
 const router = useRouter();

@@ -3,7 +3,7 @@
  * 创建阅读记录表和每日统计表，并在qc_bookdata表添加相关字段
  */
 
-import databaseService from '../services/databaseService.js';
+import databaseService from '../services/legacy/databaseService.js';
 
 /**
  * 执行迁移

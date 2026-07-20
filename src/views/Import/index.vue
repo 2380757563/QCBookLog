@@ -348,7 +348,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { importService, type ImportFormat, type ImportResult, type ImportOptions, type ZipImportResult } from '@/services/importService';
+import { importService, type ImportFormat, type ImportResult, type ImportOptions, type ZipImportResult } from '@/api/importService';
 
 const router = useRouter();
 

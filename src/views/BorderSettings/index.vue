@@ -445,8 +445,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { useBookBorderStore } from '@/store/bookBorder';
-import { BookStatus, BorderParams, getBordersByStatus, getBorderDefinition, BorderDefinition } from '@/store/bookBorder/types';
+import { useBookBorderStore } from '@/stores/bookBorder';
+import { BookStatus, BorderParams, getBordersByStatus, getBorderDefinition, BorderDefinition } from '@/stores/bookBorder/types';
 import BorderPreview from '@/components/business/BookBorder/BorderPreview.vue';
 
 const router = useRouter();

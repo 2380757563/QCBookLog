@@ -91,8 +91,8 @@
 
 <script setup lang="ts">
 import { ref, nextTick, computed, onMounted, onBeforeUnmount } from 'vue';
-import { BookGroup } from '@/services/book/types';
-import { Book } from '@/services/book/types';
+import { BookGroup } from '@/api/book/types';
+import { Book } from '@/api/book/types';
 
 interface Props {
   group: BookGroup;

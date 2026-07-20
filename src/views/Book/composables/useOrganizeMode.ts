@@ -14,10 +14,10 @@
  * - useBookGroups - 暴露 moveToGroup
  */
 import { ref } from 'vue';
-import { bookService } from '@/services/book';
-import { useBookStore } from '@/store/book';
-import { useReaderStore } from '@/store/reader';
-import type { Book } from '@/services/book/types';
+import { bookService } from '@/api/book';
+import { useBookStore } from '@/stores/book';
+import { useReaderStore } from '@/stores/reader';
+import type { Book } from '@/api/book/types';
 
 export type ReadStatusLabel = '未读' | '在读' | '已读';
 

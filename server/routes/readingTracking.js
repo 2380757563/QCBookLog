@@ -1,5 +1,5 @@
 import express from 'express';
-import readingTrackingService from '../services/readingTrackingService.js';
+import readingTrackingService from '../services/reading/readingTrackingService.js';
 
 const router = express.Router();
 

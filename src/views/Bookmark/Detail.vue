@@ -79,13 +79,13 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { useBookmarkStore } from '@/store/bookmark';
-import { useBookStore } from '@/store/book';
-import { bookmarkService } from '@/services/bookmark';
-import { bookService } from '@/services/book';
-import { tagApi } from '@/services/apiClient';
-import type { Bookmark } from '@/services/bookmark/types';
-import type { Book } from '@/services/book/types';
+import { useBookmarkStore } from '@/stores/bookmark';
+import { useBookStore } from '@/stores/book';
+import { bookmarkService } from '@/api/bookmark';
+import { bookService } from '@/api/book';
+import { tagApi } from '@/api/apiClient';
+import type { Bookmark } from '@/api/bookmark/types';
+import type { Book } from '@/api/book/types';
 
 const router = useRouter();
 const route = useRoute();

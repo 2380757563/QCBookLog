@@ -3,8 +3,8 @@
  */
 
 import express from 'express';
-import readingStateSyncService from '../services/readingStateSyncService.js';
-import syncScheduler from '../services/syncScheduler.js';
+import readingStateSyncService from '../services/reading/readingStateSyncService.js';
+import syncScheduler from '../services/sync/syncScheduler.js';
 
 const router = express.Router();
 

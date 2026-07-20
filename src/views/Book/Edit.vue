@@ -609,16 +609,16 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, reactive, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { useBookStore } from '@/store/book';
-import { useReaderStore } from '@/store/reader';
-import { useReadingStore } from '@/store/reading';
-import { bookService } from '@/services/book';
-import readingTrackingService from '@/services/readingTracking';
-import activityService from '@/services/activity';
-import type { Book, BookGroup, Tag } from '@/services/book/types';
-import { searchBookByISBN, searchBookByISBNWithSource, isbnCacheUtils } from '@/services/common/isbnApi';
-import { API_CONFIGS } from '@/services/common/isbnApi/apiConfig';
-import type { BookSearchResult } from '@/services/common/isbnApi/types';
+import { useBookStore } from '@/stores/book';
+import { useReaderStore } from '@/stores/reader';
+import { useReadingStore } from '@/stores/reading';
+import { bookService } from '@/api/book';
+import readingTrackingService from '@/api/readingTracking';
+import activityService from '@/api/activity';
+import type { Book, BookGroup, Tag } from '@/api/book/types';
+import { searchBookByISBN, searchBookByISBNWithSource, isbnCacheUtils } from '@/api/common/isbnApi';
+import { API_CONFIGS } from '@/api/common/isbnApi/apiConfig';
+import type { BookSearchResult } from '@/api/common/isbnApi/types';
 import ReadingProgressBar from '@/components/ReadingProgressBar/ReadingProgressBar.vue';
 import ReadingStatsCard from '@/components/ReadingStatsCard/ReadingStatsCard.vue';
 

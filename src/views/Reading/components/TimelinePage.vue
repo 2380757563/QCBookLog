@@ -279,7 +279,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
-import activityService from '@/services/activity';
+import activityService from '@/api/activity';
 import { useEventBus } from '@/utils/eventBus';
 
 const route = useRoute();

@@ -47,7 +47,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { readingGoalsService } from '@/services/readingGoalsService';
+import { readingGoalsService } from '@/api/readingGoalsService';
 
 // 阅读统计数据
 interface ReadingStats {

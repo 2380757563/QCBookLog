@@ -92,7 +92,7 @@
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useEventBus } from '@/utils/eventBus';
-import readingTrackingService, { ReadingRecord } from '@/services/readingTracking';
+import readingTrackingService, { ReadingRecord } from '@/api/readingTracking';
 
 interface DailyStats {
   total_books: number;

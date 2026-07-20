@@ -4,7 +4,7 @@
  */
 
 import express from 'express';
-import configController from './controllers/config-controller.js';
+import configController from '../../handlers/config-handler.js';
 
 const router = express.Router();
 

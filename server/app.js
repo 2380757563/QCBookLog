@@ -11,10 +11,12 @@ import winston from 'winston';
 import axios from 'axios';
 import fs from 'fs/promises';
 import fsSync from 'fs';
-import calibreService from './services/calibreService.js';
-import activityService from './services/activityService.js';
-import databaseService from './services/database/index.js';
-import syncScheduler from './services/syncScheduler.js';
+import calibreService from './services/legacy/calibreService.js';
+import activityService from './services/legacy/activityService.js';
+import databaseService from './services/legacy/database-service.js';
+import syncScheduler from './services/sync/syncScheduler.js';
+import configManager from './config/index.js';
+import bookSourceSettingsService from './services/settings/book-source-settings-service.js';
 
 // 配置日志
 const logger = winston.createLogger({
@@ -257,7 +259,8 @@ import activitiesRoutes from './routes/activities.js';
 import readingStateSyncRoutes from './routes/readingStateSync.js';
 import userSettingsRoutes from './routes/userSettings.js';
 import userImagesRoutes from './routes/userImages.js';
-import dbrService from './services/dbrService.js';
+import bookSourceSettingsRoutes from './routes/bookSourceSettings.js';
+import dbrService from './services/legacy/dbrService.js';
 
 // 注册路由
 app.use('/api/books', bookRoutes);
@@ -281,133 +284,45 @@ app.use('/api/activities', activitiesRoutes);
 app.use('/api/reading-state-sync', readingStateSyncRoutes);
 app.use('/api/user-settings', userSettingsRoutes);
 app.use('/api/user-images', userImagesRoutes);
+app.use('/api/book-source-settings', bookSourceSettingsRoutes);
 
-// 探数图书API代理（解决CORS问题）
+// 书源 API 代理：统一由插件层处理
 app.get('/api/tanshu/isbn/:isbn', async (req, res) => {
   try {
     const { isbn } = req.params;
-    const apiKey = process.env.TANSHU_API_KEY || '';
-
-    if (!apiKey) {
-      console.error('❌ 探数图书API密钥未配置');
-      return res.status(500).json({ error: '探数图书API密钥未配置，请设置TANSHU_API_KEY环境变量' });
-    }
-
     console.log(`🔍 探数图书API请求，ISBN: ${isbn}`);
-
-    const response = await axios.get('https://api.tanshuapi.com/api/isbn_base/v1/index', {
-      params: {
-        key: apiKey,
-        isbn: isbn
-      },
-      timeout: 15000,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      }
-    });
-
-    console.log(`✅ 探数图书API响应:`, response.data);
-    res.json(response.data);
+    const data = await bookSourceSettingsService.searchByIsbn('tanshu', isbn);
+    console.log(`✅ 探数图书API响应:`, data);
+    res.json(data);
   } catch (error) {
     console.error(`❌ 探数图书API错误:`, error.message);
-    if (error.response) {
-      res.status(error.response.status).json(error.response.data);
-    } else {
-      res.status(500).json({ error: '探数图书API调用失败' });
-    }
+    res.status(500).json({ error: error.message || '探数图书API调用失败' });
   }
 });
 
-// 豆瓣图书API代理（使用GET请求，解决403问题）
 app.get('/api/douban/v2/book/isbn/:isbn', async (req, res) => {
   try {
     const { isbn } = req.params;
-    const apiKey = process.env.DOUBAN_API_KEY || '';
-
-    if (!apiKey) {
-      console.error('❌ 豆瓣图书API密钥未配置');
-      return res.status(500).json({ error: '豆瓣图书API密钥未配置，请设置DOUBAN_API_KEY环境变量' });
-    }
-
     console.log(`🔍 豆瓣图书API请求，ISBN: ${isbn}`);
-
-    const response = await axios.get(
-      `https://api.douban.com/v2/book/isbn/${isbn}`,
-      {
-        params: {
-          apikey: apiKey
-        },
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-          'Accept': 'application/json, text/plain, */*'
-        },
-        timeout: 15000
-      }
-    );
-
-    console.log(`✅ 豆瓣图书API响应成功，书名: ${response.data.title || '无'}`);
-
-    // 处理译者，合并到作者字段
-    const data = response.data;
-    if (data.translator && Array.isArray(data.translator) && data.translator.length > 0) {
-      const translatorStr = data.translator.join(' & ');
-      if (data.author && Array.isArray(data.author)) {
-        if (data.author.length > 0) {
-          // 将译者合并到最后一个作者后
-          data.author[data.author.length - 1] = `${data.author[data.author.length - 1]} & ${translatorStr}`;
-        } else {
-          // 如果没有作者，译者作为作者
-          data.author = [translatorStr];
-        }
-      }
-    }
-
+    const data = await bookSourceSettingsService.searchByIsbn('douban', isbn);
+    console.log(`✅ 豆瓣图书API响应成功，书名: ${data.title || '无'}`);
     res.json(data);
   } catch (error) {
     console.error(`❌ 豆瓣图书API错误:`, error.message);
-    if (error.response) {
-      console.error(`   状态码: ${error.response.status}`);
-      console.error(`   响应数据:`, error.response.data);
-      res.status(error.response.status).json(error.response.data);
-    } else {
-      res.status(500).json({ error: '豆瓣图书API调用失败', message: error.message });
-    }
+    res.status(500).json({ error: error.message || '豆瓣图书API调用失败' });
   }
 });
 
-// 公共图书API代理（解决CORS问题）
 app.get('/api/isbn-work/isbn/:isbn', async (req, res) => {
   try {
     const { isbn } = req.params;
-    const apiKey = process.env.ISBN_WORK_API_KEY || '';
-
-    if (!apiKey) {
-      console.error('❌ 公共图书API密钥未配置');
-      return res.status(500).json({ error: '公共图书API密钥未配置，请设置ISBN_WORK_API_KEY环境变量' });
-    }
-
     console.log(`🔍 公共图书API请求，ISBN: ${isbn}`);
-
-    const response = await axios.get('http://data.isbn.work/openApi/getInfoByIsbn', {
-      params: {
-        appKey: apiKey,
-        isbn: isbn
-      },
-      timeout: 15000,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      }
-    });
-
-    console.log(`✅ 公共图书API响应:`, response.data);
-    res.json(response.data);
+    const data = await bookSourceSettingsService.searchByIsbn('isbnWork', isbn);
+    console.log(`✅ 公共图书API响应:`, data);
+    res.json(data);
   } catch (error) {
     console.error(`❌ 公共图书API错误:`, error.message);
-    if (error.response) {
-      res.status(error.response.status).json(error.response.data);
-    } else {
-      res.status(500).json({ error: '公共图书API调用失败' });
-    }
+    res.status(500).json({ error: error.message || '公共图书API调用失败' });
   }
 });
 

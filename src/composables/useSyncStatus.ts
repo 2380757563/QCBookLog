@@ -8,7 +8,7 @@ import { ref } from 'vue';
 import {
   fetchSyncStatus,
   executeCalibreToTalebook
-} from '@/services/config/syncStatusService';
+} from '@/api/config/syncStatusService';
 
 export function useSyncStatus() {
   // 总体同步状态

@@ -48,7 +48,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { BorderParams } from '@/store/bookBorder/types';
+import { BorderParams } from '@/stores/bookBorder/types';
 
 const props = defineProps<{
   params: BorderParams;

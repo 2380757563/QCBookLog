@@ -146,7 +146,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { useTalebookStore } from '@/store/talebook';
+import { useTalebookStore } from '@/stores/talebook';
 
 const router = useRouter();
 const talebookStore = useTalebookStore();

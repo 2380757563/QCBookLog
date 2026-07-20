@@ -79,7 +79,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { useReadingStore } from '@/store/reading';
+import { useReadingStore } from '@/stores/reading';
 
 const router = useRouter();
 const readingStore = useReadingStore();

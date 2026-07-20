@@ -5,8 +5,8 @@
 
 import path from 'path';
 import fs from 'fs/promises';
-import databaseService from './services/databaseService.js';
-import qcDataService from './services/qcDataService.js';
+import databaseService from '../services/legacy/databaseService.js';
+import qcDataService from '../services/legacy/qcDataService.js';
 
 /**
  * 数据迁移类

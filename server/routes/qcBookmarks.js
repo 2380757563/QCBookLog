@@ -3,8 +3,8 @@
  */
 
 import express from 'express';
-import qcDataService from '../services/qcDataService.js';
-import activityService from '../services/activityService.js';
+import qcDataService from '../services/legacy/qcDataService.js';
+import activityService from '../services/legacy/activityService.js';
 
 const router = express.Router();
 

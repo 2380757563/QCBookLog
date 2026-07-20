@@ -5,7 +5,7 @@
  */
 
 import express from 'express';
-import qcDataService from '../services/qcDataService.js';
+import qcDataService from '../services/legacy/qcDataService.js';
 
 const router = express.Router();
 

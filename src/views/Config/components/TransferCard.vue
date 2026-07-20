@@ -54,7 +54,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { TransferLogEntry } from '@/services/config/dataTransferService';
+import type { TransferLogEntry } from '@/api/config/dataTransferService';
 import { formatBytes } from '@/utils/format';
 
 const props = defineProps<{

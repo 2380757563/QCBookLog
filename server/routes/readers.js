@@ -4,7 +4,7 @@
  */
 
 import express from 'express';
-import databaseService from '../services/database/index.js';
+import databaseService from '../services/legacy/database-service.js';
 
 const router = express.Router();
 

@@ -11,7 +11,7 @@ import {
   executeTransfer as apiExecuteTransfer,
   fetchTransferLogs,
   type TransferLogEntry
-} from '@/services/config/dataTransferService';
+} from '@/api/config/dataTransferService';
 
 export type TransferStep = 'config' | 'confirm' | 'result';
 

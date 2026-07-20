@@ -123,7 +123,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import type { ConfigMode, SelectedType } from '@/composables/useConfig';
-import type { TransferLogEntry } from '@/services/config/dataTransferService';
+import type { TransferLogEntry } from '@/api/config/dataTransferService';
 import { useFolderPicker } from '@/composables/useFolderPicker';
 import TransferCard from './TransferCard.vue';
 

@@ -19,11 +19,11 @@ import {
   deleteFile,
   fileExists,
   updateVersionInfo
-} from '../services/dataService.js';
-import calibreService from '../services/calibreService.js';
-import activityService from '../services/activityService.js';
-import databaseService from '../services/database/index.js';
-import syncService from '../services/syncService.js';
+} from '../services/legacy/dataService.js';
+import calibreService from '../services/legacy/calibreService.js';
+import activityService from '../services/legacy/activityService.js';
+import databaseService from '../services/legacy/database-service.js';
+import syncService from '../services/sync/syncService.js';
 
 const router = express.Router();
 

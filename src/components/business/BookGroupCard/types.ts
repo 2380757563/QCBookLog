@@ -1,5 +1,5 @@
-import { BookGroup } from '@/services/book/types';
-import { Book } from '@/services/book/types';
+import { BookGroup } from '@/api/book/types';
+import { Book } from '@/api/book/types';
 
 export interface BookGroupCardProps {
   group: BookGroup;

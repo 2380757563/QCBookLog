@@ -429,18 +429,18 @@ import { ref, computed, onMounted, onActivated, watch, onUnmounted, nextTick } f
 import { useRouter, useRoute } from 'vue-router';
 import { storeToRefs } from 'pinia';
 
-import { useBookStore } from '@/store/book';
-import { useAppStore } from '@/store/app';
-import { useReaderStore } from '@/store/reader';
-import { useReadingStore } from '@/store/reading';
-import { useBookBorderStore } from '@/store/bookBorder';
-import { useBindingBorderStore } from '@/store/bindingBorder';
+import { useBookStore } from '@/stores/book';
+import { useAppStore } from '@/stores/app';
+import { useReaderStore } from '@/stores/reader';
+import { useReadingStore } from '@/stores/reading';
+import { useBookBorderStore } from '@/stores/bookBorder';
+import { useBindingBorderStore } from '@/stores/bindingBorder';
 import { useBookViewSettings } from '@/composables/useBookViewSettings';
 
-import { bookService } from '@/services/book';
-import type { Book, BookGroup } from '@/services/book/types';
-import type { WishlistItem } from '@/services/wishlistService';
-import { BookStatus } from '@/store/bookBorder/types';
+import { bookService } from '@/api/book';
+import type { Book, BookGroup } from '@/api/book/types';
+import type { WishlistItem } from '@/api/wishlistService';
+import { BookStatus } from '@/stores/bookBorder/types';
 import {
   getBindingType,
   getHardcoverTexture,
@@ -449,7 +449,7 @@ import {
   BindingBorderParams,
   Binding1Type,
   Binding2Type
-} from '@/store/bindingBorder/types';
+} from '@/stores/bindingBorder/types';
 
 import BookGroupCard from '@/components/business/BookGroupCard/BookGroupCard.vue';
 import ReadingProgressBarList from '@/components/ReadingProgressBarList/ReadingProgressBarList.vue';

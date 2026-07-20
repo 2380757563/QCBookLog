@@ -363,14 +363,14 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { useBindingBorderStore } from '@/store/bindingBorder';
+import { useBindingBorderStore } from '@/stores/bindingBorder';
 import { 
   EbookBorderParams, 
   PaperbackBorderParams, 
   HardcoverBorderParams, 
   SpecialBorderParams,
   BindingBorderParams
-} from '@/store/bindingBorder/types';
+} from '@/stores/bindingBorder/types';
 import BindingBorder from '@/components/business/BindingBorder/BindingBorder.vue';
 
 const router = useRouter();

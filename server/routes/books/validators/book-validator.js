@@ -3,7 +3,7 @@
  * 验证书籍创建和更新的数据
  */
 
-import databaseService from '../../../services/database/index.js';
+import databaseService from '../../../services/legacy/database-service.js';
 
 /**
  * 验证书籍ID

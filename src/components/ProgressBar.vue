@@ -34,7 +34,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useProgressStore } from '@/store/progress';
+import { useProgressStore } from '@/stores/progress';
 
 const props = defineProps<{
   visible: boolean;

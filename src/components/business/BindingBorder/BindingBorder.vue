@@ -359,7 +359,7 @@ import {
   getPaperbackVariant,
   getEbookVariant,
   shouldShowOilEdge
-} from '@/store/bindingBorder/types';
+} from '@/stores/bindingBorder/types';
 
 const props = defineProps<{
   binding1: Binding1Type;

@@ -122,7 +122,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { getBorderDefinition } from '@/store/bookBorder/types';
+import { getBorderDefinition } from '@/stores/bookBorder/types';
 
 const props = defineProps<{
   borderId: string;

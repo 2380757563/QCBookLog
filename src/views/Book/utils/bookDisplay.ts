@@ -15,17 +15,17 @@
  * - @/store/bindingBorder/types - getBindingType/getHardcoverTexture 等工具
  * - @/utils/imageUtils - generatePlaceholderImage
  */
-import type { Book } from '@/services/book/types';
-import type { BookStatus } from '@/store/bookBorder/types';
-import type { Binding1Type, Binding2Type, BindingBorderParams } from '@/store/bindingBorder/types';
-import { useBookBorderStore } from '@/store/bookBorder';
-import { useBindingBorderStore } from '@/store/bindingBorder';
+import type { Book } from '@/api/book/types';
+import type { BookStatus } from '@/stores/bookBorder/types';
+import type { Binding1Type, Binding2Type, BindingBorderParams } from '@/stores/bindingBorder/types';
+import { useBookBorderStore } from '@/stores/bookBorder';
+import { useBindingBorderStore } from '@/stores/bindingBorder';
 import {
   getBindingType,
   getHardcoverTexture,
   shouldShowOilEdge,
   getSpecialPattern
-} from '@/store/bindingBorder/types';
+} from '@/stores/bindingBorder/types';
 
 /** 1. 判断书籍状态（用于边框样式） */
 export function getBookStatus(book: Book): BookStatus {

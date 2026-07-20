@@ -81,7 +81,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import type { Book, BookGroup } from '@/services/book/types';
+import type { Book, BookGroup } from '@/api/book/types';
 
 const props = defineProps<{
   show: boolean;

@@ -15,7 +15,7 @@
 </template>
 
 <script setup lang="ts">
-import type { WishlistItem } from '@/services/wishlistService';
+import type { WishlistItem } from '@/api/wishlistService';
 
 defineProps<{
   wishlist: WishlistItem[];

@@ -3,10 +3,10 @@
  */
 
 import express from 'express';
-import databaseService, { initPromise } from '../services/database/index.js';
-import calibreService from '../services/calibreService.js';
-import syncService from '../services/syncService.js';
-import configController from './config/controllers/config-controller.js';
+import databaseService, { initPromise } from '../services/legacy/database-service.js';
+import calibreService from '../services/legacy/calibreService.js';
+import syncService from '../services/sync/syncService.js';
+import configController from '../handlers/config-handler.js';
 
 const router = express.Router();
 

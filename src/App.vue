@@ -46,8 +46,8 @@
 <script setup lang="ts">
 import { useRoute } from 'vue-router';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { useReaderStore } from '@/store/reader';
-import { useReadingStore } from '@/store/reading';
+import { useReaderStore } from '@/stores/reader';
+import { useReadingStore } from '@/stores/reading';
 import ReadingFloatingBall from '@/components/ReadingFloatingBall/ReadingFloatingBall.vue';
 import DatabaseConfigModal from '@/components/DatabaseConfigModal.vue';
 
