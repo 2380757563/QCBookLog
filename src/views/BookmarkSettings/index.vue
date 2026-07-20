@@ -263,8 +263,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import userImagesService from '../../services/userImages';
-import userSettingsService from '../../services/userSettings';
+import userImagesService from '../../api/userImages';
+import userSettingsService from '../../api/userSettings';
 
 const router = useRouter();
 const fileInput = ref<HTMLInputElement | null>(null);

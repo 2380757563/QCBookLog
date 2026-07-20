@@ -11,8 +11,8 @@
  * - readerStore - currentReaderId
  */
 import { ref } from 'vue';
-import { wishlistService, type WishlistItem } from '@/services/wishlistService';
-import { useReaderStore } from '@/store/reader';
+import { wishlistService, type WishlistItem } from '@/api/wishlistService';
+import { useReaderStore } from '@/stores/reader';
 
 export function useWishlist() {
   const readerStore = useReaderStore();

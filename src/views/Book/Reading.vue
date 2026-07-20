@@ -117,13 +117,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { useReadingStore } from '@/store/reading';
-import { useBookStore } from '@/store/book';
-import { useReaderStore } from '@/store/reader';
-import { bookmarkService } from '@/services/bookmark';
-import { bookService } from '@/services/book';
-import readingTrackingService from '@/services/readingTracking';
-import type { Book } from '@/services/book/types';
+import { useReadingStore } from '@/stores/reading';
+import { useBookStore } from '@/stores/book';
+import { useReaderStore } from '@/stores/reader';
+import { bookmarkService } from '@/api/bookmark';
+import { bookService } from '@/api/book';
+import readingTrackingService from '@/api/readingTracking';
+import type { Book } from '@/api/book/types';
 import { useBookImage } from './composables/useBookImage';
 
 const router = useRouter();

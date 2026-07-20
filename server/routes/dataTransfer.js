@@ -7,9 +7,9 @@ import express from 'express';
 import fs from 'fs';
 import fsPromises from 'fs/promises';
 import path from 'path';
-import databaseService from '../services/database/index.js';
-import calibreService from '../services/calibreService.js';
-import configManager from '../services/configManager.js';
+import databaseService from '../services/legacy/database-service.js';
+import calibreService from '../services/legacy/calibreService.js';
+import configManager from '../config/index.js';
 
 const router = express.Router();
 

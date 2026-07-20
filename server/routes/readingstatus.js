@@ -12,7 +12,7 @@ import {
   deleteJsonItem,
   getJsonItem,
   updateVersionInfo
-} from '../services/dataService.js';
+} from '../services/legacy/dataService.js';
 
 const router = express.Router();
 

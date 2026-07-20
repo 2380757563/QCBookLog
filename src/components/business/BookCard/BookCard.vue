@@ -103,10 +103,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { BookCardProps, BookCardEmits } from './types';
-import { useBookBorderStore } from '@/store/bookBorder';
-import { BookStatus } from '@/store/bookBorder/types';
-import { useBindingBorderStore } from '@/store/bindingBorder';
-import { API_CONFIGS } from '@/services/common/isbnApi/apiConfig';
+import { useBookBorderStore } from '@/stores/bookBorder';
+import { BookStatus } from '@/stores/bookBorder/types';
+import { useBindingBorderStore } from '@/stores/bindingBorder';
+import { API_CONFIGS } from '@/api/common/isbnApi/apiConfig';
 import {
   getBindingType,
   getHardcoverTexture,
@@ -117,7 +117,7 @@ import {
   BindingBorderParams,
   Binding1Type,
   Binding2Type
-} from '@/store/bindingBorder/types';
+} from '@/stores/bindingBorder/types';
 import BindingBorder from '@/components/business/BindingBorder/BindingBorder.vue';
 import RatingDisplay from '@/components/business/RatingDisplay.vue';
 

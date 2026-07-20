@@ -4,7 +4,7 @@
  */
 
 import express from 'express';
-import syncService from '../services/syncService.js';
+import syncService from '../services/sync/syncService.js';
 
 const router = express.Router();
 

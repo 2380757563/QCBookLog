@@ -1194,10 +1194,10 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick, watchEffect, markRaw } from 'vue';
 import { useRouter } from 'vue-router';
 import * as echarts from 'echarts';
-import { useBookStore } from '@/store/book';
-import { useBookmarkStore } from '@/store/bookmark';
-import { bookService } from '@/services/book';
-import type { BookGroup } from '@/services/book/types';
+import { useBookStore } from '@/stores/book';
+import { useBookmarkStore } from '@/stores/bookmark';
+import { bookService } from '@/api/book';
+import type { BookGroup } from '@/api/book/types';
 import StackedSettingsPanel from './StackedSettingsPanel.vue';
 import CardOpacityControl from './CardOpacityControl.vue';
 

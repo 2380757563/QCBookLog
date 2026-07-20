@@ -134,7 +134,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onActivated, onBeforeUnmount } from 'vue';
-import { useBookStore } from '@/store/book';
+import { useBookStore } from '@/stores/book';
 import { useConfig } from '@/composables/useConfig';
 import { useSyncStatus } from '@/composables/useSyncStatus';
 import { useDataTransfer } from '@/composables/useDataTransfer';

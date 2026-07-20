@@ -175,10 +175,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { useBookStore } from '@/store/book';
-import { bookService } from '@/services/book';
-import { searchBookByISBN, searchTanshuByISBN } from '@/services/common/isbnApi';
-import type { BookSearchResult } from '@/services/common/isbnApi/types';
+import { useBookStore } from '@/stores/book';
+import { bookService } from '@/api/book';
+import { searchBookByISBN, searchTanshuByISBN } from '@/api/common/isbnApi';
+import type { BookSearchResult } from '@/api/common/isbnApi/types';
 import { getImageUrl } from '@/utils/localImageStorage';
 import ProgressBar from '@/components/ProgressBar.vue';
 

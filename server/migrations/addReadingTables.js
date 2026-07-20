@@ -3,7 +3,7 @@
  * 添加阅读目标、阅读热力图、愿望清单数据表
  */
 
-import databaseService from '../services/databaseService.js';
+import databaseService from '../services/legacy/databaseService.js';
 
 /**
  * 执行迁移

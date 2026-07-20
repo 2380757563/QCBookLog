@@ -284,8 +284,8 @@
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import RatingDisplay from '@/components/business/RatingDisplay.vue';
-import { useAppStore } from '@/store/app';
-import { useReadingStore } from '@/store/reading';
+import { useAppStore } from '@/stores/app';
+import { useReadingStore } from '@/stores/reading';
 import { useBookViewSettings } from '@/composables/useBookViewSettings';
 import { useRatingDisplayMode, type RatingDisplayMode } from '@/composables/useRatingDisplayMode';
 

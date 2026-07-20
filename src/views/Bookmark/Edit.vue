@@ -144,13 +144,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, reactive } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { useBookStore } from '@/store/book';
-import { useBookmarkStore } from '@/store/bookmark';
-import { bookService } from '@/services/book';
-import { bookmarkService } from '@/services/bookmark';
-import { tagApi } from '@/services/apiClient';
-import type { Book } from '@/services/book/types';
-import type { Bookmark } from '@/services/bookmark/types';
+import { useBookStore } from '@/stores/book';
+import { useBookmarkStore } from '@/stores/bookmark';
+import { bookService } from '@/api/book';
+import { bookmarkService } from '@/api/bookmark';
+import { tagApi } from '@/api/apiClient';
+import type { Book } from '@/api/book/types';
+import type { Bookmark } from '@/api/bookmark/types';
 import { useBookImage } from '@/views/Book/composables/useBookImage';
 
 const router = useRouter();

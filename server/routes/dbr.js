@@ -4,7 +4,7 @@
  */
 
 import express from 'express';
-import dbrService from '../services/dbrService.js';
+import dbrService from '../services/legacy/dbrService.js';
 
 const router = express.Router();
 

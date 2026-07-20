@@ -1,6 +1,6 @@
 import express from 'express';
-import userSettingsService from '../services/userSettingsService.js';
-import userImagesService from '../services/userImagesService.js';
+import userSettingsService from '../services/settings/userSettingsService.js';
+import userImagesService from '../services/legacy/userImagesService.js';
 
 const router = express.Router();
 

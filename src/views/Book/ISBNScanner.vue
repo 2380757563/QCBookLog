@@ -240,7 +240,7 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { BrowserBarcodeReader } from '@zxing/library';
-import { isbnImageScannerService } from '@/services/common/isbnImageScanner';
+import { isbnImageScannerService } from '@/api/common/isbnImageScanner';
 import { detectImageQuality, type ImageQualityMetrics } from '@/utils/imageEnhancer';
 
 const router = useRouter();

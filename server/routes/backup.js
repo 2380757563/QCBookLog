@@ -7,10 +7,10 @@ import express from 'express';
 import fs from 'fs/promises';
 import fsSync from 'fs';
 import path from 'path';
-import { readJsonFile, writeJsonFile, fileExists, updateVersionInfo } from '../services/dataService.js';
+import { readJsonFile, writeJsonFile, fileExists, updateVersionInfo } from '../services/legacy/dataService.js';
 import archiver from 'archiver';
 import unzipper from 'unzipper';
-import databaseService from '../services/database/index.js';
+import databaseService from '../services/legacy/database-service.js';
 
 const router = express.Router();
 const DATA_DIR = path.join(process.cwd(), '../data');

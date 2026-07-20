@@ -4,7 +4,7 @@
  */
 
 import express from 'express';
-import bookController from './controllers/book-controller.js';
+import bookController from '../../handlers/books-handler.js';
 import uploadMiddleware from './middleware/upload-middleware.js';
 
 const router = express.Router();

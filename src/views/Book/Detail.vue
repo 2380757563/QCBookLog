@@ -413,15 +413,15 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { useBookStore } from '@/store/book';
-import { useReaderStore } from '@/store/reader';
-import { useReadingStore } from '@/store/reading';
-import { useTalebookStore } from '@/store/talebook';
-import { bookService } from '@/services/book';
-import { bookmarkService } from '@/services/bookmark';
-import readingTrackingService from '@/services/readingTracking';
-import type { Book, BookGroup, ReadingState } from '@/services/book/types';
-import type { Bookmark } from '@/services/bookmark/types';
+import { useBookStore } from '@/stores/book';
+import { useReaderStore } from '@/stores/reader';
+import { useReadingStore } from '@/stores/reading';
+import { useTalebookStore } from '@/stores/talebook';
+import { bookService } from '@/api/book';
+import { bookmarkService } from '@/api/bookmark';
+import readingTrackingService from '@/api/readingTracking';
+import type { Book, BookGroup, ReadingState } from '@/api/book/types';
+import type { Bookmark } from '@/api/bookmark/types';
 import { useBookImage } from './composables/useBookImage';
 import ReadingProgressBarList from '@/components/ReadingProgressBarList/ReadingProgressBarList.vue';
 import RatingDisplay from '@/components/business/RatingDisplay.vue';

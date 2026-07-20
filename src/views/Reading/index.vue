@@ -29,10 +29,10 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { useBookStore } from '@/store/book';
-import { useBookmarkStore } from '@/store/bookmark';
-import { bookService } from '@/services/book';
-import { bookmarkService } from '@/services/bookmark';
+import { useBookStore } from '@/stores/book';
+import { useBookmarkStore } from '@/stores/bookmark';
+import { bookService } from '@/api/book';
+import { bookmarkService } from '@/api/bookmark';
 import ReadingHeader from './components/ReadingHeader.vue';
 import ReadingGoalCard from './components/ReadingGoalCard.vue';
 import ReadingBooksList from './components/ReadingBooksList.vue';

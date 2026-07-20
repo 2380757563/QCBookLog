@@ -3,7 +3,7 @@
  * 目标：支持独立阅读会话记录，时间精度提升到秒级
  */
 
-import databaseService from '../services/databaseService.js';
+import databaseService from '../services/legacy/databaseService.js';
 
 /**
  * 新表结构设计

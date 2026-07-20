@@ -11,10 +11,10 @@
  * - 父组件传入的 sentinelRef
  */
 import { ref, computed, onUnmounted } from 'vue';
-import { useBookStore } from '@/store/book';
-import { useReaderStore } from '@/store/reader';
-import { bookService } from '@/services/book';
-import type { Book } from '@/services/book/types';
+import { useBookStore } from '@/stores/book';
+import { useReaderStore } from '@/stores/reader';
+import { bookService } from '@/api/book';
+import type { Book } from '@/api/book/types';
 
 export function useBookPagination() {
   const bookStore = useBookStore();

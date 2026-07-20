@@ -61,7 +61,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import type { Book } from '@/services/book/types';
+import type { Book } from '@/api/book/types';
 
 interface Props {
   book: Book | null;

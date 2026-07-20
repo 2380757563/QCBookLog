@@ -12,8 +12,8 @@
  * - bookStore (allBooks)
  */
 import { computed, type Ref, type ComputedRef } from 'vue';
-import type { Book } from '@/services/book/types';
-import { useBookStore } from '@/store/book';
+import type { Book } from '@/api/book/types';
+import { useBookStore } from '@/stores/book';
 
 export type SortBy = 'createTime' | 'updateTime' | 'title' | 'author' | 'rating';
 

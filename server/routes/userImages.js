@@ -1,6 +1,6 @@
 import express from 'express';
 import multer from 'multer';
-import userImagesService from '../services/userImagesService.js';
+import userImagesService from '../services/legacy/userImagesService.js';
 
 const router = express.Router();
 

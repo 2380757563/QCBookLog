@@ -15,10 +15,10 @@
  * - readerStore - currentReaderId
  */
 import { ref, computed } from 'vue';
-import { bookService } from '@/services/book';
-import { useBookStore } from '@/store/book';
-import { useReaderStore } from '@/store/reader';
-import type { Book, BookGroup } from '@/services/book/types';
+import { bookService } from '@/api/book';
+import { useBookStore } from '@/stores/book';
+import { useReaderStore } from '@/stores/reader';
+import type { Book, BookGroup } from '@/api/book/types';
 
 export interface UseBookGroupsOptions {
   /** 外部 displayBooks ref（与分页/全量模式联动） */

@@ -3,7 +3,7 @@
  * 用于通过后端API管理图片，替代localStorage存储
  */
 
-import { bookApi } from '@/services/apiClient';
+import { bookApi } from '@/api/apiClient';
 
 /**
  * 从URL下载图片数据，支持可配置超时和指数退避重试机制

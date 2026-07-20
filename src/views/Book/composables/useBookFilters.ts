@@ -13,8 +13,8 @@
  * 由 /home/project/QCBookLog/src/views/Book/index.vue 拆分而来
  */
 import { ref, computed, watch } from 'vue';
-import { useBookStore } from '@/store/book';
-import type { Book } from '@/services/book/types';
+import { useBookStore } from '@/stores/book';
+import type { Book } from '@/api/book/types';
 
 /** 筛选条件数据结构 */
 export interface BookFilterConditions {

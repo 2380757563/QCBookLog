@@ -262,12 +262,12 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { useBookStore } from '@/store/book';
-import { useBookmarkStore } from '@/store/bookmark';
-import { useReaderStore } from '@/store/reader';
-import { bookService } from '@/services/book';
-import { bookmarkService } from '@/services/bookmark';
-import userSettingsService from '@/services/userSettings';
+import { useBookStore } from '@/stores/book';
+import { useBookmarkStore } from '@/stores/bookmark';
+import { useReaderStore } from '@/stores/reader';
+import { bookService } from '@/api/book';
+import { bookmarkService } from '@/api/bookmark';
+import userSettingsService from '@/api/userSettings';
 
 const router = useRouter();
 const bookStore = useBookStore();

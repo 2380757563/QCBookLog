@@ -146,11 +146,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { useBookmarkStore } from '@/store/bookmark';
-import { useBookStore } from '@/store/book';
-import { bookmarkService } from '@/services/bookmark';
-import { bookService } from '@/services/book';
-import { tagApi } from '@/services/apiClient';
+import { useBookmarkStore } from '@/stores/bookmark';
+import { useBookStore } from '@/stores/book';
+import { bookmarkService } from '@/api/bookmark';
+import { bookService } from '@/api/book';
+import { tagApi } from '@/api/apiClient';
 
 const router = useRouter();
 const route = useRoute();

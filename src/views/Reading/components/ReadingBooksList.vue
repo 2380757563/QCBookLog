@@ -51,7 +51,7 @@
 import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useBookImage } from '@/views/Book/composables/useBookImage';
-import { useBookStore } from '@/store/book';
+import { useBookStore } from '@/stores/book';
 
 // 书籍接口
 interface Book {

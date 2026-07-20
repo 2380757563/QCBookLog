@@ -22,7 +22,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { Book } from '@/services/book/types';
+import type { Book } from '@/api/book/types';
 
 interface Props {
   book: Book;

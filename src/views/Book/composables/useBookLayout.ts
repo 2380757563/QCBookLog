@@ -11,7 +11,7 @@
  * - bookStore (Pinia) - layout 状态
  */
 import { useBookViewSettings } from '@/composables/useBookViewSettings';
-import { useBookStore } from '@/store/book';
+import { useBookStore } from '@/stores/book';
 
 export function useBookLayout() {
   const bookStore = useBookStore();
