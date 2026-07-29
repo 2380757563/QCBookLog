@@ -2,7 +2,17 @@
   <div class="heatmap-card card">
     <div class="card-header">
       <span class="card-title">🔥 阅读热力图</span>
-      <span class="heatmap-period">{{ scrollHeatmapYearMonth }}</span>
+      <div class="card-header-right">
+        <span class="heatmap-period">{{ scrollHeatmapYearMonth }}</span>
+        <button
+          v-if="isNotAtToday"
+          class="back-to-today-btn"
+          title="滚动到今天的格子"
+          @click="backToToday"
+        >
+          回到今天
+        </button>
+      </div>
     </div>
 
     <!-- 卷轴导航 -->
@@ -845,37 +855,75 @@ const handleScrollHeatmapCellClick = async (day: any) => {
   });
 };
 
-// 初始化热力图滚动到今天的位置
-const initHeatmapScrollToToday = () => {
+// 计算今天的列索引（公用）
+const getTodayColumnIndex = (): number => {
+  const columns = scrollHeatmapColumnsData.value;
+  for (let colIndex = 0; colIndex < columns.length; colIndex++) {
+    if (columns[colIndex].some((d: any) => d.isToday)) {
+      return colIndex;
+    }
+  }
+  return -1;
+};
+
+/**
+ * 滚动到今天的列
+ * - smooth=true：用于「回到今天」按钮，平滑滚动
+ * - smooth=false：用于初始化定位，立即跳转
+ */
+const scrollHeatmapToToday = (smooth: boolean = true) => {
   const wrapper = scrollHeatmapWrapper.value;
   if (!wrapper) return;
 
-  const columns = scrollHeatmapColumnsData.value;
-  if (columns.length === 0) return;
+  const todayColumn = getTodayColumnIndex();
+  if (todayColumn < 0) return;
 
-  // 找到今天的日期所在的列
-  let todayColumn = -1;
-  for (let colIndex = 0; colIndex < columns.length; colIndex++) {
-    const column = columns[colIndex];
-    const todayCell = column.find((d: any) => d.isToday);
-    if (todayCell) {
-      todayColumn = colIndex;
-      break;
-    }
+  // 桌面端：40px（格子宽度）+ 8px（列之间的gap）= 48px
+  // 移动端：16px（格子宽度）+ 4px（列之间的gap）= 20px
+  const isMobile = window.innerWidth <= 768;
+  const cellWidth = isMobile ? 20 : 48;
+
+  // 计算滚动位置，让今天在视图中居中
+  const targetLeft = Math.max(0, todayColumn * cellWidth - wrapper.offsetWidth / 2);
+  if (smooth) {
+    wrapper.scrollTo({ left: targetLeft, behavior: 'smooth' });
+  } else {
+    wrapper.scrollLeft = targetLeft;
   }
+  // 强制更新年月显示（确保用户立刻看到回到今天的日期范围）
+  updateScrollHeatmapYearMonth();
+};
 
-  if (todayColumn >= 0) {
-    // 根据屏幕宽度计算格子宽度（与CSS保持一致）
-    // 桌面端：40px（格子宽度）+ 8px（列之间的gap）= 48px
-    // 移动端：16px（格子宽度）+ 4px（列之间的gap）= 20px
-    const isMobile = window.innerWidth <= 768;
-    const cellWidth = isMobile ? 20 : 48;
+/**
+ * 判断今日是否不在当前视口（决定是否显示「回到今天」按钮）
+ * - 视口左边缘 > today column 的中心：用户向右滚过头了
+ * - 视口右边缘 < today column 的右边缘：用户向左滚过头了
+ */
+const isNotAtToday = computed(() => {
+  const wrapper = scrollHeatmapWrapper.value;
+  if (!wrapper) return false;
+  const todayColumn = getTodayColumnIndex();
+  if (todayColumn < 0) return false;
 
-    // 计算滚动位置，让今天在视图中居中
-    const scrollToToday = Math.max(0, todayColumn * cellWidth - wrapper.offsetWidth / 2);
-    wrapper.scrollLeft = scrollToToday;
-    updateScrollHeatmapYearMonth();
-  }
+  const isMobile = window.innerWidth <= 768;
+  const cellWidth = isMobile ? 20 : 48;
+
+  const todayLeft = todayColumn * cellWidth;
+  const todayRight = todayLeft + cellWidth;
+  // 读取响应式 ref，让 computed 在滚动时自动重新计算
+  //（直接读 wrapper.scrollLeft 是非响应式的 DOM 属性，Vue 不会跟踪）
+  const viewLeft = scrollHeatmapScrollLeft.value;
+  const viewRight = viewLeft + wrapper.offsetWidth;
+
+  // 今天完全在视口内则不显示按钮
+  return todayLeft < viewLeft || todayRight > viewRight;
+});
+
+/**
+ * 「回到今天」按钮点击：平滑滚动到今日列
+ */
+const backToToday = () => {
+  scrollHeatmapToToday(true);
 };
 
 // 热力图颜色等级（根据阅读记录数量动态调整颜色深度）
@@ -913,7 +961,7 @@ onMounted(async () => {
 
   // 等待数据加载完成后滚动到今天
   setTimeout(() => {
-    initHeatmapScrollToToday();
+    scrollHeatmapToToday(false);
   }, 300);
 });
 
@@ -1072,7 +1120,7 @@ onUnmounted(() => {
 watch(scrollHeatmapColumnsData, () => {
   if (scrollHeatmapWrapper.value) {
     setTimeout(() => {
-      initHeatmapScrollToToday();
+      scrollHeatmapToToday(false);
     }, 100);
   }
 });
@@ -1102,7 +1150,7 @@ eventBus.on('reader-changed', (data: any) => {
 
 // 暴露给父组件的方法
 defineExpose({
-  initHeatmapScrollToToday,
+  scrollHeatmapToToday,
   initHeatmapEventListeners
 });
 </script>
@@ -1561,10 +1609,16 @@ defineExpose({
   z-index: 1;
 }
 
+/* 今日红框：使用 inset box-shadow 在 cell 内部绘制 2px 红色边框。
+   不超出 cell 边界，因此不会被 contain / content-visibility / 相邻列裁剪。
+   同时保留原本格子的圆角，视觉仍然清晰。 */
 .scroll-cell--today {
-  outline: 2px solid var(--primary-color);
-  outline-offset: 2px;
-  box-shadow: 0 0 0 4px var(--primary-color);
+  box-shadow: inset 0 0 0 2px var(--primary-color, #ff6b35);
+  z-index: 1;
+}
+
+.scroll-cell--today:hover {
+  box-shadow: inset 0 0 0 2px var(--primary-color, #ff6b35), 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
 .scroll-heatmap-cell.level-0 { background-color: #ebedf0; }
@@ -1572,6 +1626,33 @@ defineExpose({
 .scroll-heatmap-cell.level-2 { background-color: #ffb380; }
 .scroll-heatmap-cell.level-3 { background-color: #ff8533; }
 .scroll-heatmap-cell.level-4 { background-color: #ff6b35; }
+
+/* 「回到今天」按钮（仅当今日不在视口时显示） */
+.back-to-today-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--primary-color, #ff6b35);
+  background: #fff7f0;
+  border: 1px solid var(--primary-color, #ff6b35);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.back-to-today-btn:hover {
+  background: var(--primary-color, #ff6b35);
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(255, 107, 53, 0.25);
+}
+
+.back-to-today-btn:active {
+  transform: translateY(0);
+}
 
 .heatmap-legend {
   display: flex;

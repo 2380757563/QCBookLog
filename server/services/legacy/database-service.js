@@ -819,6 +819,26 @@ class DatabaseService {
     const calibreDb = this.connectionManager.getCalibreDb();
     const talebookDb = this.connectionManager.getTalebookDb();
 
+    // ISBN 重复软警告：前端 findDuplicates 应当已经阻止重复添加，
+    // 这里只做一次轻量级查询并打日志，避免静默写入重复记录
+    if (book && book.isbn) {
+      try {
+        const normalizeIsbn = (isbn) => String(isbn || '').replace(/[-\s]/g, '').toUpperCase();
+        const isbn = normalizeIsbn(book.isbn);
+        if (isbn) {
+          const existing = calibreDb.prepare(
+            "SELECT i.book, b.title FROM identifiers i JOIN books b ON b.id = i.book WHERE i.type = 'isbn' AND REPLACE(UPPER(i.val), '-', '') = ?"
+          ).get(isbn);
+          if (existing) {
+            console.warn(`⚠️ [_addBook] ISBN ${book.isbn} 已存在于书籍ID: ${existing.book} (${existing.title})`);
+          }
+        }
+      } catch (e) {
+        // 软警告失败不影响主流程
+        console.warn('⚠️ [_addBook] ISBN 重复预检失败:', e.message);
+      }
+    }
+
     let bookId;
 
     // 确保路径是正确的两级结构（移除作者和标题中的路径分隔符）

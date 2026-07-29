@@ -167,9 +167,28 @@
     <!-- 导出进度 -->
     <div v-if="isExporting" class="progress-overlay">
       <div class="progress-card">
-        <div class="progress-spinner"></div>
-        <p class="progress-text">正在导出数据...</p>
-        <p class="progress-hint">请勿关闭页面</p>
+        <p class="progress-text">{{ progressTitle }}</p>
+
+        <!-- 整库导出:显示文件级进度条 + 当前文件序号 -->
+        <template v-if="exportMode === 'library'">
+          <div class="progress-bar-wrapper">
+            <div class="progress-bar">
+              <div
+                class="progress-bar-fill"
+                :style="{ width: exportPercent + '%' }"
+              ></div>
+            </div>
+            <div class="progress-bar-label">{{ exportPercent }}%</div>
+          </div>
+          <p class="progress-status">正在打包……文件 ({{ exportCurrent }}/{{ exportTotal }})</p>
+          <p class="progress-current-file" v-if="exportCurrentFile">📄 {{ exportCurrentFile }}</p>
+        </template>
+
+        <!-- 书籍数据导出:仅显示旋转动画 -->
+        <template v-else>
+          <div class="progress-spinner"></div>
+          <p class="progress-hint">请勿关闭页面</p>
+        </template>
       </div>
     </div>
 
@@ -190,7 +209,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { bookService } from '@/api/book';
 import { exportService, EXPORT_FIELDS, type ExportFormat, type ExportOptions } from '@/api/exportService';
@@ -213,6 +232,24 @@ const useCompression = ref(false);
 const isExporting = ref(false);
 const exportSuccess = ref(false);
 const exportError = ref('');
+
+// 整库导出进度(用于进度条 + 状态信息)
+const exportCurrent = ref(0);
+const exportTotal = ref(0);
+const exportCurrentFile = ref('');
+const exportPercent = computed(() => {
+  if (exportTotal.value <= 0) return 0;
+  return Math.min(100, Math.floor((exportCurrent.value / exportTotal.value) * 100));
+});
+const progressTitle = computed(() => {
+  if (exportMode.value === 'library') {
+    if (exportCurrent.value >= exportTotal.value && exportTotal.value > 0) {
+      return '备份完成,准备下载...';
+    }
+    return '正在导出整库备份...';
+  }
+  return '正在导出数据...';
+});
 
 // 可用的导出字段
 const exportFields = EXPORT_FIELDS;
@@ -267,9 +304,20 @@ const handleLibraryExport = async () => {
   isExporting.value = true;
   exportError.value = '';
   exportSuccess.value = false;
+  // 重置进度
+  exportCurrent.value = 0;
+  exportTotal.value = 0;
+  exportCurrentFile.value = '';
 
   try {
-    const blob = await exportService.exportLibrary({});
+    const blob = await exportService.exportLibrary(
+      {},
+      (current, total, currentFile) => {
+        exportCurrent.value = current;
+        exportTotal.value = total;
+        exportCurrentFile.value = currentFile;
+      }
+    );
     const date = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `library-backup-${date}.zip`;
     exportService.downloadFile(blob, filename);
@@ -755,6 +803,51 @@ const goBack = () => {
   padding: 2rem;
   text-align: center;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  min-width: 320px;
+  max-width: 90vw;
+}
+
+/* 进度条 */
+.progress-bar-wrapper {
+  margin: 1.25rem 0 0.5rem;
+}
+.progress-bar {
+  width: 100%;
+  height: 10px;
+  background-color: #e8f5e9;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #c8e6c9;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #66bb6a 0%, #4CAF50 100%);
+  border-radius: 6px;
+  transition: width 0.25s ease;
+  box-shadow: 0 0 8px rgba(76, 175, 80, 0.4);
+}
+.progress-bar-label {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #2e7d32;
+}
+.progress-status {
+  margin: 0.75rem 0 0.25rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #333;
+  font-variant-numeric: tabular-nums;
+}
+.progress-current-file {
+  margin: 0.25rem 0 0;
+  font-size: 0.82rem;
+  color: #666;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
 .progress-spinner {

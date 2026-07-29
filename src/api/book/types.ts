@@ -91,6 +91,25 @@ export interface ReadingState {
   download: number;
 }
 
+/**
+ * ISBN 重复检测返回的书籍信息（精简字段）
+ */
+export interface DuplicateBook {
+  id: number;
+  title: string;
+  author: string;
+  isbn: string;
+  publisher?: string;
+  hasCover: boolean;
+  coverPath?: string;
+  addToLibraryTime: string; // ISO datetime
+}
+
+/**
+ * ISBN 重复检测返回的 map：归一化 ISBN -> 重复书籍列表
+ */
+export type DuplicatesByIsbn = Record<string, DuplicateBook[]>;
+
 export interface BookService {
   // 书籍管理
   addBook(book: Omit<Book, 'id' | 'createTime' | 'updateTime'>): Promise<Book>;
@@ -115,6 +134,9 @@ export interface BookService {
   }>;
   getBooksCount(): Promise<number>;
   batchAddBooks(books: Omit<Book, 'id' | 'createTime' | 'updateTime'>[]): Promise<Book[]>;
+
+  // ISBN 重复检测
+  findDuplicates(isbns: string[]): Promise<DuplicatesByIsbn>;
 
   // 分组管理
   addGroup(group: Omit<BookGroup, 'id' | 'bookCount'>): Promise<BookGroup>;

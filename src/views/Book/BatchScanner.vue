@@ -249,6 +249,22 @@
       </div>
     </div>
 
+    <!-- ISBN 重复检测弹窗 -->
+    <DuplicateBookDialog
+      :visible="duplicateDialogVisible"
+      :duplicates="duplicateList"
+      :mode="duplicateDialogMode"
+      :batch-stats="batchDupStats"
+      :incoming-duplicate-books="incomingDuplicateBooks"
+      :current-book-title="currentBookTitle"
+      @cancel="pendingDuplicateResolver?.('cancel')"
+      @continue="pendingDuplicateResolver?.('continue')"
+      @view-existing="onDupDialogViewExisting"
+      @skip-all="pendingDuplicateResolver?.('skip-all')"
+      @continue-all="pendingDuplicateResolver?.('continue-all')"
+      @review-one-by-one="pendingDuplicateResolver?.('review-one-by-one')"
+    />
+
     <!-- 退出确认弹窗 -->
     <div v-if="showExitConfirmDialog" class="exit-confirm-dialog">
       <div class="confirm-dialog-content">
@@ -440,6 +456,9 @@ import { bookService } from '@/api/book';
 import { searchBookByISBN, searchBookByISBNWithSource } from '@/api/common/isbnApi';
 import type { BookSearchResult } from '@/api/common/isbnApi/types';
 import { API_CONFIGS } from '@/api/common/isbnApi/apiConfig';
+import { normalizeIsbn } from '@/utils/isbnUtils';
+import type { DuplicateBook } from '@/api/book/types';
+import DuplicateBookDialog from '@/views/Book/components/DuplicateBookDialog.vue';
 
 const router = useRouter();
 const route = useRoute();
@@ -602,6 +621,18 @@ const progressPercent = computed(() => {
 
 const currentIndex = ref(0);
 const totalItems = ref(0);
+
+// ISBN 重复检测弹窗状态
+const duplicateDialogVisible = ref(false);
+const duplicateDialogMode = ref<'single' | 'batch-summary'>('single');
+const duplicateList = ref<DuplicateBook[]>([]);
+const batchDupStats = ref<{ totalCount: number; duplicateCount: number } | null>(null);
+// 合并处理时：会触发重复的待导入书籍（仅含触发重复的）
+const incomingDuplicateBooks = ref<Array<{ isbn: string; title: string }>>([]);
+// 逐本处理时：当前正在确认的待导入书名
+const currentBookTitle = ref<string | undefined>(undefined);
+const pendingDuplicateResolver = ref<((r: any) => void) | null>(null);
+const perBookDecisions = ref<Map<string, boolean>>(new Map());
 
 // 返回上一页
 const goBack = () => {
@@ -1001,7 +1032,7 @@ const searchAll = async () => {
 
 // 导入所有书籍
 const importAll = async () => {
-  const booksToImport = selectedBooks.value.length > 0
+  let booksToImport = selectedBooks.value.length > 0
     ? previewBooks.value.filter(book => selectedBooks.value.includes(book.isbn))
     : previewBooks.value;
 
@@ -1012,6 +1043,95 @@ const importAll = async () => {
 
   if (!confirm(`确定要导入 ${booksToImport.length} 本书籍到书库吗？`)) {
     return;
+  }
+
+  // ISBN 重复预检（一次性查所有 ISBN，命中则弹汇总对话框）
+  const allIsbns = booksToImport.map(b => (b.isbn || '').toString()).filter(Boolean);
+  const dupMap = await bookService.findDuplicates(allIsbns);
+  const dupListAll: DuplicateBook[] = [];
+  const seenIds = new Set<number>();
+  for (const k of Object.keys(dupMap)) {
+    for (const d of dupMap[k]) {
+      if (!seenIds.has(d.id)) {
+        seenIds.add(d.id);
+        dupListAll.push(d);
+      }
+    }
+  }
+  if (dupListAll.length > 0) {
+    const dupIsbnSet = new Set<string>();
+    for (const b of booksToImport) {
+      const nk = normalizeIsbn(b.isbn);
+      if (dupMap[nk] && dupMap[nk].length > 0) dupIsbnSet.add(nk);
+    }
+    // 收集触发重复的待导入书籍（含书名、ISBN），用于弹窗中以可点击形式展示
+    incomingDuplicateBooks.value = booksToImport
+      .filter(b => dupIsbnSet.has(normalizeIsbn(b.isbn)))
+      .map(b => ({ isbn: normalizeIsbn(b.isbn), title: b.title || '（无标题）' }));
+
+    const choice = await new Promise<any>((resolve) => {
+      duplicateDialogMode.value = 'batch-summary';
+      duplicateList.value = dupListAll;
+      batchDupStats.value = {
+        totalCount: booksToImport.length,
+        duplicateCount: dupIsbnSet.size
+      };
+      pendingDuplicateResolver.value = (r: any) => {
+        duplicateDialogVisible.value = false;
+        // 关闭后清空单次状态，避免下次弹窗残留
+        incomingDuplicateBooks.value = [];
+        currentBookTitle.value = undefined;
+        pendingDuplicateResolver.value = null;
+        resolve(r);
+      };
+      duplicateDialogVisible.value = true;
+    });
+    if (choice === 'view') {
+      isProcessing.value = false;
+      return;
+    }
+    if (choice === 'skip-all') {
+      booksToImport = booksToImport.filter(b => !dupIsbnSet.has(normalizeIsbn(b.isbn)));
+      if (booksToImport.length === 0) {
+        alert('已全部跳过，无书可导入');
+        return;
+      }
+    } else if (choice === 'review-one-by-one') {
+      perBookDecisions.value.clear();
+      for (const book of booksToImport) {
+        const nk = normalizeIsbn(book.isbn);
+        const list = dupMap[nk];
+        if (!list || list.length === 0) {
+          perBookDecisions.value.set(book.isbn, true);
+          continue;
+        }
+        // 逐本处理：当前正在确认的待导入书名（用于弹窗文案展示）
+        currentBookTitle.value = book.title || '（无标题）';
+        const c = await new Promise<any>((resolve) => {
+          duplicateDialogMode.value = 'single';
+          duplicateList.value = list;
+          batchDupStats.value = null;
+          pendingDuplicateResolver.value = (r: any) => {
+            duplicateDialogVisible.value = false;
+            currentBookTitle.value = undefined;
+            pendingDuplicateResolver.value = null;
+            resolve(r);
+          };
+          duplicateDialogVisible.value = true;
+        });
+        if (c === 'view' || c === 'cancel') {
+          perBookDecisions.value.set(book.isbn, false);
+        } else {
+          perBookDecisions.value.set(book.isbn, true);
+        }
+      }
+      booksToImport = booksToImport.filter(b => perBookDecisions.value.get(b.isbn) === true);
+      if (booksToImport.length === 0) {
+        alert('已全部跳过，无书可导入');
+        return;
+      }
+    }
+    // 'continue-all' 直接走原循环
   }
 
   isProcessing.value = true;
@@ -1025,6 +1145,11 @@ const importAll = async () => {
     const bookData = booksToImport[i];
     currentIndex.value++;
     currentProcessingBook.value = bookData;
+
+    // 「逐本处理」模式下，用户选择跳过的书直接跳过 addBook
+    if (perBookDecisions.value.has(bookData.isbn) && perBookDecisions.value.get(bookData.isbn) === false) {
+      continue;
+    }
 
     console.log(`📊 [BatchScanner.importAll] 导入书籍 ${i + 1}/${booksToImport.length}:`, {
       isbn: bookData.isbn,
@@ -1114,6 +1239,12 @@ const importAll = async () => {
       message: `成功导入 ${successCount} 本，失败 ${failedBooks.length} 本\n失败书籍: ${failedBooks.join('、')}`
     };
   }
+};
+
+// ISBN 重复弹窗 - 点击列表行查看已有：跳详情
+const onDupDialogViewExisting = (bookId: number) => {
+  router.push(`/book/detail/${bookId}`);
+  pendingDuplicateResolver.value?.('view');
 };
 
 // 关闭结果提示

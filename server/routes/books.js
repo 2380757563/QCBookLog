@@ -230,6 +230,95 @@ router.put('/:id/reading-progress', async (req, res) => {
 });
 
 /**
+ * 根据 ISBN 查找已存在的书籍（用于添加前重复检测）
+ * 注意：此路由必须在 /:id 之前定义，否则会被 /:id 匹配
+ */
+router.get('/duplicates', async (req, res) => {
+  try {
+    // Express 自动将 ?isbns=a&isbns=b 解析为数组
+    const rawIsbns = req.query.isbns;
+    const isbns = (Array.isArray(rawIsbns) ? rawIsbns : rawIsbns ? [rawIsbns] : [])
+      .map(s => String(s).trim())
+      .filter(Boolean);
+
+    if (isbns.length === 0) {
+      return res.json({});
+    }
+
+    // ISBN 归一化：去除连字符和空格，ISBN-10 末尾 'X' 转大写
+    const normalizeIsbn = (s) => {
+      const cleaned = String(s).replace(/[-\s]/g, '').toUpperCase();
+      // 长度 10 时，保留 'X'；否则强制大写
+      return cleaned;
+    };
+
+    // 同时匹配归一化前和归一化后的 ISBN（兼容 Calibre 库内可能存不同格式的情况）
+    const normalizedSet = new Set(isbns.map(normalizeIsbn));
+    const searchIsbns = Array.from(new Set([...isbns, ...normalizedSet]));
+
+    const calibreDb = databaseService.connectionManager?.getCalibreDb();
+    if (!calibreDb) {
+      console.warn('⚠️ [GET /duplicates] Calibre 数据库不可用');
+      return res.json({});
+    }
+
+    // 动态构建 IN (?, ?, ...) 占位符
+    const placeholders = searchIsbns.map(() => '?').join(',');
+    const query = `
+      SELECT
+        b.id,
+        b.title,
+        b.path,
+        b.has_cover,
+        b.timestamp,
+        UPPER(REPLACE(IFNULL(i.val, ''), '-', '')) as isbn_normalized,
+        IFNULL(i.val, '') as isbn,
+        (SELECT GROUP_CONCAT(a.name, ' & ')
+          FROM authors a
+          JOIN books_authors_link bal ON a.id = bal.author
+          WHERE bal.book = b.id) as author,
+        (SELECT p.name FROM publishers p
+          WHERE p.id IN (SELECT publisher FROM books_publishers_link WHERE book = b.id)) as publisher
+      FROM identifiers i
+      JOIN books b ON i.book = b.id
+      WHERE i.type = 'isbn'
+        AND (
+          i.val IN (${searchIsbns.map(() => '?').join(',')})
+          OR UPPER(REPLACE(i.val, '-', '')) IN (${placeholders})
+        )
+    `;
+
+    const params = [...searchIsbns, ...searchIsbns];
+    const rows = calibreDb.prepare(query).all(...params);
+
+    // 按归一化 ISBN 分组
+    const result = {};
+    for (const row of rows) {
+      const key = row.isbn_normalized || normalizeIsbn(row.isbn);
+      if (!result[key]) {
+        result[key] = [];
+      }
+      result[key].push({
+        id: row.id,
+        title: row.title,
+        author: row.author || '',
+        isbn: row.isbn,
+        publisher: row.publisher || undefined,
+        hasCover: !!row.has_cover,
+        coverPath: row.path || undefined,
+        addToLibraryTime: row.timestamp || ''
+      });
+    }
+
+    console.log(`🔍 [GET /duplicates] 查询 ${isbns.length} 个 ISBN，命中 ${Object.keys(result).length} 个`);
+    res.json(result);
+  } catch (error) {
+    console.error('❌ [GET /duplicates] 查询失败:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * 根据ID获取书籍
  */
 router.get('/:id', async (req, res) => {
