@@ -2,6 +2,7 @@ import { bookApi, groupApi, tagApi } from '@/api/apiClient';
 import { downloadBookCover } from '@/utils/imageUtils';
 import { fileService } from '@/api/fileService';
 import { useProgressStore } from '@/stores/progress';
+import { normalizeIsbn } from '@/utils/isbnUtils';
 import {
   Book,
   BookGroup,
@@ -9,7 +10,8 @@ import {
   BookQueryParams,
   BookQueryResult,
   BookService,
-  ReadingState
+  ReadingState,
+  DuplicatesByIsbn
 } from './types';
 
 // 生成当前时间
@@ -228,6 +230,24 @@ class BookServiceImpl implements BookService {
   async getBooksCount(): Promise<number> {
     const result = await bookApi.getCount();
     return result.count;
+  }
+
+  // ISBN 重复检测（添加前预检用）
+  // 入参：原始 ISBN 数组；自动归一化（去连字符/空格、大写）
+  // 返回：map，归一化 ISBN -> 重复书籍列表；空 map 表示无重复
+  async findDuplicates(isbns: string[]): Promise<DuplicatesByIsbn> {
+    if (!isbns || isbns.length === 0) return {};
+    const normalized = isbns
+      .map(i => normalizeIsbn(i))
+      .filter(Boolean);
+    if (normalized.length === 0) return {};
+    try {
+      return await bookApi.findDuplicates(normalized);
+    } catch (error) {
+      // 失败时返回空 map（fail-open，前端让用户继续添加）
+      console.warn('⚠️ [findDuplicates] 查询失败，跳过预检:', error?.message || error);
+      return {};
+    }
   }
 
   async batchAddBooks(books: Omit<Book, 'id' | 'createTime' | 'updateTime'>[]): Promise<Book[]> {

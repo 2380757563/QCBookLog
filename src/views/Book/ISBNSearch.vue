@@ -169,6 +169,16 @@
         </div>
       </div>
     </div>
+
+    <!-- ISBN 重复检测弹窗 -->
+    <DuplicateBookDialog
+      :visible="duplicateDialogVisible"
+      :duplicates="duplicateList"
+      mode="single"
+      @cancel="pendingDuplicateResolver?.(false)"
+      @continue="pendingDuplicateResolver?.(true)"
+      @view-existing="onDupDialogViewExisting"
+    />
   </div>
 </template>
 
@@ -180,7 +190,10 @@ import { bookService } from '@/api/book';
 import { searchBookByISBN, searchTanshuByISBN } from '@/api/common/isbnApi';
 import type { BookSearchResult } from '@/api/common/isbnApi/types';
 import { getImageUrl } from '@/utils/localImageStorage';
+import { normalizeIsbn } from '@/utils/isbnUtils';
+import type { DuplicateBook } from '@/api/book/types';
 import ProgressBar from '@/components/ProgressBar.vue';
+import DuplicateBookDialog from '@/views/Book/components/DuplicateBookDialog.vue';
 
 const router = useRouter();
 const bookStore = useBookStore();
@@ -190,6 +203,11 @@ const searching = ref(false);
 const hasSearched = ref(false);
 const showProgressBar = ref(false);
 const bookTitles = ref(new Map<string, string>());
+
+// ISBN 重复检测弹窗状态
+const duplicateDialogVisible = ref(false);
+const duplicateList = ref<DuplicateBook[]>([]);
+const pendingDuplicateResolver = ref<((proceed: boolean) => void) | null>(null);
 
 // 搜索历史
 const searchHistory = ref<Array<{isbn: string, title: string}>>([]);
@@ -465,6 +483,29 @@ const useBookInfo = () => {
       // 添加书籍标题映射，用于进度显示
       bookTitles.value.set(sourceData.isbn, sourceData.title);
 
+      // ISBN 重复检测
+      const dupMap = await bookService.findDuplicates([sourceData.isbn || '']);
+      const key = normalizeIsbn(sourceData.isbn || '');
+      const list = dupMap[key] || [];
+      if (list.length > 0) {
+        // 命中重复，弹窗让用户决定
+        const proceed = await new Promise<boolean>((resolve) => {
+          duplicateList.value = list;
+          pendingDuplicateResolver.value = (ok: boolean) => {
+            duplicateDialogVisible.value = false;
+            pendingDuplicateResolver.value = null;
+            resolve(ok);
+          };
+          duplicateDialogVisible.value = true;
+        });
+        if (!proceed) {
+          // 用户取消或跳转到详情页，终止本次保存
+          showProgressBar.value = false;
+          bookTitles.value.clear();
+          return;
+        }
+      }
+
       const newBook = await bookService.addBook(bookData);
       bookStore.addBook(newBook);
 
@@ -527,6 +568,12 @@ const handleImgError = async (event: Event) => {
       placeholder.style.display = 'flex';
     }
   }
+};
+
+// ISBN 重复弹窗 - 查看已有：跳转到详情页并取消当前保存
+const onDupDialogViewExisting = (bookId: number) => {
+  router.push(`/book/detail/${bookId}`);
+  pendingDuplicateResolver.value?.(false);
 };
 </script>
 

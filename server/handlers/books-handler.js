@@ -515,6 +515,91 @@ async function deleteBook(req, res) {
 }
 
 /**
+ * 根据 ISBN 查找已存在的书籍（用于添加前重复检测）
+ */
+async function findDuplicates(req, res) {
+  try {
+    // Express 自动将 ?isbns=a&isbns=b 解析为数组
+    const rawIsbns = req.query.isbns;
+    const isbns = (Array.isArray(rawIsbns) ? rawIsbns : rawIsbns ? [rawIsbns] : [])
+      .map(s => String(s).trim())
+      .filter(Boolean);
+
+    if (isbns.length === 0) {
+      return res.json({});
+    }
+
+    // ISBN 归一化：去除连字符和空格
+    const normalizeIsbn = (s) => String(s).replace(/[-\s]/g, '').toUpperCase();
+
+    // 同时匹配归一化前和归一化后的 ISBN（兼容 Calibre 库内可能存不同格式的情况）
+    const normalizedSet = new Set(isbns.map(normalizeIsbn));
+    const searchIsbns = Array.from(new Set([...isbns, ...normalizedSet]));
+
+    const calibreDb = databaseService.connectionManager?.getCalibreDb();
+    if (!calibreDb) {
+      console.warn('⚠️ [findDuplicates] Calibre 数据库不可用');
+      return res.json({});
+    }
+
+    // 动态构建 IN (?, ?, ...) 占位符
+    const inPlaceholders = searchIsbns.map(() => '?').join(',');
+    const query = `
+      SELECT
+        b.id,
+        b.title,
+        b.path,
+        b.has_cover,
+        b.timestamp,
+        UPPER(REPLACE(IFNULL(i.val, ''), '-', '')) as isbn_normalized,
+        IFNULL(i.val, '') as isbn,
+        (SELECT GROUP_CONCAT(a.name, ' & ')
+          FROM authors a
+          JOIN books_authors_link bal ON a.id = bal.author
+          WHERE bal.book = b.id) as author,
+        (SELECT p.name FROM publishers p
+          WHERE p.id IN (SELECT publisher FROM books_publishers_link WHERE book = b.id)) as publisher
+      FROM identifiers i
+      JOIN books b ON i.book = b.id
+      WHERE i.type = 'isbn'
+        AND (
+          i.val IN (${inPlaceholders})
+          OR UPPER(REPLACE(i.val, '-', '')) IN (${inPlaceholders})
+        )
+    `;
+
+    const params = [...searchIsbns, ...searchIsbns];
+    const rows = calibreDb.prepare(query).all(...params);
+
+    // 按归一化 ISBN 分组
+    const result = {};
+    for (const row of rows) {
+      const key = row.isbn_normalized || normalizeIsbn(row.isbn);
+      if (!key) continue;
+      if (!result[key]) {
+        result[key] = [];
+      }
+      result[key].push({
+        id: row.id,
+        title: row.title,
+        author: row.author || '',
+        isbn: row.isbn,
+        publisher: row.publisher || undefined,
+        hasCover: !!row.has_cover,
+        coverPath: row.path || undefined,
+        addToLibraryTime: row.timestamp || ''
+      });
+    }
+
+    console.log(`🔍 [findDuplicates] 查询 ${isbns.length} 个 ISBN，命中 ${Object.keys(result).length} 个`);
+    res.json(result);
+  } catch (error) {
+    console.error('❌ [findDuplicates] 查询失败:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+/**
  * 搜索书籍
  */
 async function searchBooks(req, res) {
@@ -688,6 +773,7 @@ export default {
   updateBook,
   deleteBook,
   searchBooks,
+  findDuplicates,
   uploadBookCover,
   deleteBookCover,
   getReadingState,

@@ -15,6 +15,9 @@ router.get('/search', bookController.searchBooks);
 // 书籍总数路由（必须在 /:id 之前）
 router.get('/count', bookController.getBooksCount);
 
+// ISBN 重复检测路由（必须在 /:id 之前）
+router.get('/duplicates', bookController.findDuplicates);
+
 // 书籍 CRUD 路由
 router.get('/', bookController.getAllBooks);
 router.get('/:id', bookController.getBookById);

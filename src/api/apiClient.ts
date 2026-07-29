@@ -193,6 +193,18 @@ export const bookApi = {
   },
 
   /**
+   * 批量检查 ISBN 重复（用于添加前预检）
+   * @param isbns ISBN 列表（已归一化或原文均可）
+   * @returns map: 归一化 ISBN -> 重复书籍列表
+   */
+  findDuplicates: (isbns: string[]): Promise<Record<string, any[]>> => {
+    if (!isbns || isbns.length === 0) return Promise.resolve({});
+    const params = new URLSearchParams();
+    isbns.forEach(i => params.append('isbns', i));
+    return apiRequest(`/books/duplicates?${params.toString()}`);
+  },
+
+  /**
    * 上传书籍封面
    * @param id 书籍ID
    * @param file 封面文件

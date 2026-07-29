@@ -110,28 +110,89 @@ class ExportService {
   }
 
   /**
-   * 导出整库备份（完整备份：Calibre书库 + Talebook数据库）
+   * 导出整库备份（完整备份：Calibre书库 + Talebook数据库 + QCBookLog数据库）
+   * 使用后端异步任务模式，支持进度回调
+   * @param options 导出选项
+   * @param onProgress 进度回调 (current, total, currentFile)
+   * @returns Promise<Blob>
    */
-  async exportLibrary(options: ZipExportOptions): Promise<Blob> {
-
+  async exportLibrary(
+    options: ZipExportOptions,
+    onProgress?: (current: number, total: number, currentFile: string) => void
+  ): Promise<Blob> {
     try {
-      // 调用后端备份 API
-      const response = await fetch('/api/backup/library', {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/zip'
-        }
+      console.log('📦 启动整库备份任务...');
+
+      // 1) 启动任务
+      const startResp = await fetch('/api/backup/library', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(options || {})
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || '导出失败');
+      if (!startResp.ok) {
+        let msg = '启动整库备份失败';
+        try {
+          const data = await startResp.json();
+          msg = data.error || msg;
+        } catch (e) {}
+        throw new Error(msg);
       }
+      const { jobId, total, filename } = await startResp.json();
+      console.log(`📦 任务已启动: ${jobId}, 待处理 ${total} 个文件`);
 
-      // 获取 Blob
-      const blob = await response.blob();
-      console.log('✅ 整库备份导出完成，大小:', this.formatFileSize(blob.size));
-      return blob;
+      // 通知前端:开始打包(总数已知)
+      if (onProgress) onProgress(0, total, '准备中...');
+
+      // 2) 轮询状态
+      const pollInterval = 300; // 300ms
+      const maxWaitMs = 30 * 60 * 1000; // 30 分钟超时
+      const startedAt = Date.now();
+      let lastCurrent = -1;
+
+      // 立即先做一次状态查询,避免空轮询
+      while (true) {
+        if (Date.now() - startedAt > maxWaitMs) {
+          throw new Error('整库备份超时,请重试');
+        }
+        const statusResp = await fetch(`/api/backup/library/status/${encodeURIComponent(jobId)}`);
+        if (statusResp.status === 404) {
+          throw new Error('备份任务不存在或已过期');
+        }
+        if (!statusResp.ok) {
+          throw new Error(`查询进度失败: HTTP ${statusResp.status}`);
+        }
+        const status = await statusResp.json();
+
+        if (status.status === 'failed') {
+          throw new Error(status.error || '备份失败');
+        }
+
+        // 仅在变化时通知(减少无效渲染)
+        if (status.current !== lastCurrent) {
+          lastCurrent = status.current;
+          if (onProgress) {
+            onProgress(status.current, status.total, status.currentFile || '处理中...');
+          }
+        }
+
+        if (status.status === 'completed') {
+          // 3) 下载备份文件
+          const dlResp = await fetch(`/api/backup/library/download/${encodeURIComponent(jobId)}`);
+          if (!dlResp.ok) {
+            let msg = '下载备份文件失败';
+            try {
+              const data = await dlResp.json();
+              msg = data.error || msg;
+            } catch (e) {}
+            throw new Error(msg);
+          }
+          const blob = await dlResp.blob();
+          console.log(`✅ 整库备份导出完成,文件: ${filename}, 大小: ${this.formatFileSize(blob.size)}`);
+          return blob;
+        }
+
+        await new Promise(r => setTimeout(r, pollInterval));
+      }
     } catch (error) {
       console.error('❌ 导出整库备份失败:', error);
       throw error;

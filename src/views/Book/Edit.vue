@@ -603,6 +603,16 @@
         </div>
       </div>
     </div>
+
+    <!-- ISBN 重复检测弹窗 -->
+    <DuplicateBookDialog
+      :visible="duplicateDialogVisible"
+      :duplicates="duplicateList"
+      mode="single"
+      @cancel="onDupDialogCancel"
+      @continue="onDupDialogContinue"
+      @view-existing="onDupDialogViewExisting"
+    />
   </div>
 </template>
 
@@ -615,12 +625,14 @@ import { useReadingStore } from '@/stores/reading';
 import { bookService } from '@/api/book';
 import readingTrackingService from '@/api/readingTracking';
 import activityService from '@/api/activity';
-import type { Book, BookGroup, Tag } from '@/api/book/types';
+import type { Book, BookGroup, Tag, DuplicateBook } from '@/api/book/types';
+import { normalizeIsbn } from '@/utils/isbnUtils';
 import { searchBookByISBN, searchBookByISBNWithSource, isbnCacheUtils } from '@/api/common/isbnApi';
 import { API_CONFIGS } from '@/api/common/isbnApi/apiConfig';
 import type { BookSearchResult } from '@/api/common/isbnApi/types';
 import ReadingProgressBar from '@/components/ReadingProgressBar/ReadingProgressBar.vue';
 import ReadingStatsCard from '@/components/ReadingStatsCard/ReadingStatsCard.vue';
+import DuplicateBookDialog from '@/views/Book/components/DuplicateBookDialog.vue';
 
 const router = useRouter();
 const route = useRoute();
@@ -636,6 +648,11 @@ const coverInput = ref<HTMLInputElement | null>(null);
 const calibreTagInput = ref('');
 const allGroups = ref<BookGroup[]>([]);
 const allTags = ref<string[]>([]);
+
+// ISBN 重复检测弹窗状态
+const duplicateDialogVisible = ref(false);
+const duplicateList = ref<DuplicateBook[]>([]);
+const pendingDuplicateResolver = ref<((proceed: boolean) => void) | null>(null);
 
 // ISBN 多源获取对话框
 const showIsbnFetchDialog = ref(false);
@@ -1432,7 +1449,13 @@ const validateForm = (): { valid: boolean; errors: string[] } => {
       bookStore.updateBook(updatedBook);
       savedBook = updatedBook;
     } else {
-
+      // 新建模式：先做 ISBN 重复检测，命中则弹窗让用户决定
+      const proceed = await checkIsbnDuplicateBeforeAdd();
+      if (!proceed) {
+        // 用户在弹窗里选择「取消添加」或在「查看已有」后放弃
+        saving.value = false;
+        return;
+      }
       const newBook = await bookService.addBook(finalSaveData);
       bookStore.addBook(newBook);
       savedBook = newBook;
@@ -1511,6 +1534,41 @@ const validateForm = (): { valid: boolean; errors: string[] } => {
   } finally {
     saving.value = false;
   }
+};
+
+/**
+ * 添加书籍前的 ISBN 重复检测
+ * - ISBN 为空时直接放行
+ * - 有重复则弹窗；用户「取消」或「查看已有」时返回 false（中止添加）
+ * - 用户「仍然添加」时返回 true（继续后续保存）
+ */
+const checkIsbnDuplicateBeforeAdd = async (): Promise<boolean> => {
+  const isbn = (form as any).isbn?.trim?.() || '';
+  if (!isbn) return true;
+
+  const dupMap = await bookService.findDuplicates([isbn]);
+  const key = normalizeIsbn(isbn);
+  const list = dupMap[key] || dupMap[Object.keys(dupMap).find(k => normalizeIsbn(k) === key) || ''] || [];
+  if (list.length === 0) return true;
+
+  // 命中重复，弹窗等待用户选择
+  duplicateList.value = list;
+  return new Promise<boolean>((resolve) => {
+    pendingDuplicateResolver.value = (proceed: boolean) => {
+      duplicateDialogVisible.value = false;
+      pendingDuplicateResolver.value = null;
+      resolve(proceed);
+    };
+    duplicateDialogVisible.value = true;
+  });
+};
+
+// ISBN 重复弹窗的回调（由模板里的 @cancel / @continue / @view-existing 触发）
+const onDupDialogCancel = () => pendingDuplicateResolver.value?.(false);
+const onDupDialogContinue = () => pendingDuplicateResolver.value?.(true);
+const onDupDialogViewExisting = (bookId: number) => {
+  router.push(`/book/detail/${bookId}`);
+  pendingDuplicateResolver.value?.(false);
 };
 
 // 加载书籍数据的函数
