@@ -1,4 +1,5 @@
 import { bookApi, groupApi, tagApi } from '@/api/apiClient';
+import type { ImportProgress } from '@/api/importService';
 import { downloadBookCover } from '@/utils/imageUtils';
 import { fileService } from '@/api/fileService';
 import { useProgressStore } from '@/stores/progress';
@@ -243,14 +244,17 @@ class BookServiceImpl implements BookService {
     if (normalized.length === 0) return {};
     try {
       return await bookApi.findDuplicates(normalized);
-    } catch (error) {
+    } catch (error: any) {
       // 失败时返回空 map（fail-open，前端让用户继续添加）
       console.warn('⚠️ [findDuplicates] 查询失败，跳过预检:', error?.message || error);
       return {};
     }
   }
 
-  async batchAddBooks(books: Omit<Book, 'id' | 'createTime' | 'updateTime'>[]): Promise<Book[]> {
+  async batchAddBooks(
+    books: Omit<Book, 'id' | 'createTime' | 'updateTime'>[],
+    onProgress?: (p: ImportProgress) => void
+  ): Promise<Book[]> {
     const progressStore = useProgressStore();
     const addedBooks: Book[] = [];
 
@@ -260,6 +264,7 @@ class BookServiceImpl implements BookService {
     try {
       // 第一阶段：创建所有书籍（不立即上传封面）
       const booksWithCovers: Array<{ book: Book; coverBlob?: Blob; coverUrl?: string }> = [];
+      let lastCreatePercent = -1;
 
       for (let i = 0; i < books.length; i++) {
         const book = books[i];
@@ -287,31 +292,59 @@ class BookServiceImpl implements BookService {
         } catch (error) {
           console.error(`❌ [${i + 1}/${books.length}] 创建书籍失败: ${book.title}`, error);
         }
+
+        // 每 10 本或百分比变化时触发进度
+        if (onProgress) {
+          const percent = Math.floor((i + 1) / books.length * 100);
+          if (percent !== lastCreatePercent) {
+            lastCreatePercent = percent;
+            onProgress({
+              percent,
+              phase: 'creating',
+              message: `创建书籍中 (${i + 1}/${books.length})...`,
+              current: i + 1,
+              total: books.length
+            });
+          }
+        }
+        // 让出主线程，避免 UI 卡顿
+        await new Promise(r => setTimeout(r, 0));
       }
 
       // 等待数据库事务完全提交（WAL模式需要时间）
-
       await new Promise(resolve => setTimeout(resolve, 500));
 
       // 第二阶段：批量上传封面
-
+      let lastCoverPercent = -1;
       for (let i = 0; i < booksWithCovers.length; i++) {
         const { book, coverBlob, coverUrl } = booksWithCovers[i];
 
         try {
           if (coverBlob) {
-
             await this.uploadCoverBlob(book.id, coverBlob);
-
           } else if (coverUrl) {
-
             await downloadBookCover(book.id, coverUrl);
-
           }
         } catch (error) {
           console.error(`⚠️ [${i + 1}/${booksWithCovers.length}] 封面处理失败: ${book.title}`, error);
           // 封面失败不影响整体导入，继续处理下一本
         }
+
+        if (onProgress && booksWithCovers.length > 0) {
+          const percent = Math.floor((i + 1) / booksWithCovers.length * 100);
+          if (percent !== lastCoverPercent) {
+            lastCoverPercent = percent;
+            onProgress({
+              percent,
+              phase: 'covers',
+              message: `上传封面中 (${i + 1}/${booksWithCovers.length})...`,
+              current: i + 1,
+              total: booksWithCovers.length
+            });
+          }
+        }
+        // 让出主线程，避免 UI 卡顿
+        await new Promise(r => setTimeout(r, 0));
       }
 
       return addedBooks;

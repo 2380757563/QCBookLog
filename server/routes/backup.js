@@ -18,7 +18,7 @@ import multer from 'multer';
 const router = express.Router();
 const DATA_DIR = path.join(process.cwd(), '../data');
 const BACKUP_DIR = path.join(DATA_DIR, 'metadata/backup');
-const TEMP_DIR = path.join(os.tmpdir(), 'qc-booklog-library-backup');
+const TEMP_DIR = path.join(DATA_DIR, 'tmp/library-backup');
 
 /**
  * 异步整库备份任务存储
@@ -33,8 +33,32 @@ function generateJobId() {
 }
 
 /**
- * 递归统计目录下的文件总数(用于进度展示)
+ * 递归统计目录字节大小(用于进度展示)
  */
+async function getDirSize(dir) {
+  let total = 0;
+  let entries;
+  try {
+    entries = await fs.readdir(dir, { withFileTypes: true });
+  } catch (e) {
+    return 0;
+  }
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      total += await getDirSize(full);
+    } else if (entry.isFile()) {
+      try {
+        const stats = await fs.stat(full);
+        total += stats.size;
+      } catch (e) {
+        // 忽略无法读取的文件
+      }
+    }
+  }
+  return total;
+}
+
 async function countFiles(dir) {
   let count = 0;
   let entries;
@@ -52,6 +76,27 @@ async function countFiles(dir) {
     }
   }
   return count;
+}
+
+/**
+ * 清理临时目录下过期的 zip 文件（默认 30 分钟）
+ */
+async function cleanupOldTempZips(maxAgeMs = 30 * 60 * 1000) {
+  try {
+    const entries = await fs.readdir(TEMP_DIR, { withFileTypes: true });
+    const now = Date.now();
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name.endsWith('.zip')) {
+        const full = path.join(TEMP_DIR, entry.name);
+        const stats = await fs.stat(full);
+        if (now - stats.mtime.getTime() > maxAgeMs) {
+          await fs.unlink(full).catch(() => {});
+        }
+      }
+    }
+  } catch (e) {
+    // 目录可能不存在
+  }
 }
 
 /**
@@ -303,29 +348,43 @@ router.post('/library', async (req, res) => {
       }
     }
 
-    // 预统计文件总数(用于进度展示 n/m)
-    const calibreFileCount = await countFiles(calibreLibraryDir);
-    // 加上 1 (talebook.db) + 1 (qcbooklog.db) + 1 (backup-metadata.json)
-    const totalFiles = calibreFileCount + (qcBooklogExists ? 2 : 1) + 1;
-    console.log(`📊 待处理文件总数: ${totalFiles} (Calibre 目录: ${calibreFileCount})`);
+    // 预统计字节数(用于进度展示)
+    const calibreDirSize = await getDirSize(calibreLibraryDir);
+    let totalBytes = calibreDirSize;
+    try {
+      const talebookStats = await fs.stat(talebookDbPath);
+      totalBytes += talebookStats.size;
+    } catch (e) { /* ignore */ }
+    if (qcBooklogExists && qcBooklogDbPath) {
+      try {
+        const qcStats = await fs.stat(qcBooklogDbPath);
+        totalBytes += qcStats.size;
+      } catch (e) { /* ignore */ }
+    }
+    // 元数据文件粗略估算
+    totalBytes += 1024 * 1024;
+    console.log(`📊 预计待处理字节: ${totalBytes} (Calibre 目录: ${calibreDirSize})`);
 
     // 创建任务
     const jobId = generateJobId();
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `library-backup-${timestamp}.zip`;
 
-    // 确保临时目录存在
+    // 确保临时目录存在并清理过期 zip
     await fs.mkdir(TEMP_DIR, { recursive: true });
+    await cleanupOldTempZips();
     const filePath = path.join(TEMP_DIR, `${jobId}.zip`);
 
     const job = {
       status: 'running',
       current: 0,
-      total: totalFiles,
+      total: 0,
       currentFile: '准备中...',
       filename,
       filePath,
       size: 0,
+      processedBytes: 0,
+      totalBytes,
       error: null,
       startedAt: Date.now(),
       finishedAt: null
@@ -335,7 +394,7 @@ router.post('/library', async (req, res) => {
     // 立即返回 jobId,不阻塞
     res.json({
       jobId,
-      total: totalFiles,
+      totalBytes,
       filename
     });
 
@@ -374,7 +433,9 @@ router.get('/library/status/:jobId', (req, res) => {
     current: job.current,
     total: job.total,
     currentFile: job.currentFile,
-    percent: job.total > 0 ? Math.min(100, Math.floor((job.current / job.total) * 100)) : 0,
+    processedBytes: job.processedBytes || 0,
+    totalBytes: job.totalBytes || 0,
+    percent: job.totalBytes > 0 ? Math.min(100, Math.floor((job.processedBytes / job.totalBytes) * 100)) : 0,
     filename: job.filename,
     size: job.size,
     error: job.error,
@@ -398,14 +459,39 @@ router.get('/library/download/:jobId', async (req, res) => {
   if (!job.filePath || !fsSync.existsSync(job.filePath)) {
     return res.status(410).json({ error: '备份文件已失效,请重新创建任务' });
   }
-  res.download(job.filePath, job.filename, (err) => {
-    if (err) {
-      console.error('❌ 备份文件下载失败:', err);
+
+  try {
+    const stats = fsSync.statSync(job.filePath);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Length', stats.size);
+    res.setHeader('Content-Disposition', `attachment; filename="${job.filename}"`);
+
+    const stream = fsSync.createReadStream(job.filePath);
+    let aborted = false;
+
+    stream.on('error', (err) => {
+      console.error('❌ 备份文件流式下载失败:', err);
       if (!res.headersSent) {
         res.status(500).json({ error: err.message });
+      } else if (!res.destroyed) {
+        res.end();
       }
+    });
+
+    req.on('close', () => {
+      if (!aborted) {
+        aborted = true;
+        stream.destroy();
+      }
+    });
+
+    stream.pipe(res);
+  } catch (err) {
+    console.error('❌ 备份文件下载失败:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message });
     }
-  });
+  }
 });
 
 /**
@@ -433,10 +519,13 @@ async function runLibraryBackupJob(job, ctx) {
     zlib: { level: 6 }
   });
 
-  // 监听单文件 entry 完成(每个文件加 1)
-  archive.on('entry', (entry) => {
-    job.current += 1;
-    job.currentFile = entry.name;
+  // 使用 archiver 内置 progress 事件按字节推进
+  archive.on('progress', (data) => {
+    job.processedBytes = data.fs.processedBytes;
+    job.totalBytes = data.fs.totalBytes;
+    job.current = data.entries.processed;
+    job.total = data.entries.total;
+    job.currentFile = `${data.entries.processed} / ${data.entries.total}`;
   });
 
   // 监听错误
@@ -456,6 +545,7 @@ async function runLibraryBackupJob(job, ctx) {
       job.size = archive.pointer();
     }
     job.status = 'completed';
+    job.processedBytes = job.totalBytes;
     job.current = job.total;
     job.currentFile = '完成';
     job.finishedAt = Date.now();

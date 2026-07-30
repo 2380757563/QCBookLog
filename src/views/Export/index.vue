@@ -169,26 +169,18 @@
       <div class="progress-card">
         <p class="progress-text">{{ progressTitle }}</p>
 
-        <!-- 整库导出:显示文件级进度条 + 当前文件序号 -->
-        <template v-if="exportMode === 'library'">
-          <div class="progress-bar-wrapper">
-            <div class="progress-bar">
-              <div
-                class="progress-bar-fill"
-                :style="{ width: exportPercent + '%' }"
-              ></div>
-            </div>
-            <div class="progress-bar-label">{{ exportPercent }}%</div>
+        <div class="progress-bar-wrapper">
+          <div class="progress-bar">
+            <div
+              class="progress-bar-fill"
+              :style="{ width: exportPercent + '%' }"
+            ></div>
           </div>
-          <p class="progress-status">正在打包……文件 ({{ exportCurrent }}/{{ exportTotal }})</p>
-          <p class="progress-current-file" v-if="exportCurrentFile">📄 {{ exportCurrentFile }}</p>
-        </template>
-
-        <!-- 书籍数据导出:仅显示旋转动画 -->
-        <template v-else>
-          <div class="progress-spinner"></div>
-          <p class="progress-hint">请勿关闭页面</p>
-        </template>
+          <div class="progress-bar-label">{{ exportPercent }}%</div>
+        </div>
+        <p class="progress-status" v-if="exportTotal > 0">
+          {{ exportCurrent }}/{{ exportTotal }}
+        </p>
       </div>
     </div>
 
@@ -212,7 +204,7 @@
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { bookService } from '@/api/book';
-import { exportService, EXPORT_FIELDS, type ExportFormat, type ExportOptions } from '@/api/exportService';
+import { exportService, EXPORT_FIELDS, type ExportFormat, type ExportOptions, type ExportProgress } from '@/api/exportService';
 
 const router = useRouter();
 
@@ -233,22 +225,23 @@ const isExporting = ref(false);
 const exportSuccess = ref(false);
 const exportError = ref('');
 
-// 整库导出进度(用于进度条 + 状态信息)
-const exportCurrent = ref(0);
-const exportTotal = ref(0);
-const exportCurrentFile = ref('');
-const exportPercent = computed(() => {
-  if (exportTotal.value <= 0) return 0;
-  return Math.min(100, Math.floor((exportCurrent.value / exportTotal.value) * 100));
+// 统一进度状态
+const exportProgress = ref<ExportProgress>({
+  percent: 0,
+  phase: 'building',
+  message: '准备中...'
 });
-const progressTitle = computed(() => {
+const exportPercent = computed(() => exportProgress.value.percent);
+const progressTitle = computed(() => exportProgress.value.message);
+const exportCurrent = computed(() => exportProgress.value.current ?? 0);
+const exportTotal = computed(() => exportProgress.value.total ?? 0);
+const exportCurrentFile = computed(() => {
   if (exportMode.value === 'library') {
-    if (exportCurrent.value >= exportTotal.value && exportTotal.value > 0) {
-      return '备份完成,准备下载...';
-    }
-    return '正在导出整库备份...';
+    return exportProgress.value.phase === 'packing' || exportProgress.value.phase === 'downloading'
+      ? exportProgress.value.message
+      : '';
   }
-  return '正在导出数据...';
+  return '';
 });
 
 // 可用的导出字段
@@ -277,6 +270,7 @@ const handleExport = async () => {
   isExporting.value = true;
   exportError.value = '';
   exportSuccess.value = false;
+  exportProgress.value = { percent: 0, phase: 'building', message: '准备导出...' };
 
   try {
     const options: ExportOptions = {
@@ -285,7 +279,10 @@ const handleExport = async () => {
       compression: useCompression.value
     };
 
-    const blob = await exportService.exportBooks(options);
+    const blob = await exportService.exportBooks(
+      options,
+      (p) => { exportProgress.value = p; }
+    );
     const filename = exportService.generateFilename(exportFormat.value);
     exportService.downloadFile(blob, filename);
 
@@ -304,19 +301,12 @@ const handleLibraryExport = async () => {
   isExporting.value = true;
   exportError.value = '';
   exportSuccess.value = false;
-  // 重置进度
-  exportCurrent.value = 0;
-  exportTotal.value = 0;
-  exportCurrentFile.value = '';
+  exportProgress.value = { percent: 0, phase: 'packing', message: '准备打包...' };
 
   try {
     const blob = await exportService.exportLibrary(
       {},
-      (current, total, currentFile) => {
-        exportCurrent.value = current;
-        exportTotal.value = total;
-        exportCurrentFile.value = currentFile;
-      }
+      (p) => { exportProgress.value = p; }
     );
     const date = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `library-backup-${date}.zip`;
@@ -357,12 +347,28 @@ const goBack = () => {
 }
 
 .back-btn {
-  background: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
   border: none;
-  font-size: 1.2rem;
+  background: transparent;
+  border-radius: 50%;
   cursor: pointer;
-  padding: 0.5rem;
-  color: #333;
+  color: var(--text-primary, #333);
+  transition: background-color 0.2s ease;
+  padding: 0;
+}
+
+.back-btn:hover {
+  background-color: var(--bg-hover, rgba(0, 0, 0, 0.05));
+}
+
+.back-btn svg {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
 }
 
 .title {

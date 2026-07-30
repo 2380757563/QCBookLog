@@ -28,12 +28,18 @@ export const EXPORT_FIELDS: ExportField[] = [
   { key: 'publisher', label: '出版社' },
   { key: 'publishYear', label: '出版年份' },
   { key: 'pages', label: '页数' },
+  { key: 'book_type', label: '书籍类型' },
   { key: 'binding1', label: '装帧（一级）' },
   { key: 'binding2', label: '装帧（二级）' },
+  { key: 'paper1', label: '纸张类型' },
+  { key: 'edge1', label: '刷边位置' },
+  { key: 'edge2', label: '刷边工艺' },
   { key: 'series', label: '丛书' },
   { key: 'readStatus', label: '阅读状态' },
   { key: 'readCompleteDate', label: '完成阅读日期' },
   { key: 'rating', label: '评分' },
+  { key: 'personal_rating', label: '个人评分' },
+  { key: 'personal_rating_date', label: '个人评分日期' },
   { key: 'purchaseDate', label: '购买日期' },
   { key: 'purchasePrice', label: '购买价格' },
   { key: 'standardPrice', label: '定价' },
@@ -42,6 +48,16 @@ export const EXPORT_FIELDS: ExportField[] = [
   { key: 'coverUrl', label: '封面' },
   { key: 'note', label: '备注' },
   { key: 'description', label: '简介' },
+  { key: 'source', label: '数据来源' },
+  { key: 'favorite', label: '收藏' },
+  { key: 'favorite_date', label: '收藏日期' },
+  { key: 'wants', label: '想读' },
+  { key: 'wants_date', label: '想读日期' },
+  { key: 'total_reading_time', label: '累计阅读时长' },
+  { key: 'read_pages', label: '已读页数' },
+  { key: 'reading_count', label: '阅读次数' },
+  { key: 'last_read_date', label: '最后阅读日期' },
+  { key: 'last_read_duration', label: '最后阅读时长' },
   { key: 'createTime', label: '创建时间' },
   { key: 'updateTime', label: '更新时间' },
 ];
@@ -50,6 +66,22 @@ export const EXPORT_FIELDS: ExportField[] = [
  * 导出格式类型
  */
 export type ExportFormat = 'csv' | 'excel';
+
+/**
+ * 导出进度
+ */
+export interface ExportProgress {
+  /** 0-100 整数 */
+  percent: number;
+  /** 当前阶段 */
+  phase: 'parsing' | 'building' | 'covers' | 'packing' | 'downloading' | 'done';
+  /** 当前阶段文案 */
+  message: string;
+  /** 当前条目索引 */
+  current?: number;
+  /** 总条目数 */
+  total?: number;
+}
 
 /**
  * 导出选项
@@ -78,9 +110,16 @@ class ExportService {
   /**
    * 导出书籍数据
    */
-  async exportBooks(options: ExportOptions): Promise<Blob> {
+  async exportBooks(
+    options: ExportOptions,
+    onProgress?: (p: ExportProgress) => void
+  ): Promise<Blob> {
     const bookStore = useBookStore();
     const books = bookStore.allBooks;
+
+    if (!Array.isArray(books) || books.length === 0) {
+      throw new Error('当前没有书籍可导出，请确认书库中已有书籍');
+    }
 
     // 获取所有分组数据，用于将分组ID转换为分组名称
     let groupsMap = new Map<string, string>();
@@ -101,9 +140,9 @@ class ExportService {
     // 根据格式生成数据
     switch (options.format) {
       case 'csv':
-        return this.exportAsCSV(filteredBooks, options.selectedFields, groupsMap);
+        return this.exportAsCSV(filteredBooks, options.selectedFields, groupsMap, onProgress);
       case 'excel':
-        return await this.exportAsExcel(filteredBooks, options.selectedFields, groupsMap);
+        return await this.exportAsExcel(filteredBooks, options.selectedFields, groupsMap, onProgress);
       default:
         throw new Error(`不支持的导出格式: ${options.format}`);
     }
@@ -118,7 +157,7 @@ class ExportService {
    */
   async exportLibrary(
     options: ZipExportOptions,
-    onProgress?: (current: number, total: number, currentFile: string) => void
+    onProgress?: (p: ExportProgress) => void
   ): Promise<Blob> {
     try {
       console.log('📦 启动整库备份任务...');
@@ -141,13 +180,14 @@ class ExportService {
       console.log(`📦 任务已启动: ${jobId}, 待处理 ${total} 个文件`);
 
       // 通知前端:开始打包(总数已知)
-      if (onProgress) onProgress(0, total, '准备中...');
+      if (onProgress) onProgress({ percent: 0, phase: 'packing', message: '准备打包...' });
 
       // 2) 轮询状态
       const pollInterval = 300; // 300ms
       const maxWaitMs = 30 * 60 * 1000; // 30 分钟超时
       const startedAt = Date.now();
-      let lastCurrent = -1;
+      let lastPercent = -1;
+      let lastCurrentFile = '';
 
       // 立即先做一次状态查询,避免空轮询
       while (true) {
@@ -167,16 +207,32 @@ class ExportService {
           throw new Error(status.error || '备份失败');
         }
 
+        // 按字节计算百分比
+        const percent = status.totalBytes > 0
+          ? Math.min(100, Math.floor((status.processedBytes / status.totalBytes) * 100))
+          : 0;
+
         // 仅在变化时通知(减少无效渲染)
-        if (status.current !== lastCurrent) {
-          lastCurrent = status.current;
+        if (percent !== lastPercent || status.currentFile !== lastCurrentFile) {
+          lastPercent = percent;
+          lastCurrentFile = status.currentFile;
           if (onProgress) {
-            onProgress(status.current, status.total, status.currentFile || '处理中...');
+            const message = status.status === 'completed'
+              ? '准备下载...'
+              : `正在打包字节 (${this.formatFileSize(status.processedBytes)} / ${this.formatFileSize(status.totalBytes)})...`;
+            onProgress({
+              percent,
+              phase: status.status === 'completed' ? 'downloading' : 'packing',
+              message,
+              current: status.current,
+              total: status.total
+            });
           }
         }
 
         if (status.status === 'completed') {
           // 3) 下载备份文件
+          if (onProgress) onProgress({ percent: 99, phase: 'downloading', message: '正在下载备份文件...' });
           const dlResp = await fetch(`/api/backup/library/download/${encodeURIComponent(jobId)}`);
           if (!dlResp.ok) {
             let msg = '下载备份文件失败';
@@ -187,6 +243,7 @@ class ExportService {
             throw new Error(msg);
           }
           const blob = await dlResp.blob();
+          if (onProgress) onProgress({ percent: 100, phase: 'done', message: '备份完成' });
           console.log(`✅ 整库备份导出完成,文件: ${filename}, 大小: ${this.formatFileSize(blob.size)}`);
           return blob;
         }
@@ -213,31 +270,71 @@ class ExportService {
   }
 
   /**
+   * 将字段值格式化为人类可读的展示文本
+   * CSV 与 Excel 导出共用，避免枚举值直接输出数字
+   */
+  private formatDisplayValue(value: any, field: string): string {
+    if (value === null || value === undefined || value === '') {
+      return '';
+    }
+
+    if (field === 'book_type') {
+      const map: Record<number, string> = { 0: '电子书', 1: '实体书' };
+      return map[value] ?? String(value);
+    }
+    if (field === 'paper1') {
+      const map: Record<number, string> = {
+        0: '未指定', 1: '胶版纸（双胶纸）', 2: '轻型纸', 3: '道林纸',
+        4: '铜版纸', 5: '牛皮纸', 6: '宣纸', 7: '进口特种纸'
+      };
+      return map[value] ?? String(value);
+    }
+    if (field === 'edge1') {
+      const map: Record<number, string> = { 0: '无刷边', 1: '书口单侧', 2: '多侧（书口+天头/地脚）', 3: '全三边' };
+      return map[value] ?? String(value);
+    }
+    if (field === 'edge2') {
+      const map: Record<number, string> = { 0: '无细分', 1: '基础单色', 2: '烫边（烫金/银）', 3: '磨边（毛边）', 4: '彩绘艺术刷边', 5: '鎏金高端刷边' };
+      return map[value] ?? String(value);
+    }
+    if (field === 'favorite' || field === 'wants') {
+      return value === 1 ? '是' : '否';
+    }
+    if (field === 'total_reading_time' || field === 'last_read_duration') {
+      const totalMinutes = Number(value);
+      const hours = Math.floor(totalMinutes / 60);
+      const minutes = Math.floor(totalMinutes % 60);
+      if (hours > 0) {
+        return `${hours}小时${minutes > 0 ? minutes + '分钟' : ''}`;
+      }
+      return `${minutes}分钟`;
+    }
+
+    return String(value);
+  }
+
+  /**
    * 根据选中的字段过滤数据（保持原始数据格式）
    */
   private filterFields(books: any[], selectedFields: string[]): any[] {
+    // 解除 Pinia 响应式代理，避免后续深循环中反复触发 Proxy 行为
+    const rawBooks = Array.isArray(books) ? books.map(book => ({ ...book })) : [];
 
-    return books.map((book, index) => {
+    return rawBooks.map((book, index) => {
       const filtered: any = {};
       selectedFields.forEach(field => {
         if (field === 'rating') {
           filtered[field] = book[field] || 0;
         } else if (field === 'coverUrl') {
           filtered[field] = book[field] || '';
+        } else if (field === 'favorite' || field === 'wants') {
+          filtered[field] = book[field] ?? 0;
+        } else if (field === 'book_type') {
+          filtered[field] = book[field] ?? 1;
         } else {
           filtered[field] = book[field];
         }
       });
-
-      // 调试：打印前3本书籍的原始数据
-      if (index < 3) {
-        if (selectedFields.includes('tags')) {
-          console.log(`🏷️ 书籍[${index}] 原始tags:`, filtered.tags, '(类型:', typeof filtered.tags, ')');
-        }
-        if (selectedFields.includes('groups')) {
-          console.log(`📁 书籍[${index}] 原始groups:`, filtered.groups, '(类型:', typeof filtered.groups, ')');
-        }
-      }
 
       return filtered;
     });
@@ -246,15 +343,23 @@ class ExportService {
   /**
    * 导出为CSV格式
    */
-  private exportAsCSV(books: any[], selectedFields: string[], groupsMap?: Map<string, string>): Blob {
-
+  private exportAsCSV(
+    books: any[],
+    selectedFields: string[],
+    groupsMap?: Map<string, string>,
+    onProgress?: (p: ExportProgress) => void
+  ): Blob {
     // 生成表头
     const headers = selectedFields.join(',');
+    let lastPercent = -1;
 
     // 生成数据行
     const rows = books.map((book, index) => {
       return selectedFields.map(field => {
         let value = book[field];
+
+        // 枚举/可读性字段先转文本
+        value = this.formatDisplayValue(value, field);
 
         // 处理tags和groups字段
         if (field === 'tags') {
@@ -324,6 +429,23 @@ class ExportService {
       }).join(',');
     });
 
+    // 每 1% 触发一次进度回调
+    if (onProgress) {
+      for (let i = 0; i < books.length; i++) {
+        const percent = Math.floor((i / books.length) * 100);
+        if (percent !== lastPercent) {
+          lastPercent = percent;
+          onProgress({
+            percent,
+            phase: 'building',
+            message: `生成表格中 (${i + 1}/${books.length})...`,
+            current: i + 1,
+            total: books.length
+          });
+        }
+      }
+    }
+
     const csvContent = [headers, ...rows].join('\n');
 
     // 添加BOM以支持Excel中文显示
@@ -334,7 +456,12 @@ class ExportService {
   /**
    * 导出为Excel格式（支持图片嵌入）
    */
-  private async exportAsExcel(books: any[], selectedFields: string[], groupsMap?: Map<string, string>): Promise<Blob> {
+  private async exportAsExcel(
+    books: any[],
+    selectedFields: string[],
+    groupsMap?: Map<string, string>,
+    onProgress?: (p: ExportProgress) => void
+  ): Promise<Blob> {
 
     // 创建 workbook 和 worksheet
     const workbook = new ExcelJS.Workbook();
@@ -360,9 +487,26 @@ class ExportService {
     };
 
     // 添加数据行
+    let lastRowPercent = -1;
+    let lastProgressMessage = '';
+    const reportProgress = (force: boolean, percent: number, phase: ExportProgress['phase'], message: string, current?: number, total?: number) => {
+      if (!onProgress) return;
+      if (force || percent !== lastRowPercent || message !== lastProgressMessage) {
+        lastRowPercent = percent;
+        lastProgressMessage = message;
+        onProgress({ percent, phase, message, current, total });
+      }
+    };
+
     for (let i = 0; i < books.length; i++) {
       const book = books[i];
       const row: any = {};
+
+      // 行生成阶段进度 (0-70%)
+      const rowPercent = Math.floor((i / books.length) * 70);
+      reportProgress(false, rowPercent, 'building', `生成表格中 (${i + 1}/${books.length})...`, i + 1, books.length);
+
+      await new Promise(r => setTimeout(r, 0));
 
       for (const field of selectedFields) {
         if (field === 'tags') {
@@ -413,13 +557,18 @@ class ExportService {
         } else if (field === 'coverUrl') {
           row[field] = book[field] || '';
         } else {
-          row[field] = book[field];
+          row[field] = this.formatDisplayValue(book[field], field);
         }
       }
 
       const worksheetRow = worksheet.addRow(row);
 
       // 如果包含封面字段且书籍有封面，则嵌入图片
+      let coverCount = 0;
+      let totalCovers = 0;
+      if (hasCover) {
+        totalCovers = books.filter(b => b.coverUrl).length;
+      }
       if (hasCover && coverColumnIndex > 0 && book.coverUrl) {
         try {
           // 获取图片数据
@@ -461,9 +610,17 @@ class ExportService {
 
         }
       }
+
+      // 封面阶段进度 (70-100%)
+      if (hasCover && book.coverUrl) {
+        coverCount++;
+        const coverPercent = 70 + Math.floor((coverCount / totalCovers) * 30);
+        reportProgress(false, coverPercent, 'covers', `下载封面中 (${coverCount}/${totalCovers})...`, coverCount, totalCovers);
+      }
     }
 
     // 生成 Blob
+    reportProgress(true, 100, 'done', '生成完成');
     const buffer = await workbook.xlsx.writeBuffer();
     return new Blob([buffer], {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'

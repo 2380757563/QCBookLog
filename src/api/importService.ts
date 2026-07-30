@@ -103,17 +103,43 @@ export interface ImportOptions {
 }
 
 /**
+ * 导入进度
+ */
+export interface ImportProgress {
+  /** 0-100 整数 */
+  percent: number;
+  /** 当前阶段 */
+  phase: 'parsing' | 'creating' | 'covers' | 'done';
+  /** 当前阶段文案 */
+  message: string;
+  /** 当前条目索引 */
+  current?: number;
+  /** 总条目数 */
+  total?: number;
+  /** 已导入数量 */
+  imported?: number;
+  /** 已跳过数量 */
+  skipped?: number;
+  /** 已错误数量 */
+  errors?: number;
+}
+
+/**
  * 导入服务类
  */
 class ImportService {
   /**
    * 从文件导入
    */
-  async importFromFile(file: File, options: ImportOptions): Promise<ImportResult> {
+  async importFromFile(
+    file: File,
+    options: ImportOptions,
+    onProgress?: (p: ImportProgress) => void
+  ): Promise<ImportResult> {
 
     // 如果是ZIP格式，单独处理
     if (options.format === 'zip') {
-      return this.importFromZip(file, options);
+      return this.importFromZip(file, options, onProgress);
     }
 
     let books: any[];
@@ -144,15 +170,20 @@ class ImportService {
       }
     }
 
-    return await this.importBooks(books, options);
+    return await this.importBooks(books, options, onProgress);
   }
 
   /**
    * 导入ZIP压缩包（完善版）
    */
-  async importFromZip(file: File, options: ImportOptions): Promise<ImportResult> {
+  async importFromZip(
+    file: File,
+    options: ImportOptions,
+    onProgress?: (p: ImportProgress) => void
+  ): Promise<ImportResult> {
 
     try {
+      if (onProgress) onProgress({ percent: 0, phase: 'parsing', message: '读取 ZIP 文件...' });
       const arrayBuffer = await file.arrayBuffer();
       const zip = await JSZip.loadAsync(arrayBuffer);
 
@@ -365,8 +396,7 @@ class ImportService {
       }
 
       // ===== 10. 导入书籍 =====
-      const result = await this.importBooks(books, options);
-
+      const result = await this.importBooks(books, options, onProgress);
       result.warnings.push(`从ZIP文件成功导入 ${books.length} 本书籍`);
 
       return result;
@@ -1068,8 +1098,12 @@ class ImportService {
   /**
    * 公共方法:导入已解析的书籍数组(用于 UI 层先做重复预检 + 弹窗,再导入)
    */
-  async importParsedBooks(books: any[], options: ImportOptions): Promise<ImportResult> {
-    return this.importBooks(books, options);
+  async importParsedBooks(
+    books: any[],
+    options: ImportOptions,
+    onProgress?: (p: ImportProgress) => void
+  ): Promise<ImportResult> {
+    return this.importBooks(books, options, onProgress);
   }
 
   /**
@@ -1098,7 +1132,11 @@ class ImportService {
     throw new Error(`不支持的格式: ${format}`);
   }
 
-  private async importBooks(books: any[], options: ImportOptions): Promise<ImportResult> {
+  private async importBooks(
+    books: any[],
+    options: ImportOptions,
+    onProgress?: (p: ImportProgress) => void
+  ): Promise<ImportResult> {
     const result: ImportResult = {
       success: false,
       total: books.length,
@@ -1127,8 +1165,28 @@ class ImportService {
       }
     }
 
+    let lastParsePercent = -1;
     for (let i = 0; i < books.length; i++) {
       const row = books[i];
+
+      // 阶段 1：解析校验进度（0-30%）
+      if (onProgress) {
+        const percent = Math.floor((i / books.length) * 30);
+        if (percent !== lastParsePercent) {
+          lastParsePercent = percent;
+          onProgress({
+            percent,
+            phase: 'parsing',
+            message: `校验数据中 (${i + 1}/${books.length})...`,
+            current: i + 1,
+            total: books.length,
+            imported: result.imported,
+            skipped: result.skipped,
+            errors: result.errors.length
+          });
+          await new Promise(r => setTimeout(r, 0));
+        }
+      }
 
       try {
         // 验证必填字段: ISBN 和 书名
@@ -1184,9 +1242,37 @@ class ImportService {
     // 批量添加书籍到数据库
     if (validBooks.length > 0) {
       try {
-
-        await bookService.batchAddBooks(validBooks);
-
+        if (onProgress) {
+          onProgress({
+            percent: 30,
+            phase: 'creating',
+            message: `创建书籍中 (0/${validBooks.length})...`,
+            current: 0,
+            total: validBooks.length,
+            imported: result.imported,
+            skipped: result.skipped,
+            errors: result.errors.length
+          });
+        }
+        await bookService.batchAddBooks(
+          validBooks,
+          (p) => {
+            if (onProgress) {
+              // 创建阶段占 30%-70%
+              const percent = 30 + Math.floor((p.percent / 100) * 40);
+              onProgress({
+                percent,
+                phase: p.phase === 'covers' ? 'covers' : 'creating',
+                message: p.message,
+                current: p.current,
+                total: p.total,
+                imported: result.imported,
+                skipped: result.skipped,
+                errors: result.errors.length
+              });
+            }
+          }
+        );
       } catch (e) {
         console.error('❌ 书籍保存失败:', e);
         result.errors.push({
@@ -1199,6 +1285,18 @@ class ImportService {
     }
 
     result.success = result.errors.length === 0;
+    if (onProgress) {
+      onProgress({
+        percent: 100,
+        phase: 'done',
+        message: '导入完成',
+        current: books.length,
+        total: books.length,
+        imported: result.imported,
+        skipped: result.skipped,
+        errors: result.errors.length
+      });
+    }
 
     return result;
   }

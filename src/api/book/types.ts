@@ -133,7 +133,10 @@ export interface BookService {
     hasMore: boolean;
   }>;
   getBooksCount(): Promise<number>;
-  batchAddBooks(books: Omit<Book, 'id' | 'createTime' | 'updateTime'>[]): Promise<Book[]>;
+  batchAddBooks(
+    books: Omit<Book, 'id' | 'createTime' | 'updateTime'>[],
+    onProgress?: (p: { percent: number; phase: string; message: string; current?: number; total?: number }) => void
+  ): Promise<Book[]>;
 
   // ISBN 重复检测
   findDuplicates(isbns: string[]): Promise<DuplicatesByIsbn>;
