@@ -474,8 +474,24 @@
     <!-- 导入进度 -->
     <div v-if="isImporting" class="progress-overlay">
       <div class="progress-card">
-        <div class="progress-spinner"></div>
-        <p class="progress-text">正在导入数据...</p>
+        <p class="progress-text">{{ importProgress.message || '正在导入数据...' }}</p>
+
+        <div class="progress-bar-wrapper">
+          <div class="progress-bar">
+            <div
+              class="progress-bar-fill"
+              :style="{ width: importProgress.percent + '%' }"
+            ></div>
+          </div>
+          <div class="progress-bar-label">{{ importProgress.percent }}%</div>
+        </div>
+
+        <p class="progress-status" v-if="importTotal > 0">
+          {{ importCurrent }}/{{ importTotal }}
+        </p>
+        <p class="progress-stats" v-if="showImportStats">
+          已导入 {{ importedCount }} · 已跳过 {{ skippedCount }} · 错误 {{ errorsCount }}
+        </p>
         <p class="progress-hint">请勿关闭页面</p>
       </div>
     </div>
@@ -536,7 +552,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { importService, type ImportFormat, type ImportResult, type ImportOptions, type ZipImportResult } from '@/api/importService';
+import { importService, type ImportFormat, type ImportResult, type ImportOptions, type ZipImportResult, type ImportProgress } from '@/api/importService';
 import { bookService } from '@/api/book';
 import { normalizeIsbn } from '@/utils/isbnUtils';
 import DuplicateBookDialog from '@/views/Book/components/DuplicateBookDialog.vue';
@@ -587,6 +603,24 @@ let pendingDuplicateResolver: ((r: any) => void) | null = null;
 const isImporting = ref(false);
 const importResult = ref<ImportResult | null>(null);
 const generating = ref(false);
+
+// 导入进度
+const importProgress = ref<ImportProgress>({
+  percent: 0,
+  phase: 'parsing',
+  message: '准备导入...'
+});
+const importPercent = computed(() => importProgress.value.percent);
+const importTotal = computed(() => importProgress.value.total ?? 0);
+const importCurrent = computed(() => importProgress.value.current ?? 0);
+const importedCount = computed(() => importProgress.value.imported ?? 0);
+const skippedCount = computed(() => importProgress.value.skipped ?? 0);
+const errorsCount = computed(() => importProgress.value.errors ?? 0);
+const showImportStats = computed(() =>
+  importProgress.value.phase === 'creating' ||
+  importProgress.value.phase === 'covers' ||
+  importProgress.value.phase === 'done'
+);
 
 // ===== 格式示例下载 =====
 
@@ -1374,6 +1408,7 @@ const confirmImport = async () => {
 
     isImporting.value = true;
     importResult.value = null;
+    importProgress.value = { percent: 0, phase: 'parsing', message: '读取 ZIP 文件...' };
     try {
       const options: ImportOptions = {
         format: 'zip',
@@ -1381,7 +1416,11 @@ const confirmImport = async () => {
         updateExisting: importOptions.value.updateExisting,
         fieldMapping: fieldMapping.value
       };
-      const result = await importService.importFromFile(selectedFile.value, options);
+      const result = await importService.importFromFile(
+        selectedFile.value,
+        options,
+        (p) => { importProgress.value = p; }
+      );
       importResult.value = result;
     } catch (e) {
       importResult.value = {
@@ -1397,6 +1436,7 @@ const confirmImport = async () => {
   // 非 ZIP: 先解析 + ISBN 重复预检,与 ISBN 扫描走相同流程
   isImporting.value = true;
   importResult.value = null;
+  importProgress.value = { percent: 0, phase: 'parsing', message: '解析文件中...' };
 
   try {
     const parsed = await importService.parseFileOnly(selectedFile.value, importFormat.value);
@@ -1496,12 +1536,16 @@ const confirmImport = async () => {
     }
 
     // 调用导入服务(重复项已在前置处理,这里关闭 skipDuplicates 避免二次判断)
-    const result = await importService.importParsedBooks(booksToImport, {
-      format: importFormat.value,
-      skipDuplicates: false,
-      updateExisting: importOptions.value.updateExisting,
-      fieldMapping: fieldMapping.value
-    });
+    const result = await importService.importParsedBooks(
+      booksToImport,
+      {
+        format: importFormat.value,
+        skipDuplicates: false,
+        updateExisting: importOptions.value.updateExisting,
+        fieldMapping: fieldMapping.value
+      },
+      (p) => { importProgress.value = p; }
+    );
     importResult.value = result;
   } catch (e) {
     console.error('导入失败:', e);
@@ -1584,12 +1628,28 @@ const goBack = () => {
 }
 
 .back-btn {
-  background: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
   border: none;
-  font-size: 1.2rem;
+  background: transparent;
+  border-radius: 50%;
   cursor: pointer;
-  padding: 0.5rem;
-  color: #333;
+  color: var(--text-primary, #333);
+  transition: background-color 0.2s ease;
+  padding: 0;
+}
+
+.back-btn:hover {
+  background-color: var(--bg-hover, rgba(0, 0, 0, 0.05));
+}
+
+.back-btn svg {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
 }
 
 .title {
@@ -2411,23 +2471,42 @@ const goBack = () => {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
 }
 
-.progress-spinner {
-  width: 50px;
-  height: 50px;
-  border: 4px solid #e0e0e0;
-  border-top: 4px solid #4CAF50;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin: 0 auto 1rem;
+/* 进度条 */
+.progress-bar-wrapper {
+  margin: 1.25rem 0 0.5rem;
 }
-
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
+.progress-bar {
+  width: 100%;
+  height: 10px;
+  background-color: #e8f5e9;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #c8e6c9;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #66bb6a 0%, #4CAF50 100%);
+  border-radius: 6px;
+  transition: width 0.25s ease;
+  box-shadow: 0 0 8px rgba(76, 175, 80, 0.4);
+}
+.progress-bar-label {
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #2e7d32;
+}
+.progress-status {
+  margin: 0.75rem 0 0.25rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #333;
+  font-variant-numeric: tabular-nums;
+}
+.progress-stats {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  color: #666;
 }
 
 .progress-text {

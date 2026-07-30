@@ -517,16 +517,28 @@ onMounted(() => {
 }
 
 .back-btn {
-  width: 40px;
-  height: 40px;
-  border: none;
-  background: none;
-  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: transparent;
   border-radius: 50%;
-  transition: background-color 0.2s;
+  cursor: pointer;
+  color: var(--text-primary, #333);
+  transition: background-color 0.2s ease;
+  padding: 0;
+}
+
+.back-btn:hover {
+  background-color: var(--bg-hover, rgba(0, 0, 0, 0.05));
+}
+
+.back-btn svg {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
 }
 
 .back-btn:hover {

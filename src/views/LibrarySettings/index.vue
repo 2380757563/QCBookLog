@@ -422,6 +422,7 @@ onMounted(async () => {
   cursor: pointer;
   color: var(--text-primary);
   transition: background-color 0.2s ease;
+  padding: 0;
 }
 
 .back-btn:hover {
