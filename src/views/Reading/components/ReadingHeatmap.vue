@@ -288,6 +288,8 @@ const computeHeatmapColumns = () => {
       countToAdd = 1;
     } else if (a.type === 'reading_goal_set') {
       countToAdd = 1;
+    } else if (a.type === 'review_added' || a.type === 'review_updated') {
+      countToAdd = 1;
     }
     
     dateMap.set(date, existingCount + countToAdd);

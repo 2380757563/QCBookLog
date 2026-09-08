@@ -899,6 +899,7 @@ class DatabaseConnectionManager {
 
   /**
    * 初始化默认书源设置
+   * 仅插入记录，API Key 由用户在前端配置，不与环境变量同步
    */
   initDefaultBookSourceSettings() {
     if (!this.qcBooklogDb) return;
@@ -907,7 +908,6 @@ class DatabaseConnectionManager {
       {
         source_key: 'tanshu',
         source_name: '探数图书',
-        api_key: process.env.TANSHU_API_KEY || '',
         is_required: 1,
         description: '探数图书 ISBN 查询 API，计费接口，填写后可在搜索结果中显示',
         sort_order: 1
@@ -915,7 +915,6 @@ class DatabaseConnectionManager {
       {
         source_key: 'douban',
         source_name: '豆瓣图书',
-        api_key: process.env.DOUBAN_API_KEY || '',
         is_required: 1,
         description: '豆瓣图书 API（v2），需要 apikey，用于查询图书元数据和封面',
         sort_order: 2
@@ -923,7 +922,6 @@ class DatabaseConnectionManager {
       {
         source_key: 'isbnWork',
         source_name: '公共图书',
-        api_key: process.env.ISBN_WORK_API_KEY || '',
         is_required: 1,
         description: 'ISBN 公共图书 API（data.isbn.work），需要 appKey',
         sort_order: 3
@@ -934,14 +932,7 @@ class DatabaseConnectionManager {
       const insertStmt = this.qcBooklogDb.prepare(`
         INSERT OR IGNORE INTO qc_book_source_settings
         (source_key, source_name, api_key, is_required, description, sort_order, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      `);
-
-      const updateKeyStmt = this.qcBooklogDb.prepare(`
-        UPDATE qc_book_source_settings
-        SET api_key = CASE WHEN (api_key IS NULL OR api_key = '') AND ? != '' THEN ? ELSE api_key END,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE source_key = ?
+        VALUES (?, ?, '', ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       `);
 
       const transaction = this.qcBooklogDb.transaction(() => {
@@ -949,13 +940,10 @@ class DatabaseConnectionManager {
           insertStmt.run(
             source.source_key,
             source.source_name,
-            source.api_key,
             source.is_required,
             source.description,
             source.sort_order
           );
-          // 如果环境变量中有 key，但数据库中为空，则同步进去
-          updateKeyStmt.run(source.api_key, source.api_key, source.source_key);
         }
       });
 

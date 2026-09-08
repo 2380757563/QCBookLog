@@ -533,3 +533,23 @@ export const dbrApi = {
    */
   getById: (id: string) => apiRequest(`/dbr/id/${id}`)
 };
+
+export const reviewApi = {
+  getAll: (bookId?: number) => {
+    const queryString = bookId ? `?bookId=${bookId}` : '';
+    return apiRequest(`/reviews${queryString}`);
+  },
+  getById: (id: string | number) => apiRequest(`/reviews/${id}`),
+  create: (review: any) => apiRequest('/reviews', {
+    method: 'POST',
+    body: JSON.stringify(review)
+  }),
+  update: (id: string | number, review: any) => apiRequest(`/reviews/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(review)
+  }),
+  delete: (id: string | number) => apiRequest(`/reviews/${id}`, {
+    method: 'DELETE'
+  }),
+  getByBookId: (bookId: number) => apiRequest(`/reviews/books/${bookId}`)
+};

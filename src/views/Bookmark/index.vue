@@ -18,7 +18,7 @@
       <div 
         v-for="tab in tabs" 
         :key="tab.key"
-        :class="['tab-item', { active: activeTab === tab.key }]"
+        :class="['tab-item', 'tab-item--' + tab.key, { active: activeTab === tab.key }]"
         @click="activeTab = tab.key"
       >
         {{ tab.label }}
@@ -88,39 +88,14 @@
         </div>
       </div>
 
-      <!-- 回顾页面 -->
+      <!-- 书评页面 -->
+      <div v-show="activeTab === 'book-review'" class="tab-content">
+        <BookReviewTab />
+      </div>
+
+      <!-- 回顾页面（内含两个子 tab：书摘卡片 / 时间线） -->
       <div v-show="activeTab === 'review'" class="tab-content review-tab">
-        <div v-if="allBookmarks.length > 0" class="review-card" :style="reviewCardStyle" @touchstart="handleTouchStart" @touchend="handleTouchEnd">
-          <div class="review-card-overlay" :style="overlayStyle"></div>
-          <transition :name="slideDirection" mode="out-in">
-            <div :key="reviewIndex" class="review-content">
-              <p class="review-text">{{ currentReviewBookmark?.content }}</p>
-              <p v-if="currentReviewBookmark?.note" class="review-note">
-                💭 {{ currentReviewBookmark.note }}
-              </p>
-            </div>
-          </transition>
-          <div class="review-meta">
-            <span class="review-book">《{{ currentReviewBookmark?.bookTitle }}》</span>
-            <div class="review-info">
-              <span class="review-time">{{ formatDateTime(currentReviewBookmark?.createTime) }}</span>
-              <span class="review-page" v-if="currentReviewBookmark?.pageNum">—— 引自第{{ currentReviewBookmark.pageNum }}页</span>
-            </div>
-          </div>
-          <div class="review-nav">
-            <button class="nav-btn" @click="prevReview" :disabled="reviewIndex === 0">
-              <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
-            </button>
-            <span class="review-progress">{{ reviewIndex + 1 }} / {{ allBookmarks.length }}</span>
-            <button class="nav-btn" @click="nextReview" :disabled="reviewIndex >= allBookmarks.length - 1">
-              <svg viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
-            </button>
-          </div>
-        </div>
-        <div v-else class="empty-state">
-          <span class="empty-icon">📚</span>
-          <p>暂无书摘可回顾</p>
-        </div>
+        <BookmarkReviewSection :bookmarks="allBookmarks" />
       </div>
     </div>
 
@@ -140,6 +115,11 @@
         </div>
       </div>
     </div>
+
+    <!-- 浮动添加按钮 -->
+    <button v-if="allBookmarks.length > 0" class="fab" @click="goToAddBookmark">
+      <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+    </button>
   </div>
 </template>
 
@@ -151,6 +131,8 @@ import { useBookStore } from '@/stores/book';
 import { bookmarkService } from '@/api/bookmark';
 import { bookService } from '@/api/book';
 import { tagApi } from '@/api/apiClient';
+import BookReviewTab from '@/views/Review/BookReviewTab.vue';
+import BookmarkReviewSection from './components/BookmarkReviewSection.vue';
 
 const router = useRouter();
 const route = useRoute();
@@ -160,9 +142,16 @@ const bookStore = useBookStore();
 // Tab配置
 const tabs = [
   { key: 'list', label: '书摘' },
+  { key: 'book-review', label: '书评' },
   { key: 'review', label: '回顾' }
 ];
 const activeTab = ref('list');
+
+// 支持通过路由 query 定位到指定 tab（如从书评编辑页返回书评选项卡）
+const validTabs = tabs.map(t => t.key);
+if (route.query.tab && validTabs.includes(String(route.query.tab))) {
+  activeTab.value = String(route.query.tab);
+}
 
 // 筛选
 const selectedTag = ref('');
@@ -174,14 +163,6 @@ const allTags = ref<{ tag_id: string; count: number }[]>([]);
 // 删除确认
 const showDeleteConfirm = ref(false);
 const deletingId = ref('');
-
-// 回顾索引
-const reviewIndex = ref(0);
-
-// 触摸滑动
-const touchStartX = ref(0);
-const touchEndX = ref(0);
-const slideDirection = ref('slide-left');
 
 // 所有书摘（带书名）
 const allBookmarks = computed(() => {
@@ -236,141 +217,6 @@ const filteredBookmarks = computed(() => {
   if (!selectedTag.value) return allBookmarks.value;
   return allBookmarks.value.filter(b => b.tags.includes(selectedTag.value));
 });
-
-// 当前回顾的书摘
-const currentReviewBookmark = computed(() => {
-  return allBookmarks.value[reviewIndex.value];
-});
-
-interface BookmarkSettings {
-  backgroundMode: 'color' | 'cover' | 'custom';
-  selectedColorIndex: number;
-  coverOpacity: number;
-  coverBlur: number;
-  customBackground: string;
-  customOpacity: number;
-  customBlur: number;
-}
-
-const bookmarkSettings = ref<BookmarkSettings>({
-  backgroundMode: 'color',
-  selectedColorIndex: 0,
-  coverOpacity: 0.3,
-  coverBlur: 8,
-  customBackground: '',
-  customOpacity: 0.5,
-  customBlur: 5
-});
-
-const gradients = [
-  'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-  'linear-gradient(135deg, #2193b0 0%, #6dd5ed 100%)',
-  'linear-gradient(135deg, #134e5e 0%, #71b280 100%)',
-  'linear-gradient(135deg, #ee9ca7 0%, #ffdde1 100%)',
-  'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)',
-  'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-  'linear-gradient(135deg, #0c0c0c 0%, #434343 100%)',
-  'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
-  'linear-gradient(135deg, #f2994a 0%, #f2c94c 100%)',
-  'linear-gradient(135deg, #4e54c8 0%, #8f94fb 100%)',
-  'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
-  'linear-gradient(135deg, #43cea2 0%, #185a9d 100%)',
-];
-
-const reviewCardStyle = computed(() => {
-  const settings = bookmarkSettings.value;
-  const currentBookmark = currentReviewBookmark.value;
-  const coverUrl = currentBookmark?.coverUrl || currentBookmark?.localCoverData;
-  
-  console.log('reviewCardStyle 计算:', {
-    背景模式: settings.backgroundMode,
-    颜色索引: settings.selectedColorIndex,
-    当前书摘: currentBookmark ? {
-      书籍: currentBookmark.bookTitle,
-      页码: currentBookmark.pageNum,
-      bookId: currentBookmark.bookId,
-      coverUrl: currentBookmark.coverUrl,
-      localCoverData: currentBookmark.localCoverData
-    } : null,
-    最终封面URL: coverUrl || '无封面'
-  });
-  
-  if (settings.backgroundMode === 'color') {
-    return {
-      background: gradients[settings.selectedColorIndex] || gradients[0]
-    };
-  } else if (settings.backgroundMode === 'cover') {
-    if (coverUrl) {
-      return {
-        backgroundImage: `url(${coverUrl})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        position: 'relative' as const,
-      };
-    }
-    return { background: gradients[0] };
-  } else if (settings.backgroundMode === 'custom' && settings.customBackground) {
-    return {
-      backgroundImage: `url(${settings.customBackground})`,
-      backgroundSize: 'cover',
-      backgroundPosition: 'center',
-    };
-  }
-  
-  return { background: gradients[0] };
-});
-
-const overlayStyle = computed(() => {
-  const settings = bookmarkSettings.value;
-  
-  if (settings.backgroundMode === 'cover') {
-    return {
-      background: `rgba(0, 0, 0, ${settings.coverOpacity})`,
-      backdropFilter: `blur(${settings.coverBlur}px)`,
-    };
-  } else if (settings.backgroundMode === 'custom' && settings.customBackground) {
-    return {
-      background: `rgba(0, 0, 0, ${settings.customOpacity})`,
-      backdropFilter: `blur(${settings.customBlur}px)`,
-    };
-  }
-  
-  return { background: 'transparent' };
-});
-
-const loadBookmarkSettings = () => {
-  const saved = localStorage.getItem('bookmarkSettings');
-  console.log('加载书签设置:', saved);
-  if (saved) {
-    try {
-      const settings = JSON.parse(saved);
-      bookmarkSettings.value = {
-        backgroundMode: settings.backgroundMode || 'color',
-        selectedColorIndex: settings.selectedColorIndex || 0,
-        coverOpacity: settings.coverOpacity ?? 0.3,
-        coverBlur: settings.coverBlur ?? 8,
-        customBackground: settings.customBackground || '',
-        customOpacity: settings.customOpacity ?? 0.5,
-        customBlur: settings.customBlur ?? 5
-      };
-      console.log('书签设置已加载:', {
-        加载状态: '成功',
-        背景模式: bookmarkSettings.value.backgroundMode,
-        颜色索引: bookmarkSettings.value.selectedColorIndex,
-        封面透明度: bookmarkSettings.value.coverOpacity,
-        封面模糊: bookmarkSettings.value.coverBlur
-      });
-    } catch (error) {
-      console.error('加载书签设置失败:', error);
-    }
-  } else {
-    console.log('书签设置已加载:', {
-      加载状态: '使用默认值',
-      背景模式: bookmarkSettings.value.backgroundMode,
-      颜色索引: bookmarkSettings.value.selectedColorIndex
-    });
-  }
-};
 
 // 格式化日期
 const formatDate = (dateStr: string): string => {
@@ -458,59 +304,10 @@ const confirmDelete = async () => {
   }
 };
 
-// 回顾导航
-const prevReview = () => {
-  if (reviewIndex.value > 0) {
-    slideDirection.value = 'slide-right';
-    reviewIndex.value--;
-  }
-};
-
-const nextReview = () => {
-  if (reviewIndex.value < allBookmarks.value.length - 1) {
-    slideDirection.value = 'slide-left';
-    reviewIndex.value++;
-  }
-};
-
-// 触摸滑动处理
-const handleTouchStart = (e: TouchEvent) => {
-  touchStartX.value = e.changedTouches[0].screenX;
-};
-
-const handleTouchEnd = (e: TouchEvent) => {
-  touchEndX.value = e.changedTouches[0].screenX;
-  const swipeDistance = touchEndX.value - touchStartX.value;
-  const minSwipeDistance = 50; // 最小滑动距离
-
-  if (Math.abs(swipeDistance) > minSwipeDistance) {
-    if (swipeDistance > 0) {
-      // 右滑：上一个
-      slideDirection.value = 'slide-right';
-      prevReview();
-    } else {
-      // 左滑：下一个
-      slideDirection.value = 'slide-left';
-      nextReview();
-    }
-  }
-};
-
 // 加载数据
 onMounted(async () => {
-  console.log('=== 书摘回顾页面 onMounted ===');
-  loadBookmarkSettings();
-  
   try {
     const bookmarks = await bookmarkService.getAllBookmarks();
-    console.log('加载的书摘数量:', bookmarks.length);
-    if (bookmarks.length > 0) {
-      console.log('书摘示例:', bookmarks.slice(0, 2).map(b => ({
-        书籍: b.bookTitle,
-        内容: b.content?.substring(0, 50) + '...',
-        页码: b.pageNum
-      })));
-    }
     bookmarkStore.setBookmarks(bookmarks);
 
     // 加载书摘标签（从书摘标签 API）
@@ -858,155 +655,9 @@ onMounted(async () => {
 
 /* 回顾页面 */
 .review-tab {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex: 1;
   padding: 16px;
-  min-height: calc(100vh - 120px);
-}
-
-.review-card {
-  width: 100%;
-  max-width: 1400px;
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: var(--radius-xl);
-  padding: 32px;
-  color: #fff;
-  box-shadow: var(--shadow-lg);
-  touch-action: pan-y;
-  user-select: none;
-  position: relative;
-  overflow: hidden;
-}
-
-.review-card-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.review-card > *:not(.review-card-overlay) {
-  position: relative;
-  z-index: 1;
-}
-
-.review-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  min-height: 0;
-  margin-bottom: 24px;
-}
-
-.review-text {
-  font-size: 18px;
-  line-height: 1.8;
-  margin: 0 0 16px 0;
-  text-align: left;
-  word-wrap: break-word;
-}
-
-.review-note {
-  font-size: 15px;
-  opacity: 0.95;
-  background-color: rgba(255, 255, 255, 0.15);
-  padding: 14px 16px;
-  border-radius: var(--radius-md);
-  margin: 0;
-  text-align: left;
-  line-height: 1.6;
-}
-
-.review-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  font-size: 16px;
-  opacity: 0.9;
-  padding: 20px 24px;
-  border-top: 1px solid rgba(255, 255, 255, 0.3);
-  margin-top: 8px;
-}
-
-.review-book {
-  text-align: left;
-  font-weight: 500;
-  font-size: 18px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.review-info {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 14px;
-  opacity: 0.85;
-}
-
-.review-time {
-  color: rgba(255, 255, 255, 0.8);
-}
-
-.review-page {
-  color: rgba(255, 255, 255, 0.75);
-  font-style: italic;
-  margin-left: auto;
-}
-
-.review-nav {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 32px;
-  margin-top: 32px;
-}
-
-.review-nav {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 24px;
-  margin-top: 24px;
-}
-
-.nav-btn {
-  width: 40px;
-  height: 40px;
-  border: none;
-  border-radius: 50%;
-  background-color: rgba(255,255,255,0.2);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s;
-}
-
-.nav-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
-
-.nav-btn svg {
-  width: 24px;
-  height: 24px;
-  fill: #fff;
-}
-
-.review-progress {
-  font-size: 14px;
-  opacity: 0.8;
+  max-width: 1200px;
+  margin: 0 auto;
 }
 
 /* 空状态 */
@@ -1108,32 +759,32 @@ onMounted(async () => {
   color: #fff;
 }
 
-/* 卡片滑动动画 */
-.slide-left-enter-active,
-.slide-left-leave-active,
-.slide-right-enter-active,
-.slide-right-leave-active {
-  transition: all 0.1s ease-out;
+/* 浮动添加按钮（与书评页一致） */
+.fab {
+  position: fixed;
+  bottom: 80px;
+  right: 24px;
+  width: 52px;
+  height: 52px;
+  border: none;
+  border-radius: 50%;
+  background-color: var(--primary-color, #ff6b35);
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(255, 107, 53, 0.4);
+  z-index: 100;
+  transition: all 0.2s;
 }
-
-.slide-left-enter-from {
-  opacity: 0;
-  transform: translateX(30px);
+.fab:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 20px rgba(255, 107, 53, 0.5);
 }
-
-.slide-left-leave-to {
-  opacity: 0;
-  transform: translateX(-30px);
+.fab svg {
+  width: 26px;
+  height: 26px;
+  fill: currentColor;
 }
-
-.slide-right-enter-from {
-  opacity: 0;
-  transform: translateX(-30px);
-}
-
-.slide-right-leave-to {
-  opacity: 0;
-  transform: translateX(30px);
-}
-
 </style>

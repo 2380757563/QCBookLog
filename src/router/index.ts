@@ -135,6 +135,22 @@ const routes: Array<RouteRecordRaw> = [
     }
   },
   {
+    path: '/git-sync-settings',
+    name: 'GitSyncSettings',
+    component: () => import('@/views/GitSyncSettings/index.vue'),
+    meta: {
+      title: 'GitHub 同步'
+    }
+  },
+  {
+    path: '/git-sync-settings',
+    name: 'GitSyncSettings',
+    component: () => import('@/views/GitSyncSettings/index.vue'),
+    meta: {
+      title: 'GitHub 同步'
+    }
+  },
+  {
     path: '/search',
     name: 'Search',
     component: () => import('@/views/Search/index.vue'),
@@ -185,6 +201,23 @@ const routes: Array<RouteRecordRaw> = [
     component: () => import('@/views/Bookmark/Edit.vue'),
     meta: {
       title: '编辑书摘'
+    }
+  },
+  // 书评相关路由
+  {
+    path: '/review/edit/:id?',
+    name: 'ReviewEdit',
+    component: () => import('@/views/Review/Edit.vue'),
+    meta: {
+      title: '编辑书评'
+    }
+  },
+  {
+    path: '/review/history/:id',
+    name: 'ReviewHistory',
+    component: () => import('@/views/Review/History.vue'),
+    meta: {
+      title: '书评历史版本'
     }
   },
   // 404路由

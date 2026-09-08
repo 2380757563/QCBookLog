@@ -10,109 +10,199 @@
     </div>
 
     <div class="content">
-      <!-- Talebook 设置 -->
-      <div class="settings-section">
-        <div class="section-header">
-          <div class="section-icon">📚</div>
-          <div class="section-info">
-            <h3 class="section-title">Talebook</h3>
-            <p class="section-desc">连接Talebook书库，实现书籍跳转</p>
+      <!-- Talebook 书签 -->
+      <div class="bookmark-card" :class="{ 'bookmark-card--expanded': talebookExpanded }">
+        <div class="bookmark-row" @click="toggleTalebook">
+          <div class="bookmark-icon">📚</div>
+          <div class="bookmark-info">
+            <span class="bookmark-title">Talebook</span>
+            <span class="bookmark-desc">连接Talebook书库，实现书籍跳转</span>
           </div>
-          <label class="switch">
-            <input type="checkbox" v-model="talebookEnabled" @change="handleTalebookToggle" />
-            <span class="slider"></span>
-          </label>
+          <svg class="bookmark-arrow" :class="{ 'bookmark-arrow--expanded': talebookExpanded }" viewBox="0 0 24 24">
+            <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/>
+          </svg>
         </div>
 
-        <div v-if="talebookEnabled" class="settings-form">
-          <!-- 内网配置 -->
-          <div class="form-group">
-            <label class="form-label">内网配置</label>
-            <div class="form-row">
-              <div class="form-field">
-                <label class="field-label">内网网址</label>
-                <input
-                  type="text"
-                  v-model="talebookLocalUrl"
-                  placeholder="例如: 192.168.1.100"
-                  class="form-input"
-                  :class="{ 'form-input--error': localUrlError }"
-                  @input="validateLocalUrl"
-                  @blur="validateLocalUrl"
-                />
-                <span v-if="localUrlError" class="error-message">{{ localUrlError }}</span>
+        <transition name="expand">
+          <div v-show="talebookExpanded" class="bookmark-content">
+            <div class="settings-form">
+              <!-- 启用开关 -->
+              <div class="form-row form-row--toggle">
+                <div class="toggle-wrapper">
+                  <span class="toggle-label">启用 Talebook</span>
+                  <label class="switch">
+                    <input type="checkbox" v-model="talebookEnabled" @change="handleTalebookToggle" />
+                    <span class="slider"></span>
+                  </label>
+                </div>
               </div>
-              <div class="form-field form-field--port">
-                <label class="field-label">端口</label>
-                <input
-                  type="text"
-                  v-model="talebookLocalPort"
-                  placeholder="例如: 8080"
-                  class="form-input"
-                />
-              </div>
-            </div>
-            <div class="form-example">
-              <span class="example-label">配置地址例如:</span>
-              <span class="example-value">192.168.1.100:8080</span>
-            </div>
-            <div v-if="localUrlPreview" class="url-preview">
-              <span class="preview-label">地址预览:</span>
-              <span class="preview-value">http://{{ localUrlPreview }}</span>
+
+              <template v-if="talebookEnabled">
+                <!-- 内网配置 -->
+                <div class="form-group">
+                  <label class="form-label">内网配置</label>
+                  <div class="form-row">
+                    <div class="form-field">
+                      <label class="field-label">内网网址</label>
+                      <input
+                        type="text"
+                        v-model="talebookLocalUrl"
+                        placeholder="例如: 192.168.1.100"
+                        class="form-input"
+                        :class="{ 'form-input--error': localUrlError }"
+                        @input="validateLocalUrl"
+                        @blur="validateLocalUrl"
+                      />
+                      <span v-if="localUrlError" class="error-message">{{ localUrlError }}</span>
+                    </div>
+                    <div class="form-field form-field--port">
+                      <label class="field-label">端口</label>
+                      <input
+                        type="text"
+                        v-model="talebookLocalPort"
+                        placeholder="例如: 8080"
+                        class="form-input"
+                      />
+                    </div>
+                  </div>
+                  <div class="form-example">
+                    <span class="example-label">配置地址例如:</span>
+                    <span class="example-value">192.168.1.100:8080</span>
+                  </div>
+                  <div v-if="localUrlPreview" class="url-preview">
+                    <span class="preview-label">地址预览:</span>
+                    <span class="preview-value">http://{{ localUrlPreview }}</span>
+                  </div>
+                </div>
+
+                <!-- 外网配置 -->
+                <div class="form-group">
+                  <label class="form-label">外网配置</label>
+                  <div class="form-row">
+                    <div class="form-field">
+                      <label class="field-label">外网网址</label>
+                      <input
+                        type="text"
+                        v-model="talebookRemoteUrl"
+                        placeholder="例如: talebook.example.com"
+                        class="form-input"
+                        @input="cleanRemoteUrl"
+                      />
+                    </div>
+                    <div class="form-field form-field--port">
+                      <label class="field-label">端口</label>
+                      <input
+                        type="text"
+                        v-model="talebookRemotePort"
+                        placeholder="例如: 443"
+                        class="form-input"
+                      />
+                    </div>
+                  </div>
+                  <div class="form-row form-row--toggle">
+                    <div class="toggle-wrapper">
+                      <span class="toggle-label">使用 HTTPS</span>
+                      <label class="switch switch--small">
+                        <input type="checkbox" v-model="talebookRemoteUseHttps" />
+                        <span class="slider"></span>
+                      </label>
+                    </div>
+                  </div>
+                  <div class="form-example">
+                    <span class="example-label">配置地址例如:</span>
+                    <span class="example-value">talebook.example.com:443</span>
+                  </div>
+                  <div v-if="remoteUrlPreview" class="url-preview">
+                    <span class="preview-label">地址预览:</span>
+                    <span class="preview-value">{{ talebookRemoteUseHttps ? 'https' : 'http' }}://{{ remoteUrlPreview }}</span>
+                  </div>
+                </div>
+              </template>
+
+              <!-- 保存按钮 -->
+              <button class="save-btn" @click="saveTalebookSettings" :disabled="isTalebookSaving || !!localUrlError">
+                <svg v-if="!isTalebookSaving" viewBox="0 0 24 24">
+                  <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
+                </svg>
+                <span>{{ isTalebookSaving ? '保存中...' : '保存设置' }}</span>
+              </button>
             </div>
           </div>
+        </transition>
+      </div>
 
-          <!-- 外网配置 -->
-          <div class="form-group">
-            <label class="form-label">外网配置</label>
-            <div class="form-row">
-              <div class="form-field">
-                <label class="field-label">外网网址</label>
-                <input
-                  type="text"
-                  v-model="talebookRemoteUrl"
-                  placeholder="例如: talebook.example.com"
-                  class="form-input"
-                  @input="cleanRemoteUrl"
-                />
-              </div>
-              <div class="form-field form-field--port">
-                <label class="field-label">端口</label>
-                <input
-                  type="text"
-                  v-model="talebookRemotePort"
-                  placeholder="例如: 443"
-                  class="form-input"
-                />
-              </div>
-            </div>
-            <div class="form-row form-row--toggle">
-              <div class="toggle-wrapper">
-                <span class="toggle-label">使用 HTTPS</span>
-                <label class="switch switch--small">
-                  <input type="checkbox" v-model="talebookRemoteUseHttps" />
-                  <span class="slider"></span>
-                </label>
-              </div>
-            </div>
-            <div class="form-example">
-              <span class="example-label">配置地址例如:</span>
-              <span class="example-value">talebook.example.com:443</span>
-            </div>
-            <div v-if="remoteUrlPreview" class="url-preview">
-              <span class="preview-label">地址预览:</span>
-              <span class="preview-value">{{ talebookRemoteUseHttps ? 'https' : 'http' }}://{{ remoteUrlPreview }}</span>
-            </div>
+      <!-- 书源API密钥配置 书签 -->
+      <div class="bookmark-card" :class="{ 'bookmark-card--expanded': bookSourceExpanded }">
+        <div class="bookmark-row" @click="toggleBookSource">
+          <div class="bookmark-icon">🔑</div>
+          <div class="bookmark-info">
+            <span class="bookmark-title">书源API密钥配置</span>
+            <span class="bookmark-desc">配置各书源的API密钥，用于查询书籍信息</span>
           </div>
-
-          <!-- 保存按钮 -->
-          <button class="save-btn" @click="saveSettings" :disabled="isSaving || !!localUrlError">
-            <svg v-if="!isSaving" viewBox="0 0 24 24">
-              <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
-            </svg>
-            <span>{{ isSaving ? '保存中...' : '保存设置' }}</span>
-          </button>
+          <svg class="bookmark-arrow" :class="{ 'bookmark-arrow--expanded': bookSourceExpanded }" viewBox="0 0 24 24">
+            <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/>
+          </svg>
         </div>
+
+        <transition name="expand">
+          <div v-show="bookSourceExpanded" class="bookmark-content">
+            <div class="settings-form">
+              <!-- 书源列表 -->
+              <div
+                v-for="source in bookSourceList"
+                :key="source.sourceKey"
+                class="book-source-item"
+              >
+                <div class="book-source-header">
+                  <span class="book-source-name">{{ source.sourceName }}</span>
+                  <span v-if="source.isRequired" class="book-source-tag">必填</span>
+                </div>
+                <p class="book-source-desc">{{ source.description }}</p>
+                <div class="form-field">
+                  <label class="field-label">API 密钥</label>
+                  <input
+                    type="text"
+                    v-model="source.apiKey"
+                    placeholder="请输入API密钥"
+                    class="form-input"
+                  />
+                </div>
+              </div>
+
+              <!-- 保存按钮 -->
+              <button class="save-btn" @click="saveBookSourceSettings" :disabled="isBookSourceSaving">
+                <svg v-if="!isBookSourceSaving" viewBox="0 0 24 24">
+                  <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
+                </svg>
+                <span>{{ isBookSourceSaving ? '保存中...' : '保存密钥' }}</span>
+              </button>
+            </div>
+          </div>
+        </transition>
+      </div>
+
+      <!-- GitHub 同步 书签 -->
+      <div class="bookmark-card" :class="{ 'bookmark-card--expanded': gitSyncExpanded }">
+        <div class="bookmark-row" @click="toggleGitSync">
+          <div class="bookmark-icon bookmark-icon--github">
+            <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+          </div>
+          <div class="bookmark-info">
+            <span class="bookmark-title">GitHub 同步</span>
+            <span class="bookmark-desc">书评同步到 GitHub 仓库，支持版本历史</span>
+          </div>
+          <svg class="bookmark-arrow" :class="{ 'bookmark-arrow--expanded': gitSyncExpanded }" viewBox="0 0 24 24">
+            <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/>
+          </svg>
+        </div>
+
+        <transition name="expand">
+          <div v-show="gitSyncExpanded" class="bookmark-content">
+            <div class="settings-form">
+              <GitSyncPanel />
+            </div>
+          </div>
+        </transition>
       </div>
 
       <!-- 说明信息 -->
@@ -125,6 +215,7 @@
             <li>内网地址用于本地网络访问，外网地址用于远程访问</li>
             <li>内网地址格式：IP地址（如 192.168.1.100），不要添加 http/https 前缀</li>
             <li>外网地址支持域名或IP，可使用HTTPS开关切换协议</li>
+            <li>书源API密钥用于查询书籍元数据，填写后搜索结果更丰富</li>
           </ul>
         </div>
       </div>
@@ -144,13 +235,21 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, reactive } from 'vue';
 import { useRouter } from 'vue-router';
 import { useTalebookStore } from '@/stores/talebook';
+import GitSyncPanel from '@/views/GitSyncSettings/GitSyncPanel.vue';
+import {
+  getBookSourceSettings,
+  saveBookSourceSettings as saveBookSourceSettingsApi,
+  type BookSourceSetting
+} from '@/api/bookSourceSettings';
 
 const router = useRouter();
 const talebookStore = useTalebookStore();
 
+// ===== Talebook 相关 =====
+const talebookExpanded = ref(false);
 const talebookEnabled = ref(false);
 const talebookLocalUrl = ref('');
 const talebookLocalPort = ref('');
@@ -158,38 +257,42 @@ const talebookRemoteUrl = ref('');
 const talebookRemotePort = ref('');
 const talebookRemoteUseHttps = ref(false);
 
-const isSaving = ref(false);
-const showToast = ref(false);
-const toastMessage = ref('');
-const toastType = ref<'success' | 'error'>('success');
+const isTalebookSaving = ref(false);
 const localUrlError = ref('');
+
+const toggleTalebook = () => {
+  talebookExpanded.value = !talebookExpanded.value;
+};
+
+const handleTalebookToggle = () => {
+};
 
 const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
 const ipWithPortPattern = /^(\d{1,3}\.){3}\d{1,3}:\d+$/;
 
 const validateLocalUrl = () => {
   const url = talebookLocalUrl.value.trim();
-  
+
   if (!url) {
     localUrlError.value = '';
     return;
   }
-  
+
   if (url.toLowerCase().startsWith('http://') || url.toLowerCase().startsWith('https://')) {
     localUrlError.value = '请勿输入 http:// 或 https:// 前缀，只需输入IP地址';
     return;
   }
-  
+
   if (ipWithPortPattern.test(url)) {
     localUrlError.value = '端口请单独填写在端口输入框中';
     return;
   }
-  
+
   if (!ipPattern.test(url)) {
     localUrlError.value = '请输入有效的IP地址格式（如 192.168.1.100）';
     return;
   }
-  
+
   const parts = url.split('.');
   for (const part of parts) {
     const num = parseInt(part, 10);
@@ -198,13 +301,13 @@ const validateLocalUrl = () => {
       return;
     }
   }
-  
+
   localUrlError.value = '';
 };
 
 const cleanRemoteUrl = () => {
   let url = talebookRemoteUrl.value.trim();
-  
+
   if (url.toLowerCase().startsWith('https://')) {
     url = url.substring(8);
     talebookRemoteUseHttps.value = true;
@@ -219,43 +322,36 @@ const cleanRemoteUrl = () => {
 const localUrlPreview = computed(() => {
   const url = talebookLocalUrl.value.trim();
   const port = talebookLocalPort.value.trim();
-  
+
   if (!url) return '';
-  
+
   if (port) {
     return `${url}:${port}`;
   }
-  
+
   return url;
 });
 
 const remoteUrlPreview = computed(() => {
   const url = talebookRemoteUrl.value.trim();
   const port = talebookRemotePort.value.trim();
-  
+
   if (!url) return '';
-  
+
   if (port) {
     return `${url}:${port}`;
   }
-  
+
   return url;
 });
 
-const goBack = () => {
-  router.back();
-};
-
-const handleTalebookToggle = () => {
-};
-
-const saveSettings = async () => {
+const saveTalebookSettings = async () => {
   if (localUrlError.value) {
     showErrorToast(localUrlError.value);
     return;
   }
-  
-  isSaving.value = true;
+
+  isTalebookSaving.value = true;
 
   try {
     const settings = {
@@ -281,7 +377,7 @@ const saveSettings = async () => {
 
     if (result.success) {
       talebookStore.setSettings(settings);
-      showSuccessToast('设置保存成功');
+      showSuccessToast('Talebook设置保存成功');
     } else {
       throw new Error(result.error || '保存失败');
     }
@@ -289,8 +385,62 @@ const saveSettings = async () => {
     console.error('保存设置失败:', error);
     showErrorToast('保存设置失败');
   } finally {
-    isSaving.value = false;
+    isTalebookSaving.value = false;
   }
+};
+
+// ===== 书源API密钥配置 相关 =====
+const bookSourceExpanded = ref(false);
+const bookSourceList = reactive<BookSourceSetting[]>([]);
+const isBookSourceSaving = ref(false);
+
+const toggleBookSource = () => {
+  bookSourceExpanded.value = !bookSourceExpanded.value;
+};
+
+// ===== GitHub 同步 相关 =====
+const gitSyncExpanded = ref(false);
+
+const toggleGitSync = () => {
+  gitSyncExpanded.value = !gitSyncExpanded.value;
+};
+
+const loadBookSourceSettings = async () => {
+  try {
+    const data = await getBookSourceSettings();
+    // 清空并重新填充响应式数组
+    bookSourceList.splice(0, bookSourceList.length, ...data);
+  } catch (error) {
+    console.error('加载书源设置失败:', error);
+  }
+};
+
+const saveBookSourceSettings = async () => {
+  isBookSourceSaving.value = true;
+
+  try {
+    const sources = bookSourceList.map(s => ({
+      sourceKey: s.sourceKey,
+      apiKey: s.apiKey
+    }));
+
+    await saveBookSourceSettingsApi(sources);
+    showSuccessToast('书源API密钥保存成功');
+  } catch (error) {
+    console.error('保存书源设置失败:', error);
+    showErrorToast('保存失败，请重试');
+  } finally {
+    isBookSourceSaving.value = false;
+  }
+};
+
+// ===== 通用 =====
+const showToast = ref(false);
+const toastMessage = ref('');
+const toastType = ref<'success' | 'error'>('success');
+
+const goBack = () => {
+  router.back();
 };
 
 const showSuccessToast = (message: string) => {
@@ -312,6 +462,7 @@ const showErrorToast = (message: string) => {
 };
 
 onMounted(async () => {
+  // 加载 Talebook 配置
   try {
     const response = await fetch('/api/config/third-party');
     const result = await response.json();
@@ -324,7 +475,7 @@ onMounted(async () => {
       talebookRemoteUrl.value = talebook.remoteUrl || '';
       talebookRemotePort.value = talebook.remotePort || '';
       talebookRemoteUseHttps.value = talebook.remoteUseHttps || false;
-      
+
       talebookStore.setSettings({
         enabled: talebook.enabled || false,
         localUrl: talebook.localUrl || '',
@@ -337,6 +488,9 @@ onMounted(async () => {
   } catch (error) {
     console.error('加载服务器配置失败:', error);
   }
+
+  // 加载书源配置
+  await loadBookSourceSettings();
 });
 </script>
 
@@ -398,102 +552,103 @@ onMounted(async () => {
   padding: 16px;
 }
 
-.settings-section {
+/* ===== 书签卡片样式 ===== */
+.bookmark-card {
   background-color: var(--bg-card);
   border-radius: var(--radius-lg);
   overflow: hidden;
   margin-bottom: 16px;
+  transition: box-shadow 0.2s ease;
 }
 
-.section-header {
+.bookmark-card--expanded {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.bookmark-row {
   display: flex;
   align-items: center;
   padding: 16px;
   gap: 12px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
 }
 
-.section-icon {
+.bookmark-row:hover {
+  background-color: var(--bg-hover, rgba(0, 0, 0, 0.03));
+}
+
+.bookmark-icon {
   font-size: 32px;
+  flex-shrink: 0;
 }
 
-.section-info {
+.bookmark-icon--github {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bookmark-icon--github svg {
+  width: 30px;
+  height: 30px;
+  fill: #24292f;
+}
+
+.bookmark-info {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.section-title {
+.bookmark-title {
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
-  margin: 0 0 4px 0;
 }
 
-.section-desc {
+.bookmark-desc {
   font-size: 12px;
   color: var(--text-hint);
-  margin: 0;
 }
 
-.switch {
-  position: relative;
-  width: 44px;
-  height: 24px;
-}
-
-.switch--small {
-  width: 36px;
+.bookmark-arrow {
+  width: 20px;
   height: 20px;
+  fill: var(--text-hint);
+  transition: transform 0.3s ease;
+  flex-shrink: 0;
 }
 
-.switch input {
+.bookmark-arrow--expanded {
+  transform: rotate(180deg);
+}
+
+.bookmark-content {
+  border-top: 1px solid var(--border-light);
+  overflow: hidden;
+}
+
+/* ===== 展开/收起动画 ===== */
+.expand-enter-active,
+.expand-leave-active {
+  transition: max-height 0.3s ease, opacity 0.3s ease;
+  max-height: 1000px;
+  opacity: 1;
+}
+
+.expand-enter-from,
+.expand-leave-to {
+  max-height: 0;
   opacity: 0;
-  width: 0;
-  height: 0;
 }
 
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: #ccc;
-  transition: 0.4s;
-  border-radius: 24px;
-}
-
-.slider:before {
-  position: absolute;
-  content: "";
-  height: 18px;
-  width: 18px;
-  left: 3px;
-  bottom: 3px;
-  background-color: white;
-  transition: 0.4s;
-  border-radius: 50%;
-}
-
-.switch--small .slider:before {
-  height: 14px;
-  width: 14px;
-}
-
-input:checked + .slider {
-  background-color: var(--primary-color);
-}
-
-input:checked + .slider:before {
-  transform: translateX(20px);
-}
-
-.switch--small input:checked + .slider:before {
-  transform: translateX(16px);
-}
-
+/* ===== 表单样式 ===== */
 .settings-form {
   padding: 0 16px 16px;
-  border-top: 1px solid var(--border-light);
 }
 
 .form-group {
@@ -542,6 +697,7 @@ input:checked + .slider:before {
   background-color: #fff;
   outline: none;
   transition: border-color 0.2s ease;
+  box-sizing: border-box;
 }
 
 .form-input:focus {
@@ -601,6 +757,65 @@ input:checked + .slider:before {
   word-break: break-all;
 }
 
+/* ===== 开关样式 ===== */
+.switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+}
+
+.switch--small {
+  width: 36px;
+  height: 20px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: 0.4s;
+  border-radius: 24px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.4s;
+  border-radius: 50%;
+}
+
+.switch--small .slider:before {
+  height: 14px;
+  width: 14px;
+}
+
+input:checked + .slider {
+  background-color: var(--primary-color);
+}
+
+input:checked + .slider:before {
+  transform: translateX(20px);
+}
+
+.switch--small input:checked + .slider:before {
+  transform: translateX(16px);
+}
+
 .toggle-wrapper {
   display: flex;
   align-items: center;
@@ -612,6 +827,44 @@ input:checked + .slider:before {
   color: var(--text-primary);
 }
 
+/* ===== 书源配置项 ===== */
+.book-source-item {
+  margin-top: 16px;
+  padding: 12px;
+  background-color: #fafafa;
+  border-radius: var(--radius-md);
+}
+
+.book-source-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.book-source-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.book-source-tag {
+  font-size: 11px;
+  padding: 2px 8px;
+  background-color: rgba(255, 107, 53, 0.1);
+  color: var(--primary-color);
+  border-radius: 12px;
+  font-weight: 500;
+}
+
+.book-source-desc {
+  font-size: 12px;
+  color: var(--text-hint);
+  margin: 0 0 10px 0;
+  line-height: 1.5;
+}
+
+/* ===== 保存按钮 ===== */
 .save-btn {
   display: flex;
   align-items: center;
@@ -646,6 +899,7 @@ input:checked + .slider:before {
   fill: currentColor;
 }
 
+/* ===== 说明卡片 ===== */
 .info-card {
   display: flex;
   gap: 12px;
@@ -687,6 +941,7 @@ input:checked + .slider:before {
   font-size: 12px;
 }
 
+/* ===== Toast ===== */
 .toast {
   position: fixed;
   bottom: calc(80px + env(safe-area-inset-bottom, 0));

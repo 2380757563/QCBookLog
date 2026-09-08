@@ -260,6 +260,8 @@ import readingStateSyncRoutes from './routes/readingStateSync.js';
 import userSettingsRoutes from './routes/userSettings.js';
 import userImagesRoutes from './routes/userImages.js';
 import bookSourceSettingsRoutes from './routes/bookSourceSettings.js';
+import reviewRoutes from './routes/reviews.js';
+import gitSyncRoutes from './routes/gitSync.js';
 import dbrService from './services/legacy/dbrService.js';
 
 // 注册路由
@@ -285,6 +287,8 @@ app.use('/api/reading-state-sync', readingStateSyncRoutes);
 app.use('/api/user-settings', userSettingsRoutes);
 app.use('/api/user-images', userImagesRoutes);
 app.use('/api/book-source-settings', bookSourceSettingsRoutes);
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/git', gitSyncRoutes);
 
 // 书源 API 代理：统一由插件层处理
 app.get('/api/tanshu/isbn/:isbn', async (req, res) => {
@@ -365,6 +369,16 @@ const startServer = async () => {
     console.log('🔄 正在初始化数据库服务...');
     await databaseService.init();
     console.log('✅ 数据库服务初始化成功');
+
+    // 初始化 Git 同步服务（仅在 QCBookLog 库可用时）
+    if (databaseService.connectionManager?.isQcBooklogAvailable()) {
+      try {
+        const { default: gitService } = await import('./services/git/gitService.js');
+        await gitService.init();
+      } catch (err) {
+        console.warn('⚠️ Git 同步服务初始化失败（不影响主功能）:', err.message);
+      }
+    }
 
     app.listen(PORT, '0.0.0.0', () => {
       logger.info(`Server is running on port ${PORT}`);

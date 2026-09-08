@@ -102,30 +102,9 @@
             <div class="item-icon">🔗</div>
             <div class="item-info">
               <span class="item-title">第三方设置</span>
-              <span class="item-desc">Talebook等第三方服务配置</span>
+              <span class="item-desc">Talebook、GitHub同步等第三方服务配置</span>
             </div>
             <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
-          </div>
-          <div class="list-item">
-            <div class="item-icon">🗃️</div>
-            <div class="item-info">
-              <span class="item-title">备份策略</span>
-            </div>
-            <select v-model="settings.backupStrategy" class="item-select">
-              <option value="manual">手动备份</option>
-              <option value="daily">每日备份</option>
-              <option value="weekly">每周备份</option>
-            </select>
-          </div>
-          <div class="list-item">
-            <div class="item-icon">🔔</div>
-            <div class="item-info">
-              <span class="item-title">阅读提醒</span>
-            </div>
-            <label class="switch">
-              <input type="checkbox" v-model="settings.reminder" />
-              <span class="slider"></span>
-            </label>
           </div>
         </div>
       </div>
@@ -162,67 +141,6 @@
             <div class="item-info">
               <span class="item-title">清除数据</span>
               <span class="item-desc">清除所有本地数据</span>
-            </div>
-            <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
-          </div>
-        </div>
-      </div>
-
-      <div class="section">
-        <h3 class="section-title">快捷功能</h3>
-        <div class="settings-list">
-          <div class="list-item" @click="goToAddBook">
-            <div class="item-icon">📚</div>
-            <div class="item-info">
-              <span class="item-title">添加书籍</span>
-            </div>
-            <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
-          </div>
-          <div class="list-item" @click="goToAddBookmark">
-            <div class="item-icon">📝</div>
-            <div class="item-info">
-              <span class="item-title">添加书摘</span>
-            </div>
-            <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
-          </div>
-          <div class="list-item" @click="goToSearch">
-            <div class="item-icon">🔍</div>
-            <div class="item-info">
-              <span class="item-title">搜索</span>
-            </div>
-            <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
-          </div>
-        </div>
-      </div>
-
-      <div class="section">
-        <h3 class="section-title">帮助与合规</h3>
-        <div class="settings-list">
-          <div class="list-item" @click="openLink('manual')">
-            <div class="item-icon">📖</div>
-            <div class="item-info">
-              <span class="item-title">操作指南</span>
-            </div>
-            <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
-          </div>
-          <div class="list-item" @click="openLink('agreement')">
-            <div class="item-icon">📜</div>
-            <div class="item-info">
-              <span class="item-title">用户协议</span>
-            </div>
-            <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
-          </div>
-          <div class="list-item" @click="openLink('privacy')">
-            <div class="item-icon">🔒</div>
-            <div class="item-info">
-              <span class="item-title">隐私政策</span>
-            </div>
-            <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
-          </div>
-          <div class="list-item" @click="openLink('feedback')">
-            <div class="item-icon">💬</div>
-            <div class="item-info">
-              <span class="item-title">反馈入口</span>
             </div>
             <svg class="item-arrow" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
           </div>
@@ -275,9 +193,7 @@ const bookmarkStore = useBookmarkStore();
 const readerStore = useReaderStore();
 
 const settings = reactive({
-  layout: 'grid',
-  backupStrategy: 'manual',
-  reminder: false
+  layout: 'grid'
 });
 
 // 备注编辑相关
@@ -362,18 +278,6 @@ const goToConfig = () => {
   router.push('/config');
 };
 
-const goToAddBook = () => {
-  router.push('/book/edit');
-};
-
-const goToAddBookmark = () => {
-  router.push('/bookmark/edit');
-};
-
-const goToSearch = () => {
-  router.push('/search');
-};
-
 // 加载书籍列表
 const loadBooks = async () => {
   try {
@@ -382,10 +286,6 @@ const loadBooks = async () => {
   } catch (error) {
     console.error('加载书籍列表失败:', error);
   }
-};
-
-const openLink = (type: string) => {
-  alert(`${type} 页面开发中...`);
 };
 
 const handleClearData = () => {

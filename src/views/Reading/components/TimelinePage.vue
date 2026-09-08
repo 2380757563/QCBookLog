@@ -24,9 +24,6 @@
           <option :value="30">最近30条</option>
           <option :value="0">全部</option>
         </select>
-        <button class="calendar-btn" @click="showCalendarPicker = true">
-          <svg viewBox="0 0 24 24"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM9 10H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2zm-8 4H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2z"/></svg>
-        </button>
         <button ref="settingsButtonRef" class="calendar-settings-top-btn" :class="{ active: showCalendarSettings }" @click.stop="showCalendarSettings = !showCalendarSettings" title="日历设置">
           <svg viewBox="0 0 24 24" width="18" height="18"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94 0 .31.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" fill="currentColor"/></svg>
         </button>
@@ -291,7 +288,6 @@ const timelineRecordCount = ref(10);
 const selectedTimelineDate = ref<any>(null);
 const timelineDateDetails = ref<any[]>([]);
 const loadingTimelineDetails = ref(false);
-const showCalendarPicker = ref(false);
 const timelineCalendarDays = ref<any[]>([]);
 const loadingCalendarDays = ref(false);
 const eventBus = useEventBus();
@@ -872,6 +868,8 @@ const getActivityTypeLabel = (type: string): string => {
     'book_updated': '更新书籍',
     'bookmark_added': '添加书摘',
     'bookmark_deleted': '删除书摘',
+    'review_added': '添加书评',
+    'review_updated': '更新书评',
     'reading_state_changed': '阅读状态变更',
     'reading_record': '阅读记录',
     'reading_goal_set': '设置阅读目标'
@@ -885,6 +883,8 @@ const getActivityTypeClass = (type: string): string => {
     'book_updated': 'activity-type--update',
     'bookmark_added': 'activity-type--add',
     'bookmark_deleted': 'activity-type--delete',
+    'review_added': 'activity-type--review',
+    'review_updated': 'activity-type--review',
     'reading_state_changed': 'activity-type--status',
     'reading_record': 'activity-type--reading',
     'reading_goal_set': 'activity-type--goal'
@@ -898,6 +898,8 @@ const getActivityMarkerClass = (type: string): string => {
     'book_updated': 'marker-dot--update',
     'bookmark_added': 'marker-dot--add',
     'bookmark_deleted': 'marker-dot--delete',
+    'review_added': 'marker-dot--review',
+    'review_updated': 'marker-dot--review',
     'reading_state_changed': 'marker-dot--status',
     'reading_record': 'marker-dot--reading',
     'reading_goal_set': 'marker-dot--goal'
@@ -1080,32 +1082,6 @@ const getMetadataInfo = (record: any): string => {
     outline: none;
   }
 
-  .calendar-btn {
-    width: 40px;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: var(--bg-secondary);
-    border: 1px solid var(--border-light);
-    border-radius: var(--radius-md);
-    cursor: pointer;
-    transition: all 0.3s ease;
-
-    svg {
-      width: 20px;
-      height: 20px;
-      fill: var(--text-secondary);
-    }
-
-    &:hover {
-      background-color: var(--bg-tertiary);
-      svg {
-        fill: var(--primary-color);
-      }
-    }
-  }
-
   .calendar-settings-top-btn {
     width: 40px;
     height: 40px;
@@ -1122,6 +1098,7 @@ const getMetadataInfo = (record: any): string => {
     svg {
       width: 20px;
       height: 20px;
+      flex-shrink: 0;
     }
 
     &:hover {
@@ -1568,6 +1545,10 @@ const getMetadataInfo = (record: any): string => {
       background-color: #9c27b0;
     }
 
+    &.marker-dot--review {
+      background-color: #673ab7;
+    }
+
     &.marker-dot--import {
       background-color: #00bcd4;
     }
@@ -1628,6 +1609,11 @@ const getMetadataInfo = (record: any): string => {
     &.activity-type--goal {
       background-color: rgba(156, 39, 176, 0.15);
       color: #9c27b0;
+    }
+
+    &.activity-type--review {
+      background-color: rgba(103, 58, 183, 0.15);
+      color: #673ab7;
     }
 
     &.activity-type--import {
