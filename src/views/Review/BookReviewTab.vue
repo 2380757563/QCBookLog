@@ -390,7 +390,8 @@ onBeforeUnmount(() => {
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   box-sizing: border-box;
   min-height: 120px;
-  max-height: 680px;
+  /* 最大高度以屏幕为准：视口高度减去页面头部/tab/工具栏占位，过长内容在卡片内滚动 */
+  max-height: calc(100dvh - 220px);
   display: flex;
   flex-direction: column;
 }
@@ -417,6 +418,9 @@ onBeforeUnmount(() => {
   gap: 6px;
   flex: 1 1 auto;
   min-height: 0;
+  /* 内容超出卡片时在卡片内滚动 */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .card-meta {
@@ -461,6 +465,7 @@ onBeforeUnmount(() => {
   word-break: break-word;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -591,6 +596,13 @@ onBeforeUnmount(() => {
   box-shadow: 0 4px 16px rgba(255, 107, 53, 0.4);
   z-index: 100;
   transition: all 0.2s;
+}
+
+/* 桌面端：无底部导航栏，FAB 回到底部 */
+@media (min-width: 1024px) {
+  .fab {
+    bottom: 24px;
+  }
 }
 
 .fab:hover {

@@ -142,4 +142,23 @@ onUnmounted(() => {
 .all-charts-wrapper {
   margin-top: 8px;
 }
+
+/* 桌面端：图表卡片改两栏网格，充分利用横向空间 */
+@media (min-width: 1024px) {
+  .stats-page {
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .all-charts-wrapper {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    align-items: start;
+  }
+
+  .all-charts-wrapper :deep(.stat-chart-card) {
+    margin-bottom: 0;
+  }
+}
 </style>

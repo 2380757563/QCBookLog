@@ -8,7 +8,7 @@
       </div>
       <div v-if="readingBooks.length > 0" class="book-list">
         <div
-          v-for="book in readingBooks.slice(0, 3)"
+          v-for="book in displayBooks"
           :key="book.id"
           class="book-item"
           @click="handleBookClick(book.id)"
@@ -52,6 +52,7 @@ import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useBookImage } from '@/views/Book/composables/useBookImage';
 import { useBookStore } from '@/stores/book';
+import { useIsDesktop } from '@/composables/useMediaQuery';
 
 // 书籍接口
 interface Book {
@@ -70,10 +71,17 @@ interface Book {
 const router = useRouter();
 const { handleImgLoad, handleImgError, getBookCoverUrl } = useBookImage();
 const bookStore = useBookStore();
+const isDesktop = useIsDesktop();
 
 // 在读书籍
 const readingBooks = computed(() => {
   return bookStore.allBooks.filter((b: Book) => b.readStatus === '在读');
+});
+
+// 桌面端展示更多在读书籍
+const displayBooks = computed(() => {
+  const limit = isDesktop.value ? 6 : 3;
+  return readingBooks.value.slice(0, limit);
 });
 
 // 计算阅读进度百分比

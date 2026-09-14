@@ -6,15 +6,15 @@
     <!-- 内容区域 -->
     <div class="content">
       <!-- 在读页面 -->
-      <div v-show="activeTab === 'reading'" class="tab-content">
+      <div v-show="activeTab === 'reading'" class="tab-content reading-tab-grid">
         <!-- 今年已读计划 -->
-        <ReadingGoalCard ref="goalCardRef" :reading-stats="readingStats" />
+        <ReadingGoalCard ref="goalCardRef" :reading-stats="readingStats" class="reading-goal-card" />
 
         <!-- 阅读热力图（卷轴式全景布局） -->
-        <ReadingHeatmap />
+        <ReadingHeatmap class="reading-heatmap" />
 
         <!-- 在读书籍 -->
-        <ReadingBooksList />
+        <ReadingBooksList class="reading-books-list" />
       </div>
 
       <!-- 时间线页面 -->
@@ -110,6 +110,36 @@ onMounted(async () => {
 @media (max-width: 768px) {
   .content {
     padding: 8px;
+  }
+}
+
+/* 桌面端：在读页三模块改两栏（热力图全宽 + 目标/在读书籍左右并排） */
+@media (min-width: 1024px) {
+  .reading-tab-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+
+  /* 热力图置顶，跨满两列（DOM 中它在中间，需显式定位到第一行） */
+  .reading-tab-grid :deep(.heatmap-card) {
+    grid-row: 1;
+    grid-column: 1 / -1;
+    margin-bottom: 0;
+  }
+
+  /* 目标卡与在读书籍并排（第二行） */
+  .reading-tab-grid :deep(.reading-goal-card) {
+    grid-row: 2;
+    grid-column: 1;
+    margin-bottom: 0;
+  }
+
+  .reading-tab-grid :deep(.reading-books-list) {
+    grid-row: 2;
+    grid-column: 2;
+    margin-bottom: 0;
   }
 }
 

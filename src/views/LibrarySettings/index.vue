@@ -11,11 +11,10 @@
     </div>
 
     <div class="content">
+      <div class="cards-flow">
+      <div class="cards-col">
       <!-- ========== 视图布局 ========== -->
-      <div class="settings-section">
-        <h2 class="section-title">📐 视图布局</h2>
-        <p class="section-desc">切换书库页面的网格视图与列表视图</p>
-
+      <CollapsibleSection icon="📐" title="视图布局" desc="切换书库页面的网格视图与列表视图">
         <div class="option-cards">
           <div
             :class="['option-card', { active: layout === 'grid' }]"
@@ -47,13 +46,10 @@
             <div v-if="layout === 'list'" class="check-icon">✓</div>
           </div>
         </div>
-      </div>
+      </CollapsibleSection>
 
       <!-- ========== 每行书籍数 ========== -->
-      <div class="settings-section">
-        <h2 class="section-title">📊 每行书籍数</h2>
-        <p class="section-desc">设置网格视图下每行显示的书籍数量</p>
-
+      <CollapsibleSection icon="📊" title="每行书籍数" desc="设置网格视图下每行显示的书籍数量">
         <div class="segmented-control">
           <button
             :class="['segmented-btn', { active: gridColumns === 'auto' }]"
@@ -84,13 +80,10 @@
           </div>
           <div class="slider-hint">拖动滑块设置每行显示 1-20 列书籍</div>
         </div>
-      </div>
+      </CollapsibleSection>
 
       <!-- ========== 分组缩略图数 ========== -->
-      <div class="settings-section">
-        <h2 class="section-title">🖼️ 分组缩略图数</h2>
-        <p class="section-desc">设置分组卡片上显示的书籍缩略图数量</p>
-
+      <CollapsibleSection icon="🖼️" title="分组缩略图数" desc="设置分组卡片上显示的书籍缩略图数量">
         <div class="option-cards">
           <div
             :class="['option-card option-card--compact', { active: groupThumbnailMax === 4 }]"
@@ -120,13 +113,13 @@
             <div v-if="groupThumbnailMax === 9" class="check-icon">✓</div>
           </div>
         </div>
-      </div>
+      </CollapsibleSection>
 
       <!-- ========== 阅读状态显示方式 ========== -->
-      <div class="settings-section">
-        <h2 class="section-title">📖 阅读状态显示方式</h2>
-        <p class="section-desc">选择在书籍列表中显示阅读状态的方式</p>
+      </div>
 
+      <div class="cards-col">
+      <CollapsibleSection icon="📖" title="阅读状态显示方式" desc="选择在书籍列表中显示阅读状态的方式">
         <div class="option-cards">
           <div
             :class="['option-card', { active: progressDisplayMode === 'label' }]"
@@ -171,16 +164,10 @@
             <div v-if="progressDisplayMode === 'progress'" class="check-icon">✓</div>
           </div>
         </div>
-      </div>
+      </CollapsibleSection>
 
       <!-- ========== 评分显示模式 ========== -->
-      <div class="settings-section">
-        <h2 class="section-title">⭐ 评分显示模式</h2>
-        <p class="section-desc">
-          切换书籍评分的展示方式。数据库中存储的原始评分范围是 0–10（如 7.8、9.0、8、7），
-          切换显示模式仅改变前端渲染逻辑，不会修改原始数据。
-        </p>
-
+      <CollapsibleSection icon="⭐" title="评分显示模式" desc="切换书籍评分的展示方式（仅改变前端渲染，不修改原始数据）">
         <div class="option-cards">
           <div
             :class="['option-card', { active: ratingMode === '10' }]"
@@ -220,13 +207,10 @@
             <div v-if="ratingMode === '5'" class="check-icon">✓</div>
           </div>
         </div>
-      </div>
+      </CollapsibleSection>
 
       <!-- ========== 外观设置（导航到子页面） ========== -->
-      <div class="settings-section">
-        <h2 class="section-title">🎨 外观设置</h2>
-        <p class="section-desc">为不同阅读状态的书籍配置边框样式与装帧包边效果</p>
-
+      <CollapsibleSection icon="🎨" title="外观设置" desc="为不同阅读状态的书籍配置边框样式与装帧包边效果">
         <div class="nav-cards">
           <router-link to="/border-settings" class="nav-card">
             <div class="nav-card__icon">🖼️</div>
@@ -246,9 +230,12 @@
             <div class="nav-card__arrow">›</div>
           </router-link>
         </div>
-      </div>
+      </CollapsibleSection>
 
       <!-- 操作区 -->
+      </div>
+      </div>
+
       <div class="action-section">
         <button class="btn-secondary" @click="onResetAll">恢复默认</button>
       </div>
@@ -283,6 +270,7 @@
 
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import CollapsibleSection from '@/components/Settings/CollapsibleSection.vue';
 import RatingDisplay from '@/components/business/RatingDisplay.vue';
 import { useAppStore } from '@/stores/app';
 import { useReadingStore } from '@/stores/reading';
@@ -454,32 +442,29 @@ onMounted(async () => {
   padding: 24px 16px;
 }
 
-.settings-section {
-  background-color: var(--bg-secondary, #fff);
-  border-radius: 12px;
-  padding: 24px;
-  margin-bottom: 20px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-}
+/* 桌面端：设置项两列瀑布流（多列布局）：卡片按列纵向流动，展开时原地撑高、下方内容自然下移 */
+@media (min-width: 1024px) {
+  .content {
+    max-width: 1000px;
+  }
 
-.section-title {
-  margin: 0 0 8px 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
+  /* 静态两列：卡片固定归属列，展开时向下推挤同列卡片，不跨列移动 */
+  .cards-flow {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
 
-.section-desc {
-  margin: 0 0 20px 0;
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.5;
+  .cards-col {
+    flex: 1;
+    min-width: 0;
+  }
 }
 
 /* 选项卡片 */
 .option-cards {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 12px;
 }
 

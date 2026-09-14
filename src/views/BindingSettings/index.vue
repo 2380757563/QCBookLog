@@ -78,7 +78,10 @@
         </button>
       </div>
 
-      <div class="params-section">
+      <div class="cards-flow">
+      <div class="cards-col">
+
+      <CollapsibleSection icon="⚙️" title="参数配置" desc="调整各装订类型的包边开关、宽度与颜色">
         <div class="params-card">
           <div class="param-group">
             <h3 class="param-group__title">基础参数</h3>
@@ -338,6 +341,9 @@
             </div>
           </div>
         </div>
+      </CollapsibleSection>
+
+      </div>
       </div>
 
       <div class="actions-section">
@@ -555,6 +561,26 @@ function showSuccessToast(message: string) {
 
 .preview-section {
   margin-bottom: 24px;
+}
+
+/* 桌面端：设置项两列瀑布流（多列布局）：卡片按列纵向流动，展开时原地撑高、下方内容自然下移 */
+@media (min-width: 1024px) {
+  .content {
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+
+  /* 静态两列：卡片固定归属列，展开时向下推挤同列卡片，不跨列移动 */
+  .cards-flow {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .cards-col {
+    flex: 1;
+    min-width: 0;
+  }
 }
 
 .section-title {

@@ -39,9 +39,10 @@
         </div>
       </div>
 
-      <div class="border-selection-section">
-        <h2 class="section-title">边框选择</h2>
-        
+      <div class="cards-flow">
+      <div class="cards-col">
+
+      <CollapsibleSection icon="🧩" title="边框选择" desc="为不同阅读状态选择书籍边框样式">
         <div class="status-tabs">
           <button 
             v-for="tab in statusTabs" 
@@ -63,11 +64,12 @@
             @select="selectBorder(border.id)"
           />
         </div>
+      </CollapsibleSection>
+
       </div>
 
-      <div class="params-section">
-        <h2 class="section-title">参数配置</h2>
-        
+      <div class="cards-col">
+      <CollapsibleSection icon="⚙️" title="参数配置" desc="调整当前状态边框的线条、圆角、颜色等参数">
         <div class="params-card">
           <div class="param-group">
             <h3 class="param-group__title">基础参数</h3>
@@ -417,6 +419,9 @@
             </template>
           </div>
         </div>
+      </CollapsibleSection>
+
+      </div>
       </div>
 
       <div class="actions-section">
@@ -443,10 +448,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
+import CollapsibleSection from '@/components/Settings/CollapsibleSection.vue';
 import { useBookBorderStore } from '@/stores/bookBorder';
-import { BookStatus, BorderParams, getBordersByStatus, getBorderDefinition, BorderDefinition } from '@/stores/bookBorder/types';
+import { BookStatus, BorderParams, getBordersByStatus, getBorderDefinition } from '@/stores/bookBorder/types';
 import BorderPreview from '@/components/business/BookBorder/BorderPreview.vue';
 
 const router = useRouter();
@@ -624,16 +630,6 @@ function getPreviewStyle(status: BookStatus): Record<string, string> {
 .back-btn svg {
   width: 24px;
   height: 24px;
-  fill: currentColor;
-}
-
-.back-btn:hover {
-  background-color: var(--bg-hover, #f0f0f0);
-}
-
-.back-btn svg {
-  width: 24px;
-  height: 24px;
   fill: var(--text-primary, #333);
 }
 
@@ -651,6 +647,25 @@ function getPreviewStyle(status: BookStatus): Record<string, string> {
   padding: 20px;
   max-width: 800px;
   margin: 0 auto;
+}
+
+/* 桌面端：设置项两列瀑布流（多列布局）：卡片按列纵向流动，展开时原地撑高、下方内容自然下移 */
+@media (min-width: 1024px) {
+  .content {
+    max-width: 1000px;
+  }
+
+  /* 静态两列：卡片固定归属列，展开时向下推挤同列卡片，不跨列移动 */
+  .cards-flow {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .cards-col {
+    flex: 1;
+    min-width: 0;
+  }
 }
 
 .section-title {
@@ -844,10 +859,12 @@ function getPreviewStyle(status: BookStatus): Record<string, string> {
   border-radius: 3px;
   background: var(--bg-hover, #e0e0e0);
   outline: none;
+  appearance: none;
   -webkit-appearance: none;
 }
 
 .slider::-webkit-slider-thumb {
+  appearance: none;
   -webkit-appearance: none;
   width: 20px;
   height: 20px;

@@ -19,14 +19,6 @@
       @add-book="goToAddBook"
     />
 
-    <!-- 标签快速筛选（始终可见的输入框） -->
-    <TagQuickFilter
-      :selected-tags="filterConditions.tags"
-      :available-tags="availableTags"
-      :match-count="filteredBooks.length"
-      @update:selected-tags="setTags"
-    />
-
     <!-- 高级筛选弹窗 -->
     <AdvancedFilterDialog
       :show="showAdvancedFilter"
@@ -420,7 +412,6 @@
  *
  * 通过子组件实现：
  * - BookToolbar: 顶部工具栏
- * - TagQuickFilter: 标签快速筛选
  * - AdvancedFilterDialog: 高级筛选弹窗
  * - OrganizeModeBar: 整理模式操作栏
  * - GroupSelectorDialog / GroupEditDialog / DeleteConfirmDialog / WishlistPanel
@@ -469,7 +460,6 @@ import { useBookImage } from './composables/useBookImage';
 import { getBookStatus, getBookBorderStyle } from './utils/bookDisplay';
 
 import BookToolbar from './components/BookToolbar.vue';
-import TagQuickFilter from './components/TagQuickFilter.vue';
 import AdvancedFilterDialog from './components/AdvancedFilterDialog.vue';
 import OrganizeModeBar from './components/OrganizeModeBar.vue';
 import GroupSelectorDialog from './components/GroupSelectorDialog.vue';
@@ -518,7 +508,6 @@ const {
   hasActiveFilters,
   activeFilterChips,
   toggleTagFilter,
-  setTags,
   clearFilterConditions,
   saveFilterConditions,
   loadFilterConditions
@@ -915,12 +904,12 @@ const __keepRefs = { showBackToTop, isGroupsCollapsed, isBooksCollapsed, toggleG
 
 
 <style>
-/* 全局样式：整理模式下隐藏底部导航栏 */
+/* 整理模式下隐藏底部导航栏（移动端） */
 body.organize-mode-active .bottom-nav {
   display: none !important;
 }
 
-/* 整理模式下调整内容底部间距 */
+/* 整理模式下调整内容底部间距（移动端让位底部栏） */
 body.organize-mode-active .main-content {
   padding-bottom: 72px !important;
 }
@@ -934,6 +923,17 @@ body.organize-mode-active .main-content {
 @media (max-width: 480px) {
   body.organize-mode-active .main-content {
     padding-bottom: 56px !important;
+  }
+}
+
+/* 桌面端：整理模式下隐藏侧边栏，内容区占满；底部让位归零 */
+@media (min-width: 1024px) {
+  body.organize-mode-active .sidebar-nav {
+    display: none !important;
+  }
+  body.organize-mode-active .main-content {
+    margin-left: 0;
+    padding-bottom: 72px !important;
   }
 }
 </style>

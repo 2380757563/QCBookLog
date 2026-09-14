@@ -1,7 +1,15 @@
 .book-container {
   min-height: 100vh;
   background-color: var(--bg-primary);
+  /* 顶部固定工具栏高度：供下方元素让位，避免被 .toolbar 遮挡 */
+  --book-toolbar-height: 62px;
 
+}
+
+@media (min-width: 1024px) {
+  .book-container {
+    --book-toolbar-height: 76px;
+  }
 }
 
 .book-container .toolbar {
@@ -51,226 +59,6 @@
   align-items: center;
 
 }
-
-/* 标签快速筛选 - 始终可见输入框 */
-.book-container .tag-quick-filter {
-  position: relative;
-  margin: 8px 16px 0 16px;
-  z-index: 50;
-
-}
-
-.book-container .tag-quick-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px 10px;
-  background: #fafafa;
-  border: 1px solid #e8e8e8;
-  border-radius: 10px;
-  min-height: 40px;
-  transition: border-color 0.2s ease, background 0.2s ease;
-
-}
-
-.book-container .tag-quick-row:focus-within {
-  border-color: #ff6b35;
-  background: #fff;
-  box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.08);
-
-}
-
-.book-container .tag-quick-label {
-  font-size: 12px;
-  color: #888;
-  font-weight: 500;
-  flex-shrink: 0;
-  user-select: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-
-}
-
-.book-container .tag-quick-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 9px;
-  background: #ff6b35;
-  color: #fff;
-  border-radius: 11px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  user-select: none;
-  white-space: nowrap;
-
-}
-
-.book-container .tag-quick-chip:hover {
-  background: #e55a2b;
-  transform: translateY(-1px);
-
-}
-
-.book-container .tag-quick-input-wrap {
-  display: inline-flex;
-  align-items: center;
-  flex: 1;
-  min-width: 120px;
-  position: relative;
-
-}
-
-.book-container .tag-quick-input {
-  border: none;
-  outline: none;
-  padding: 4px 6px;
-  font-size: 13px;
-  color: #333;
-  background: transparent;
-  flex: 1;
-  min-width: 80px;
-
-}
-
-.book-container .tag-quick-input::placeholder {
-  color: #aaa;
-
-}
-
-.book-container .tag-quick-clear-all {
-  background: #f0f0f0;
-  border: none;
-  color: #999;
-  font-size: 11px;
-  cursor: pointer;
-  padding: 2px 8px;
-  border-radius: 8px;
-  white-space: nowrap;
-
-}
-
-.book-container .tag-quick-clear-all:hover {
-  background: #ffe8df;
-  color: #ff6b35;
-
-}
-
-.book-container .tag-quick-result {
-  font-size: 11px;
-  color: #ff6b35;
-  font-weight: 500;
-  white-space: nowrap;
-  margin-left: auto;
-  padding-left: 6px;
-
-}
-
-/* 候选下拉 */
-.book-container .tag-quick-dropdown {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 16px;
-  right: 16px;
-  background: #fff;
-  border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.05);
-  z-index: 100;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 10px;
-  max-height: 240px;
-  overflow-y: auto;
-
-}
-
-.book-container .tag-quick-dropdown--empty {
-  color: #999;
-  font-size: 12px;
-  text-align: center;
-  padding: 12px;
-
-}
-
-.book-container .tag-quick-candidate {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  background: #f5f5f5;
-  color: #555;
-  border-radius: 12px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  user-select: none;
-
-}
-
-.book-container .tag-quick-candidate:hover {
-  background: #ff6b35;
-  color: #fff;
-  transform: translateY(-1px);
-
-}
-
-.book-container .tag-quick-candidate:hover .tag-quick-candidate-icon {
-  background: rgba(255, 255, 255, 0.3);
-  color: #fff;
-
-}
-
-.book-container .tag-quick-candidate-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  background: #fff;
-  color: #ff6b35;
-  border-radius: 50%;
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-
-}
-
-.book-container .tag-quick-candidate mark {
-  background: #fff3e0;
-  color: #ff6b35;
-  padding: 0 1px;
-  border-radius: 2px;
-  font-weight: 600;
-
-}
-
-.book-container .tag-quick-meta {
-  font-size: 11px;
-  color: #999;
-  align-self: center;
-  margin-left: auto;
-  padding: 0 4px;
-
-}
-
-@media (max-width: 600px) {
-  .book-container .tag-quick-filter {
-    margin: 8px 12px 0 12px;
-
-}
-  .book-container .tag-quick-row {
-    padding: 6px 8px;
-
-}
-  .book-container .tag-quick-input {
-    min-width: 60px;
-
-}
-}
-
 .book-container .action-btn {
   width: 36px;
   height: 36px;
@@ -685,7 +473,8 @@
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-light);
   padding: 0 16px;
-  margin-top: 60px;
+  /* 顶部让位固定工具栏 */
+  margin-top: calc(var(--book-toolbar-height) + 8px);
 
 }
 
@@ -728,6 +517,23 @@
   padding: 12px 16px;
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-light);
+
+}
+
+/* 顶部排序栏宽度约束
+   下方 .filter-select 的 width:100% 是为高级筛选弹窗定义的，但会同时命中顶部排序下拉框，
+   把它撑满整行、将「筛选」按钮挤到换行。这里用更高优先级选择器约束回按内容自适应。 */
+.book-container .filter-bar .filter-btn {
+  flex-shrink: 0;
+  white-space: nowrap;
+
+}
+
+.book-container .filter-bar .filter-select {
+  width: auto;
+  min-width: 120px;
+  max-width: 220px;
+  flex-shrink: 0;
 
 }
 
@@ -2616,12 +2422,6 @@
 }
 }
 
-/* 整理模式下隐藏全局底部导航栏 */
-.book-container .container:has(.organize-mode-overlay) ~ .bottom-nav {
-  display: none !important;
-
-}
-
 /* ==================== 高级筛选样式 ==================== */
 
 .book-container .filter-overlay {
@@ -3151,5 +2951,79 @@
   .book-container .groups-grid.book-grid-cols-4 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
+  }
+}
+
+/* ============================================ */
+/* 桌面端侧边栏适配                               */
+/* ============================================ */
+@media (min-width: 1024px) {
+  /* 顶部工具栏随侧栏偏移，并按宽屏重新排布：
+     搜索框限宽靠左、按钮组紧跟其后，避免被拉成一条细长胶囊 */
+  .book-container .toolbar {
+    left: var(--sidebar-width);
+    height: var(--book-toolbar-height);
+    padding: 0 24px;
+    justify-content: flex-start;
+    gap: 16px;
+    transition: left 0.2s ease;
+  }
+
+  .book-container .search-bar {
+    flex: 0 1 520px;
+    min-width: 280px;
+    max-width: 560px;
+    padding: 12px 20px;
+    border-radius: 24px;
+  }
+
+  .book-container .search-bar span {
+    font-size: 15px;
+  }
+
+  .book-container .search-icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* 按钮组紧跟搜索框，而不是被推到最右侧 */
+  .book-container .toolbar-actions {
+    flex: 0 0 auto;
+    gap: 12px;
+  }
+
+  .book-container .toolbar .action-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .book-container .toolbar .action-btn svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  /* 整理模式顶/底栏随侧栏偏移（与 OrganizeModeBar.vue scoped 样式同步） */
+  .book-container .organize-top-bar,
+  .book-container .organize-bottom-bar {
+    left: var(--sidebar-width);
+    transition: left 0.2s ease;
+  }
+
+  /* 返回顶部按钮：桌面端无底部导航栏，回到正常 bottom */
+  .book-container .back-to-top-btn {
+    bottom: 24px;
+  }
+
+  /* 整理模式下隐藏侧边栏，内容区占满 */
+  body.organize-mode-active .sidebar-nav {
+    display: none !important;
+  }
+  body.organize-mode-active .main-content {
+    margin-left: 0;
+  }
+  /* 侧栏已隐藏，整理顶/底栏不再偏移，与内容区对齐 */
+  body.organize-mode-active .book-container .organize-top-bar,
+  body.organize-mode-active .book-container .organize-bottom-bar {
+    left: 0 !important;
   }
 }

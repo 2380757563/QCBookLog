@@ -594,6 +594,55 @@ input:checked + .slider:before {
   font-size: 12px;
 }
 
+/* 桌面端：设置列表两栏 + 内容居中限宽 */
+@media (min-width: 1024px) {
+  .profile-container {
+    padding-top: 8px;
+  }
+
+  .user-card,
+  .stats-card {
+    max-width: 1000px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .user-card {
+    padding: 40px 32px;
+  }
+
+  .stats-card {
+    padding: 20px 32px;
+  }
+
+  .content {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 0 16px 16px;
+  }
+
+  .settings-list {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    background: transparent;
+    border-radius: 0;
+    overflow: visible;
+  }
+
+  .list-item {
+    background-color: var(--bg-card);
+    border-radius: var(--radius-md);
+    border-bottom: none;
+    padding: 16px;
+  }
+
+  .list-item:hover {
+    box-shadow: var(--shadow-sm);
+    background-color: var(--bg-card);
+  }
+}
+
 .version-info p {
   margin: 4px 0;
 }

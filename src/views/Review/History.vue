@@ -335,6 +335,13 @@ onMounted(load);
   box-sizing: border-box;
 }
 
+/* 桌面端：放宽 max-width，利用侧栏外的空间 */
+@media (min-width: 1024px) {
+  .page-body {
+    max-width: 100%;
+  }
+}
+
 /* 左侧列表：可滚动 */
 .history-list {
   width: 320px;

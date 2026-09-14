@@ -528,6 +528,16 @@ onMounted(async () => {
   gap: 12px;
 }
 
+/* 桌面端：书摘列表改多列网格 */
+@media (min-width: 1024px) {
+  .bookmarks-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 12px;
+    align-items: start;
+  }
+}
+
 .bookmark-card {
   background-color: var(--bg-card);
   border-radius: var(--radius-lg);
@@ -535,6 +545,10 @@ onMounted(async () => {
   cursor: pointer;
   transition: all 0.3s;
   position: relative;
+  /* 最大高度以屏幕为准，内容过长时在卡片内滚动 */
+  max-height: calc(100dvh - 170px);
+  display: flex;
+  flex-direction: column;
 }
 
 .bookmark-card:hover {
@@ -546,6 +560,7 @@ onMounted(async () => {
   font-weight: 500;
   color: var(--primary-color);
   margin-bottom: 8px;
+  flex-shrink: 0;
 }
 
 .bookmark-content {
@@ -553,10 +568,10 @@ onMounted(async () => {
   line-height: 1.6;
   color: var(--text-primary);
   margin: 0 0 8px 0;
-  display: -webkit-box;
-  -webkit-line-clamp: 4;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .bookmark-note {
@@ -567,6 +582,11 @@ onMounted(async () => {
   border-radius: var(--radius-md);
   margin: 0 0 12px 0;
   font-style: italic;
+  /* 想法过长时同样限制在卡片内滚动 */
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .bookmark-footer {
@@ -575,6 +595,7 @@ onMounted(async () => {
   gap: 12px;
   font-size: 12px;
   color: var(--text-hint);
+  flex-shrink: 0;
 }
 
 .page-num {
@@ -777,6 +798,13 @@ onMounted(async () => {
   box-shadow: 0 4px 16px rgba(255, 107, 53, 0.4);
   z-index: 100;
   transition: all 0.2s;
+}
+
+/* 桌面端：无底部导航栏，FAB 回到底部 */
+@media (min-width: 1024px) {
+  .fab {
+    bottom: 24px;
+  }
 }
 .fab:hover {
   transform: scale(1.08);

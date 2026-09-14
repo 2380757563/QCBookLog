@@ -360,7 +360,23 @@ const computeDailyBookCovers = (activities: any[]) => {
   const dayBookMap = new Map<string, Map<number, BookCount>>();
 
   // 统计每天每本书的记录数（只统计与书籍相关的记录）
-  const bookRelatedTypes = ['reading_record', 'reading_started', 'reading_ended', 'bookmark_added', 'bookmark_updated'];
+  // 注意：需覆盖后端聚合出的全部书籍相关类型（书评、书摘增删改、阅读状态变更等），
+  // 否则只有阅读记录/书摘的日期才会显示封面
+  const bookRelatedTypes = [
+    'reading_record',
+    'reading_started',
+    'reading_ended',
+    'reading_state_changed',
+    'reading_status_changed',
+    'bookmark_added',
+    'bookmark_updated',
+    'bookmark_deleted',
+    'review_added',
+    'review_updated',
+    'review_deleted',
+    'book_added',
+    'book_updated'
+  ];
 
   activities.forEach(activity => {
     if (!activity.bookId || !bookRelatedTypes.includes(activity.type)) return;
@@ -1805,6 +1821,38 @@ const getMetadataInfo = (record: any): string => {
       font-size: 14px;
       margin: 0;
     }
+  }
+}
+
+/* 桌面端：左日历右列表两栏布局 */
+@media (min-width: 1024px) {
+  .timeline-page {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    grid-template-areas:
+      "header header"
+      "calendar details";
+    gap: 16px;
+    align-items: start;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .timeline-header {
+    grid-area: header;
+    margin-bottom: 0;
+  }
+
+  .mini-calendar {
+    grid-area: calendar;
+    margin-bottom: 0;
+    position: sticky;
+    top: 16px;
+  }
+
+  .timeline-details {
+    grid-area: details;
+    min-height: 320px;
   }
 }
 </style>

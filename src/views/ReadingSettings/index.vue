@@ -9,11 +9,10 @@
     </div>
 
     <div class="content">
+      <div class="cards-flow">
+      <div class="cards-col">
       <!-- 热力图设置 -->
-      <div class="settings-section">
-        <h2 class="section-title">🔥 热力图滚动设置</h2>
-        <p class="section-desc">自定义热力图的滚轮和触摸划动灵敏度</p>
-        
+      <CollapsibleSection icon="🔥" title="热力图滚动设置" desc="自定义热力图的滚轮和触摸划动灵敏度">
         <!-- 预设选项 -->
         <div class="preset-buttons">
           <button
@@ -132,13 +131,13 @@
             重置为默认值
           </button>
         </div>
-      </div>
+      </CollapsibleSection>
 
       <!-- 年份书签设置 -->
-      <div class="settings-section">
-        <h2 class="section-title">📑 年份书签</h2>
-        <p class="section-desc">配置热力图顶部书签标签的显示范围</p>
+      </div>
 
+      <div class="cards-col">
+      <CollapsibleSection icon="📑" title="年份书签" desc="配置热力图顶部书签标签的显示范围">
         <div class="bookmark-range-options">
           <button
             v-for="opt in bookmarkRangeOptions"
@@ -173,12 +172,10 @@
             <button class="warning-action" @click="resetStartYearToSafe">恢复推荐值</button>
           </div>
         </div>
-      </div>
+      </CollapsibleSection>
 
       <!-- 其他阅读设置 -->
-      <div class="settings-section">
-        <h2 class="section-title">其他设置</h2>
-        
+      <CollapsibleSection icon="⚙️" title="其他设置">
         <div class="setting-item">
           <label class="setting-label">
             <input type="checkbox" v-model="autoSaveReadingProgress" />
@@ -186,7 +183,7 @@
           </label>
           <p class="setting-desc">结束阅读时自动保存阅读记录</p>
         </div>
-        
+
         <div class="setting-item">
           <label class="setting-label">
             <input type="checkbox" v-model="showReadingStatsInList" />
@@ -194,7 +191,7 @@
           </label>
           <p class="setting-desc">在书籍列表中显示总阅读时长和阅读次数</p>
         </div>
-        
+
         <div class="setting-item">
           <label class="setting-label">
             <input type="checkbox" v-model="enableReadingReminder" />
@@ -202,62 +199,12 @@
           </label>
           <p class="setting-desc">每日提醒阅读目标</p>
         </div>
-      </div>
-
-      <!-- 书源设置 -->
-      <div class="settings-section">
-        <h2 class="section-title">📚 书源设置</h2>
-        <p class="section-desc">配置 ISBN 查询等书源 API Key，用于获取图书元数据</p>
-
-        <div v-if="bookSourceLoading" class="book-source-loading">
-          <div class="loading-spinner"></div>
-          <span>正在加载书源配置...</span>
-        </div>
-
-        <div v-else-if="bookSourceError" class="book-source-error">
-          ⚠️ {{ bookSourceError }}
-        </div>
-
-        <div v-else class="book-source-list">
-          <div
-            v-for="source in bookSources"
-            :key="source.sourceKey"
-            class="book-source-item"
-          >
-            <div class="book-source-header">
-              <span class="book-source-name">{{ source.sourceName }}</span>
-              <span v-if="source.isRequired" class="book-source-required">必填</span>
-            </div>
-            <p class="book-source-desc">{{ source.description }}</p>
-            <div class="book-source-input-wrapper">
-              <input
-                :type="source.showKey ? 'text' : 'password'"
-                v-model="source.apiKey"
-                class="book-source-input"
-                :placeholder="`请输入 ${source.sourceName} API Key`"
-              />
-              <button
-                class="book-source-toggle"
-                @click="source.showKey = !source.showKey"
-                :title="source.showKey ? '隐藏' : '显示'"
-              >
-                <svg v-if="source.showKey" viewBox="0 0 24 24" width="18" height="18">
-                  <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" fill="currentColor"/>
-                </svg>
-                <svg v-else viewBox="0 0 24 24" width="18" height="18">
-                  <path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.24 2.24c.57-.23 1.18-.36 1.83-.36zM2 4.27l2.11 2.11C3.56 7.56 2.56 9.18 2 12c1.73 4.39 6 7.5 11 7.5 1.67 0 3.24-.33 4.69-.93l2.89 2.89L21 20.23 3.77 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.31-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.22-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z" fill="currentColor"/>
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          <div class="book-source-hint">
-            <span>💡 配置保存后立即生效，会覆盖环境变量中的同名配置</span>
-          </div>
-        </div>
-      </div>
+      </CollapsibleSection>
 
       <!-- 保存按钮 -->
+      </div>
+      </div>
+
       <div class="action-section">
         <button class="btn-primary" @click="saveSettings">
           保存设置
@@ -277,7 +224,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useHeatmapSettingsStore } from '@/stores/heatmapSettings';
-import { getBookSourceSettings, saveBookSourceSettings } from '@/api/bookSourceSettings';
+import CollapsibleSection from '@/components/Settings/CollapsibleSection.vue';
 
 const router = useRouter();
 const heatmapSettingsStore = useHeatmapSettingsStore();
@@ -286,39 +233,6 @@ const autoSaveReadingProgress = ref(true);
 const showReadingStatsInList = ref(false);
 const enableReadingReminder = ref(false);
 const showSuccessToast = ref(false);
-
-// 书源设置
-interface BookSourceUiItem {
-  id: number;
-  sourceKey: string;
-  sourceName: string;
-  apiKey: string;
-  isRequired: boolean;
-  description: string;
-  sortOrder: number;
-  showKey: boolean;
-}
-
-const bookSources = ref<BookSourceUiItem[]>([]);
-const bookSourceLoading = ref(false);
-const bookSourceError = ref('');
-
-const loadBookSourceSettings = async () => {
-  bookSourceLoading.value = true;
-  bookSourceError.value = '';
-  try {
-    const data = await getBookSourceSettings();
-    bookSources.value = data.map(item => ({
-      ...item,
-      showKey: false
-    }));
-  } catch (error: any) {
-    bookSourceError.value = error.message || '加载书源配置失败';
-    console.error('加载书源配置失败:', error);
-  } finally {
-    bookSourceLoading.value = false;
-  }
-};
 
 // 初始化为null,在loadSettings中根据实际值设置
 const currentPreset = ref<'veryLow' | 'low' | 'medium' | 'high' | null>(null);
@@ -467,19 +381,6 @@ const saveSettings = async () => {
     enableReadingReminder: enableReadingReminder.value
   }));
 
-  // 保存书源设置
-  try {
-    const sources = bookSources.value.map(item => ({
-      sourceKey: item.sourceKey,
-      apiKey: item.apiKey
-    }));
-    await saveBookSourceSettings(sources);
-  } catch (error: any) {
-    console.error('保存书源设置失败:', error);
-    alert(`保存书源设置失败：${error.message || '未知错误'}`);
-    return;
-  }
-
   showSuccessToast.value = true;
   setTimeout(() => {
     showSuccessToast.value = false;
@@ -498,9 +399,6 @@ const loadSettings = async () => {
       console.error('加载阅读设置失败:', e);
     }
   }
-
-  // 加载书源设置
-  await loadBookSourceSettings();
 
   // 加载热力图设置
   const savedHeatmapSettings = localStorage.getItem('heatmapSettings');
@@ -594,29 +492,31 @@ onMounted(() => {
 .content {
   flex: 1;
   padding: 1rem;
+  /* 卡片间距由 CollapsibleSection 组件的 margin-bottom 统一提供 */
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
 }
 
-.settings-section {
-  background-color: #fff;
-  border-radius: 12px;
-  padding: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
+/* 桌面端：设置项两列瀑布流（多列布局）：卡片按列纵向流动，展开时原地撑高、下方内容自然下移 */
+@media (min-width: 1024px) {
+  .content {
+    display: block;
+    max-width: 1000px;
+    margin: 0 auto;
+    width: 100%;
+  }
 
-.section-title {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: #333;
-  margin: 0 0 0.5rem 0;
-}
+  /* 静态两列：卡片固定归属列，展开时向下推挤同列卡片，不跨列移动 */
+  .cards-flow {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
 
-.section-desc {
-  font-size: 0.9rem;
-  color: #666;
-  margin: 0 0 1rem 0;
+  .cards-col {
+    flex: 1;
+    min-width: 0;
+  }
 }
 
 .option-cards {
@@ -737,7 +637,7 @@ onMounted(() => {
 }
 
 .setting-item {
-  padding: 1rem 0;
+  padding: 0.5rem 0;
   border-bottom: 1px solid #e0e0e0;
 }
 
@@ -748,7 +648,7 @@ onMounted(() => {
 .preset-buttons {
   display: flex;
   gap: 0.75rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .preset-btn {
@@ -928,6 +828,7 @@ onMounted(() => {
   color: #333;
   background-color: #fff;
   transition: border-color 0.2s ease;
+  appearance: textfield;
   -moz-appearance: textfield;
 }
 
@@ -1037,127 +938,6 @@ onMounted(() => {
 @media (max-width: 640px) {
   .option-cards {
     grid-template-columns: 1fr;
-  }
-}
-
-/* 书源设置 */
-.book-source-loading,
-.book-source-error {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 1.5rem 0;
-  color: #666;
-  font-size: 0.9rem;
-}
-
-.book-source-error {
-  color: #ff6b35;
-}
-
-.book-source-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.book-source-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 1rem;
-  background-color: #f9f9f9;
-  border-radius: 8px;
-  border: 1px solid #f0f0f0;
-}
-
-.book-source-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.book-source-name {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #333;
-}
-
-.book-source-required {
-  font-size: 0.75rem;
-  color: #ff6b35;
-  background-color: #fff3e0;
-  padding: 0.15rem 0.5rem;
-  border-radius: 4px;
-}
-
-.book-source-desc {
-  font-size: 0.85rem;
-  color: #999;
-  margin: 0;
-}
-
-.book-source-input-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.book-source-input {
-  flex: 1;
-  padding: 0.75rem 1rem;
-  border: 2px solid #e0e0e0;
-  border-radius: 8px;
-  font-size: 0.95rem;
-  color: #333;
-  background-color: #fff;
-  transition: border-color 0.2s ease;
-}
-
-.book-source-input:focus {
-  outline: none;
-  border-color: #ff6b35;
-}
-
-.book-source-toggle {
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px solid #e0e0e0;
-  border-radius: 8px;
-  background-color: #fff;
-  color: #666;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  flex-shrink: 0;
-}
-
-.book-source-toggle:hover {
-  border-color: #ff6b35;
-  color: #ff6b35;
-}
-
-.book-source-hint {
-  font-size: 0.85rem;
-  color: #999;
-  padding: 0.5rem 0;
-}
-
-.loading-spinner {
-  width: 18px;
-  height: 18px;
-  border: 2px solid #e0e0e0;
-  border-top-color: #ff6b35;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
   }
 }
 </style>

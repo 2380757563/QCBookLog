@@ -9,10 +9,9 @@
     </div>
 
     <div class="content">
-      <div class="settings-section">
-        <h2 class="section-title">回顾卡片背景</h2>
-        <p class="section-desc">自定义书签回顾页面的卡片背景样式</p>
-        
+      <div class="cards-flow">
+      <div class="cards-col">
+      <CollapsibleSection icon="🎨" title="回顾卡片背景" desc="自定义书签回顾页面的卡片背景样式">
         <div class="option-cards">
           <div
             :class="['option-card', { active: backgroundMode === 'color' }]"
@@ -79,12 +78,12 @@
             <div v-if="backgroundMode === 'custom'" class="check-icon">✓</div>
           </div>
         </div>
+      </CollapsibleSection>
+
       </div>
 
-      <div v-if="backgroundMode === 'color'" class="settings-section">
-        <h2 class="section-title">选择颜色</h2>
-        <p class="section-desc">选择一个预设的渐变色背景</p>
-        
+      <div class="cards-col">
+      <CollapsibleSection v-if="backgroundMode === 'color'" icon="🌈" title="选择颜色" desc="选择一个预设的渐变色背景">
         <div class="color-grid">
           <div
             v-for="(gradient, index) in gradients"
@@ -96,12 +95,9 @@
             <div v-if="selectedColorIndex === index" class="color-check">✓</div>
           </div>
         </div>
-      </div>
+      </CollapsibleSection>
 
-      <div v-if="backgroundMode === 'cover'" class="settings-section">
-        <h2 class="section-title">封面透明度</h2>
-        <p class="section-desc">调整书籍封面背景的透明度</p>
-        
+      <CollapsibleSection v-if="backgroundMode === 'cover'" icon="📚" title="封面透明度" desc="调整书籍封面背景的透明度">
         <div class="setting-item">
           <div class="setting-header">
             <label class="setting-label">透明度</label>
@@ -139,12 +135,9 @@
             <span>模糊</span>
           </div>
         </div>
-      </div>
+      </CollapsibleSection>
 
-      <div v-if="backgroundMode === 'custom'" class="settings-section">
-        <h2 class="section-title">自定义背景</h2>
-        <p class="section-desc">上传图片作为卡片背景（最多6张）</p>
-        
+      <CollapsibleSection v-if="backgroundMode === 'custom'" icon="🖼️" title="自定义背景" desc="上传图片作为卡片背景（最多6张）">
         <div class="image-upload-container">
           <div class="upload-area" @click="triggerUpload" @dragover.prevent @drop.prevent="handleDrop">
             <input
@@ -224,6 +217,9 @@
             <span>模糊</span>
           </div>
         </div>
+      </CollapsibleSection>
+
+      </div>
       </div>
 
       <div class="preview-section">
@@ -263,6 +259,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
+import CollapsibleSection from '@/components/Settings/CollapsibleSection.vue';
 import userImagesService from '../../api/userImages';
 import userSettingsService from '../../api/userSettings';
 
@@ -567,25 +564,23 @@ onMounted(() => {
   margin: 0 auto;
 }
 
-.settings-section {
-  background-color: var(--bg-secondary, #fff);
-  border-radius: 12px;
-  padding: 20px;
-  margin-bottom: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-}
+/* 桌面端：设置项两列瀑布流（多列布局）：卡片按列纵向流动，展开时原地撑高、下方内容自然下移 */
+@media (min-width: 1024px) {
+  .content {
+    max-width: 1000px;
+  }
 
-.section-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary, #333);
-  margin: 0 0 8px 0;
-}
+  /* 静态两列：卡片固定归属列，展开时向下推挤同列卡片，不跨列移动 */
+  .cards-flow {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
 
-.section-desc {
-  font-size: 14px;
-  color: var(--text-secondary, #666);
-  margin: 0 0 16px 0;
+  .cards-col {
+    flex: 1;
+    min-width: 0;
+  }
 }
 
 .option-cards {
@@ -860,10 +855,12 @@ onMounted(() => {
   border-radius: 3px;
   background: var(--bg-hover, #e0e0e0);
   outline: none;
+  appearance: none;
   -webkit-appearance: none;
 }
 
 .slider::-webkit-slider-thumb {
+  appearance: none;
   -webkit-appearance: none;
   width: 20px;
   height: 20px;

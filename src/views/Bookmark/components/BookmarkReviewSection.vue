@@ -364,7 +364,9 @@ loadBookmarkSettings();
 /* ========== 书摘卡片样式（沿用原回顾卡片） ========== */
 .review-card {
   position: relative;
-  min-height: 360px;
+  /* 高度贴合屏幕：上限为视口高度减去页面头部/tab 占位，过长内容在卡片内滚动 */
+  min-height: min(360px, calc(100dvh - 220px));
+  max-height: calc(100dvh - 220px);
   border-radius: 20px;
   padding: 36px 28px 24px;
   color: #fff;
@@ -383,9 +385,12 @@ loadBookmarkSettings();
   position: relative;
   z-index: 1;
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
+  min-height: 0;
+  /* grid + safe center：内容短时垂直居中，过长时顶部对齐并可滚动 */
+  display: grid;
+  align-content: safe center;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .review-text {
   font-size: 18px;

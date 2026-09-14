@@ -129,6 +129,15 @@ defineEmits<{
   flex-wrap: wrap;
 }
 
+/* 桌面端侧边栏适配：顶/底栏随侧栏偏移 */
+@media (min-width: 1024px) {
+  .organize-top-bar,
+  .organize-bottom-bar {
+    left: var(--sidebar-width);
+    transition: left 0.2s ease;
+  }
+}
+
 .organize-top-left {
   display: flex;
   gap: 8px;

@@ -219,6 +219,24 @@ input::placeholder, textarea::placeholder {
   }
 }
 
+/* ============================================ */
+/* 桌面端侧边栏布局变量                           */
+/* ============================================ */
+:root {
+  --sidebar-width: 0px;             /* 移动端默认无侧栏 */
+  --sidebar-width-expanded: 200px;  /* 桌面展开态 */
+  --sidebar-width-collapsed: 64px;  /* 桌面收起态 */
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --sidebar-width: var(--sidebar-width-expanded);
+  }
+  body.is-collapsed {
+    --sidebar-width: var(--sidebar-width-collapsed);
+  }
+}
+
 .flex-center {
   display: flex;
   align-items: center;
