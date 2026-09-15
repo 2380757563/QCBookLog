@@ -143,14 +143,6 @@ const routes: Array<RouteRecordRaw> = [
     }
   },
   {
-    path: '/git-sync-settings',
-    name: 'GitSyncSettings',
-    component: () => import('@/views/GitSyncSettings/index.vue'),
-    meta: {
-      title: 'GitHub 同步'
-    }
-  },
-  {
     path: '/search',
     name: 'Search',
     component: () => import('@/views/Search/index.vue'),
@@ -161,6 +153,8 @@ const routes: Array<RouteRecordRaw> = [
   { path: '/book/isbn-search', name: 'ISBNBookSearch', component: () => import('@/views/Book/ISBNSearch.vue'), meta: { title: 'ISBN搜索' } },
   { path: '/book/isbn-scanner', name: 'ISBNScanner', component: () => import('@/views/Book/ISBNScanner.vue'), meta: { title: 'ISBN扫描' } },
   { path: '/book/batch-scanner', name: 'BatchScanner', component: () => import('@/views/Book/BatchScanner.vue'), meta: { title: '批量扫描' } },
+  { path: '/book/doulist-import', name: 'DoulistImport', component: () => import('@/views/Book/DoulistImport.vue'), meta: { title: '豆瓣豆列导入' } },
+  { path: '/book/doulist-books', name: 'DoulistBooks', component: () => import('@/views/Book/DoulistBooks.vue'), meta: { title: '书单' } },
   // 书籍相关路由
   {
     path: '/book/detail/:id',

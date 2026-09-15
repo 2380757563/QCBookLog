@@ -67,6 +67,16 @@
           <div class="function-card__icon">⚙️</div>
           <div class="function-card__label">阅读设置</div>
         </router-link>
+        <router-link to="/book/doulist-import" class="function-card">
+          <div class="function-card__icon">📋</div>
+          <div class="function-card__label">豆列导入</div>
+          <div class="function-card__desc">从豆瓣公开豆列导入书单</div>
+        </router-link>
+        <router-link to="/book/doulist-books" class="function-card">
+          <div class="function-card__icon">📖</div>
+          <div class="function-card__label">书单</div>
+          <div class="function-card__desc">查看与手动维护书单</div>
+        </router-link>
         <router-link to="/library-settings" class="function-card">
           <div class="function-card__icon">📚</div>
           <div class="function-card__label">书库设置</div>

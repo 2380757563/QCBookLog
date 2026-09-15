@@ -1513,7 +1513,7 @@
 }
 
 /* 分组列表 */
-.book-container .groups-header, .book-container .wishlist-header {
+.book-container .groups-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -1521,7 +1521,7 @@
 
 }
 
-.book-container .groups-header h3, .book-container .wishlist-header h3 {
+.book-container .groups-header h3 {
   font-size: 16px;
   font-weight: 500;
   color: var(--text-primary);
@@ -1589,37 +1589,6 @@
 .book-container .group-actions {
   display: flex;
   gap: 8px;
-
-}
-
-/* 书单 */
-.book-container .wishlist {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-
-}
-
-.book-container .wishlist-item {
-  display: flex;
-  align-items: center;
-  padding: 12px;
-  background-color: var(--bg-card);
-  border-radius: var(--radius-md);
-  gap: 12px;
-
-}
-
-.book-container .wishlist-title {
-  flex: 1;
-  font-size: 14px;
-  color: var(--text-primary);
-
-}
-
-.book-container .wishlist-author {
-  font-size: 12px;
-  color: var(--text-hint);
 
 }
 

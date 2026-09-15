@@ -887,6 +887,102 @@ class DatabaseConnectionManager {
       `);
       console.log('  ✅ qc_book_source_settings 表创建成功');
 
+      // 创建豆列书单表（独立于 qc_bookdata，主键为豆瓣 subject ID）
+      console.log('📝 创建豆列书单表 (qc_doulist_books / qc_doulist_imports / qc_doulist_import_items)...');
+      this.qcBooklogDb.exec(`
+        CREATE TABLE IF NOT EXISTS qc_doulist_books (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          douban_id TEXT NOT NULL UNIQUE,
+          title TEXT,
+          subtitle TEXT,
+          author TEXT,
+          translator TEXT,
+          publisher TEXT,
+          publish_year TEXT,
+          isbn13 TEXT,
+          isbn10 TEXT,
+          pages INTEGER,
+          price REAL,
+          binding TEXT,
+          producer TEXT,
+          series TEXT,
+          rating REAL,
+          rating_count INTEGER,
+          tags TEXT,
+          summary TEXT,
+          cover_url TEXT,
+          douban_url TEXT,
+          enrich_status TEXT DEFAULT 'none',
+          enriched_at DATETIME,
+          shelf_status TEXT DEFAULT 'pending',
+          shelved_at DATETIME,
+          read_status TEXT DEFAULT 'unread',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+      this.qcBooklogDb.exec(`
+        CREATE INDEX IF NOT EXISTS idx_doulist_books_enrich ON qc_doulist_books(enrich_status)
+      `);
+      this.qcBooklogDb.exec(`
+        CREATE TABLE IF NOT EXISTS qc_doulist_imports (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          doulist_id TEXT NOT NULL,
+          doulist_title TEXT,
+          owner TEXT,
+          owner_url TEXT,
+          total_items INTEGER DEFAULT 0,
+          total_pages INTEGER DEFAULT 0,
+          status TEXT DEFAULT 'running',
+          category TEXT DEFAULT 'buy',
+          last_start INTEGER DEFAULT 0,
+          fetched_items INTEGER DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(doulist_id)
+        )
+      `);
+      this.qcBooklogDb.exec(`
+        CREATE INDEX IF NOT EXISTS idx_doulist_imports_status ON qc_doulist_imports(status)
+      `);
+      this.qcBooklogDb.exec(`
+        CREATE TABLE IF NOT EXISTS qc_doulist_import_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          doulist_id TEXT NOT NULL,
+          douban_id TEXT NOT NULL,
+          added_at TEXT,
+          remark TEXT,
+          imported_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(doulist_id, douban_id)
+        )
+      `);
+      this.qcBooklogDb.exec(`
+        CREATE INDEX IF NOT EXISTS idx_doulist_items_doulist ON qc_doulist_import_items(doulist_id)
+      `);
+      this.qcBooklogDb.exec(`
+        CREATE INDEX IF NOT EXISTS idx_doulist_items_douban ON qc_doulist_import_items(douban_id)
+      `);
+      // 旧库列迁移：加入书架状态 + 书单分类（买书/读书）
+      try {
+        const bookCols = this.qcBooklogDb.prepare('PRAGMA table_info(qc_doulist_books)').all().map((c) => c.name);
+        if (!bookCols.includes('shelf_status')) {
+          this.qcBooklogDb.exec("ALTER TABLE qc_doulist_books ADD COLUMN shelf_status TEXT DEFAULT 'pending'");
+        }
+        if (!bookCols.includes('shelved_at')) {
+          this.qcBooklogDb.exec('ALTER TABLE qc_doulist_books ADD COLUMN shelved_at DATETIME');
+        }
+        const importCols = this.qcBooklogDb.prepare('PRAGMA table_info(qc_doulist_imports)').all().map((c) => c.name);
+        if (!importCols.includes('category')) {
+          this.qcBooklogDb.exec("ALTER TABLE qc_doulist_imports ADD COLUMN category TEXT DEFAULT 'buy'");
+        }
+        if (!bookCols.includes('read_status')) {
+          this.qcBooklogDb.exec("ALTER TABLE qc_doulist_books ADD COLUMN read_status TEXT DEFAULT 'unread'");
+        }
+      } catch (e) {
+        console.warn('⚠️ 豆列表旧库列迁移失败:', e.message);
+      }
+      console.log('  ✅ 豆列书单表创建成功');
+
       // 初始化默认书源配置
       this.initDefaultBookSourceSettings();
 

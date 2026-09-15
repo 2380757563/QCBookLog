@@ -274,11 +274,7 @@
 
       <!-- 书单页面 -->
       <div v-if="activeTab === 'wishlist'" class="tab-content">
-        <div class="wishlist-header">
-          <h3>待购买书单</h3>
-          <button class="btn-text" @click="showAddWishlist = true">+ 添加</button>
-        </div>
-        <WishlistPanel :wishlist="wishlist" @remove="removeFromWishlist" />
+        <DoulistBooksPanel />
       </div>
     </div>
 
@@ -430,7 +426,6 @@ import { useBookViewSettings } from '@/composables/useBookViewSettings';
 
 import { bookService } from '@/api/book';
 import type { Book, BookGroup } from '@/api/book/types';
-import type { WishlistItem } from '@/api/wishlistService';
 import { BookStatus } from '@/stores/bookBorder/types';
 import {
   getBindingType,
@@ -452,7 +447,6 @@ import { useBookPagination } from './composables/useBookPagination';
 import { useBookGroups } from './composables/useBookGroups';
 import { useBookList, type SortBy } from './composables/useBookList';
 import { useOrganizeMode } from './composables/useOrganizeMode';
-import { useWishlist } from './composables/useWishlist';
 import { useBookScroll } from './composables/useBookScroll';
 import { useBookLayout } from './composables/useBookLayout';
 import { useBookImage } from './composables/useBookImage';
@@ -466,7 +460,7 @@ import GroupSelectorDialog from './components/GroupSelectorDialog.vue';
 import GroupEditDialog from './components/GroupEditDialog.vue';
 import GroupManageDialog from './components/GroupManageDialog.vue';
 import DeleteConfirmDialog from './components/DeleteConfirmDialog.vue';
-import WishlistPanel from './components/WishlistPanel.vue';
+import DoulistBooksPanel from './components/DoulistBooksPanel.vue';
 
 import './index.css';
 
@@ -700,7 +694,6 @@ const onDeleteGroup = async (groupId: string) => {
 };
 
 // ============ 书单 ============
-const { wishlist, showAddWishlist, loadWishlist, addToWishlist, removeFromWishlist } = useWishlist();
 
 // ============ 滚动监听（无限滚动回调接 loadMoreBooks）============
 useBookScroll({
@@ -833,12 +826,6 @@ async function loadData() {
       } catch (error) {
         console.error('加载书籍失败:', error);
       }
-    }
-
-    try {
-      await loadWishlist();
-    } catch (error) {
-      console.error('加载愿望清单失败:', error);
     }
   } catch (error) {
     console.error('加载数据失败:', error);

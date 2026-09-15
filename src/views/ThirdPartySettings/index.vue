@@ -181,6 +181,125 @@
         </transition>
       </div>
 
+      <!-- 豆瓣豆列设置 书签 -->
+      <div class="bookmark-card" :class="{ 'bookmark-card--expanded': doulistExpanded }">
+        <div class="bookmark-row" @click="toggleDoulist">
+          <div class="bookmark-icon">📋</div>
+          <div class="bookmark-info">
+            <span class="bookmark-title">豆瓣豆列设置</span>
+            <span class="bookmark-desc">豆列书单导入的补全模式与抓取速度</span>
+          </div>
+          <svg class="bookmark-arrow" :class="{ 'bookmark-arrow--expanded': doulistExpanded }" viewBox="0 0 24 24">
+            <path d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z"/>
+          </svg>
+        </div>
+
+        <transition name="expand">
+          <div v-show="doulistExpanded" class="bookmark-content">
+            <div class="settings-form">
+              <!-- 补全模式 -->
+              <div class="book-source-item">
+                <div class="book-source-header">
+                  <span class="book-source-name">元数据补全模式</span>
+                  <span class="book-source-tag">默认不补全</span>
+                </div>
+                <p class="book-source-desc">控制导入豆列时是否调用外部数据源补全 ISBN、页数、定价等字段</p>
+                <div class="segmented-control">
+                  <button
+                    v-for="opt in enrichModeOptions"
+                    :key="opt.value"
+                    :class="['segmented-btn', { active: doulistSettings.doulistEnrichMode === opt.value }]"
+                    @click="doulistSettings.doulistEnrichMode = opt.value"
+                  >
+                    {{ opt.label }}
+                  </button>
+                </div>
+                <p class="setting-hint">
+                  {{ doulistSettings.doulistEnrichMode === 'none'
+                    ? '导入最快，豆列页抓不到 ISBN / 页数 / 定价，这些字段会留空。'
+                    : '每本约 1 次请求，按 5 秒间隔 100 本约 8 分钟；建议只对勾选的部分书开启。' }}
+                </p>
+              </div>
+
+              <!-- 补全来源 -->
+              <div class="book-source-item">
+                <div class="book-source-header">
+                  <span class="book-source-name">补全数据来源</span>
+                </div>
+                <p class="book-source-desc">仅在上方补全模式不为「不补全」时生效</p>
+                <div class="segmented-control">
+                  <button
+                    v-for="opt in enrichSourceOptions"
+                    :key="opt.value"
+                    :class="['segmented-btn', { active: doulistSettings.doulistEnrichSource === opt.value }]"
+                    :disabled="doulistSettings.doulistEnrichMode === 'none'"
+                    @click="doulistSettings.doulistEnrichSource = opt.value"
+                  >
+                    {{ opt.label }}
+                  </button>
+                </div>
+                <p class="setting-hint">{{ enrichSourceHint }}</p>
+              </div>
+
+              <!-- 抓取参数 -->
+              <div class="book-source-item">
+                <div class="book-source-header">
+                  <span class="book-source-name">抓取参数</span>
+                </div>
+                <p class="book-source-desc">控制抓取节奏，间隔越小越快但越容易被豆瓣限制访问</p>
+                <div class="form-row">
+                  <div class="form-field">
+                    <label class="field-label">请求间隔（秒）</label>
+                    <input
+                      type="number"
+                      v-model.number="doulistSettings.doulistDelay"
+                      min="2"
+                      class="form-input"
+                    />
+                    <span class="setting-hint">最低 2 秒</span>
+                  </div>
+                  <div class="form-field">
+                    <label class="field-label">单次最多抓取页数</label>
+                    <input
+                      type="number"
+                      v-model.number="doulistSettings.doulistMaxPages"
+                      min="0"
+                      class="form-input"
+                    />
+                    <span class="setting-hint">0 表示全部，每页 25 本</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 列表显示 -->
+              <div class="book-source-item">
+                <div class="book-source-header">
+                  <span class="book-source-name">列表显示</span>
+                </div>
+                <div class="form-row form-row--toggle">
+                  <div class="toggle-wrapper">
+                    <span class="toggle-label">隐藏已划去（已加入书架）的书</span>
+                    <label class="switch">
+                      <input type="checkbox" v-model="doulistSettings.doulistHideShelved" :true-value="1" :false-value="0" />
+                      <span class="slider"></span>
+                    </label>
+                  </div>
+                </div>
+                <p class="setting-hint">开启后，已加入书架或手动划去的书在书单列表中不再显示。</p>
+              </div>
+
+              <!-- 保存按钮 -->
+              <button class="save-btn" @click="saveDoulistSettings" :disabled="isDoulistSaving">
+                <svg v-if="!isDoulistSaving" viewBox="0 0 24 24">
+                  <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
+                </svg>
+                <span>{{ isDoulistSaving ? '保存中...' : '保存设置' }}</span>
+              </button>
+            </div>
+          </div>
+        </transition>
+      </div>
+
       <!-- GitHub 同步 书签 -->
       <div class="bookmark-card" :class="{ 'bookmark-card--expanded': gitSyncExpanded }">
         <div class="bookmark-row" @click="toggleGitSync">
@@ -216,6 +335,7 @@
             <li>内网地址格式：IP地址（如 192.168.1.100），不要添加 http/https 前缀</li>
             <li>外网地址支持域名或IP，可使用HTTPS开关切换协议</li>
             <li>书源API密钥用于查询书籍元数据，填写后搜索结果更丰富</li>
+            <li>豆列设置控制「书单」页从豆瓣豆列导入时的补全模式与抓取速度</li>
           </ul>
         </div>
       </div>
@@ -244,6 +364,7 @@ import {
   saveBookSourceSettings as saveBookSourceSettingsApi,
   type BookSourceSetting
 } from '@/api/bookSourceSettings';
+import { doulistApi, type DoulistSettings } from '@/api/doulistService';
 
 const router = useRouter();
 const talebookStore = useTalebookStore();
@@ -398,6 +519,69 @@ const toggleBookSource = () => {
   bookSourceExpanded.value = !bookSourceExpanded.value;
 };
 
+// ===== 豆瓣豆列设置 相关 =====
+const doulistExpanded = ref(false);
+const isDoulistSaving = ref(false);
+const doulistSettings = reactive({
+  doulistEnrichMode: 'none' as 'none' | 'smart' | 'full',
+  doulistEnrichSource: 'dbr' as 'dbr' | 'doubanapi' | 'booksource',
+  doulistDelay: 5,
+  doulistMaxPages: 0,
+  doulistHideShelved: 0
+});
+
+const enrichModeOptions: Array<{ value: DoulistSettings['doulistEnrichMode']; label: string }> = [
+  { value: 'none', label: '不补全' },
+  { value: 'smart', label: '智能补全' },
+  { value: 'full', label: '完整补全' }
+];
+
+const enrichSourceOptions: Array<{ value: DoulistSettings['doulistEnrichSource']; label: string }> = [
+  { value: 'dbr', label: '内置 DBR' },
+  { value: 'doubanapi', label: '豆瓣 v2' },
+  { value: 'booksource', label: '其他书源' }
+];
+
+const enrichSourceHint = computed(() =>
+  ({
+    dbr: '内置 DBR 直接解析豆瓣详情页，无需配置 API Key，开箱即用。',
+    doubanapi: '豆瓣 v2 API 更快，但需要先在书源密钥中配置 apikey，失败时自动回落内置 DBR。',
+    booksource: '需先取得 ISBN，再调用已配置密钥的书源做交叉校验，豆瓣字段优先。'
+  })[doulistSettings.doulistEnrichSource] || ''
+);
+
+const toggleDoulist = () => {
+  doulistExpanded.value = !doulistExpanded.value;
+};
+
+const loadDoulistSettings = async () => {
+  try {
+    const res = await doulistApi.getSettings();
+    if (res?.data) {
+      doulistSettings.doulistEnrichMode = res.data.doulistEnrichMode;
+      doulistSettings.doulistEnrichSource = res.data.doulistEnrichSource;
+      doulistSettings.doulistDelay = res.data.doulistDelay;
+      doulistSettings.doulistMaxPages = res.data.doulistMaxPages;
+      doulistSettings.doulistHideShelved = res.data.doulistHideShelved || 0;
+    }
+  } catch (error) {
+    console.error('加载豆列设置失败:', error);
+  }
+};
+
+const saveDoulistSettings = async () => {
+  isDoulistSaving.value = true;
+  try {
+    await doulistApi.saveSettings({ ...doulistSettings });
+    showSuccessToast('豆列设置保存成功');
+  } catch (error) {
+    console.error('保存豆列设置失败:', error);
+    showErrorToast('保存失败，请重试');
+  } finally {
+    isDoulistSaving.value = false;
+  }
+};
+
 // ===== GitHub 同步 相关 =====
 const gitSyncExpanded = ref(false);
 
@@ -491,6 +675,8 @@ onMounted(async () => {
 
   // 加载书源配置
   await loadBookSourceSettings();
+  // 加载豆列设置
+  await loadDoulistSettings();
 });
 </script>
 
@@ -862,6 +1048,49 @@ input:checked + .slider:before {
   color: var(--text-hint);
   margin: 0 0 10px 0;
   line-height: 1.5;
+}
+
+/* ===== 豆列设置：分段控件 ===== */
+.segmented-control {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background-color: var(--bg-tertiary, #f1f5f9);
+  border-radius: 8px;
+  margin-top: 10px;
+}
+
+.segmented-btn {
+  flex: 1;
+  padding: 8px 4px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary, #64748b);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.segmented-btn.active {
+  background-color: var(--bg-primary, #fff);
+  color: var(--primary-color);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.segmented-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.setting-hint {
+  display: block;
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--text-hint);
+  line-height: 1.6;
 }
 
 /* ===== 保存按钮 ===== */
