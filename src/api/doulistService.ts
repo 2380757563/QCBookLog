@@ -91,8 +91,14 @@ export interface DoulistBook {
   /** 所属书单信息（书籍必须属于一个书单） */
   doulist_id: string | null;
   doulist_title: string | null;
-  /** 书单分类：buy 买书 / read 读书 */
-  category: 'buy' | 'read' | null;
+  /** 主书单双分类标志：1 = 勾选 */
+  list_is_buy: number | null;
+  list_is_read: number | null;
+  /** 书库状态（实时取自书库）：1 = 已入库 */
+  on_shelf: number | null;
+  library_book_id: number | null;
+  /** 书库阅读状态（中文）：未读 / 在读 / 已读；未入库时为 null */
+  library_read_status: string | null;
   /** 豆列中的加入时间（默认排序依据） */
   list_added_at: string | null;
   created_at: string;
@@ -106,8 +112,9 @@ export interface DoulistImportRecord {
   owner: string | null;
   owner_url: string | null;
   status: string;
-  /** 书单分类：buy 买书 / read 读书 */
-  category: 'buy' | 'read' | null;
+  /** 书单双分类标志：1 = 勾选（至少一个为 1） */
+  is_buy: number | null;
+  is_read: number | null;
   fetched_items: number;
   item_count: number;
   /** 断点续跑：上次抓到的下一页偏移，0 表示无进行中的抓取 */
@@ -174,6 +181,8 @@ export const doulistApi = {
     page?: number;
     pageSize?: number;
     keyword?: string;
+    /** 排序：createTime(默认加入时间倒序) / rating / title / author */
+    sortBy?: string;
   }): Promise<{
     ok: boolean;
     total: number;
@@ -189,9 +198,20 @@ export const doulistApi = {
     if (params?.page) query.set('page', String(params.page));
     if (params?.pageSize) query.set('pageSize', String(params.pageSize));
     if (params?.keyword) query.set('keyword', params.keyword);
+    if (params?.sortBy) query.set('sortBy', params.sortBy);
     const qs = query.toString();
     return apiClient.get(`/doulist/books${qs ? `?${qs}` : ''}`);
   },
+
+  /**
+   * 创建空书单（不添加任何书籍）
+   */
+  createDoulist: (data: {
+    doulistTitle: string;
+    isBuy?: number;
+    isRead?: number;
+  }): Promise<{ ok: boolean; doulistId: string }> =>
+    apiClient.post('/doulist/imports', data),
 
   /**
    * 手动添加一本书到书单（不来自豆列抓取）
@@ -203,10 +223,12 @@ export const doulistApi = {
     author?: string;
     publisher?: string;
     publishYear?: string;
+    isbn13?: string;
     doubanRef?: string;
     doulistId?: string;
     doulistTitle?: string;
-    category?: 'buy' | 'read';
+    isBuy?: number;
+    isRead?: number;
   }): Promise<{ ok: boolean; created: boolean; doubanId: string; doulistId: string }> =>
     apiClient.post('/doulist/books', book),
 
@@ -218,9 +240,9 @@ export const doulistApi = {
 
   /**
    * 检查某本豆列书在本地书库是否已存在（按 ISBN）
-   * 用于「加入书架」按钮置灰判断
+   * 用于「加入书架」按钮置灰判断；已入库时附书库阅读状态（中文）
    */
-  shelfCheck: (doubanId: string): Promise<{ ok: boolean; exists: boolean; bookId?: number }> =>
+  shelfCheck: (doubanId: string): Promise<{ ok: boolean; exists: boolean; bookId?: number; readStatus?: string | null }> =>
     apiClient.get(`/doulist/books/${doubanId}/shelf-check`),
 
   /**
@@ -230,10 +252,16 @@ export const doulistApi = {
     apiClient.post(`/doulist/books/${doubanId}/read-status`, { status }),
 
   /**
-   * 设置书单分类（buy 买书 / read 读书）
+   * 入库衔接点：加入书架成功后，把书单阅读状态一次性写入书库（此后书库为权威）
    */
-  setDoulistCategory: (doulistId: string, category: 'buy' | 'read'): Promise<{ ok: boolean }> =>
-    apiClient.put(`/doulist/imports/${doulistId}`, { category }),
+  applyReadStatus: (doubanId: string): Promise<{ ok: boolean; bookId?: number; readStatus?: string }> =>
+    apiClient.post(`/doulist/books/${doubanId}/apply-read-status`),
+
+  /**
+   * 设置书单双分类标志（isBuy 购书清单 / isRead 阅读清单），至少勾选一个
+   */
+  setDoulistCategories: (doulistId: string, isBuy: boolean, isRead: boolean): Promise<{ ok: boolean }> =>
+    apiClient.put(`/doulist/imports/${doulistId}`, { isBuy, isRead }),
 
   /**
    * 导入记录

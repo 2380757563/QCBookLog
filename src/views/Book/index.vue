@@ -6,6 +6,9 @@
       :group-thumbnail-max="groupThumbnailMax"
       :grid-columns="gridColumns"
       :manual-column-count="manualColumnCount"
+      :search-mode="activeTab === 'wishlist' ? 'doulist' : 'library'"
+      :search-value="doulistKeyword"
+      @update:search-value="doulistKeyword = $event"
       @go-to-search="goToSearch"
       @go-to-isbn="goToISBN"
       @go-to-batch-scanner="goToBatchScanner"
@@ -44,9 +47,10 @@
       </div>
     </div>
 
-    <!-- 筛选栏 -->
+    <!-- 筛选栏：书库标签下作用于书库；书单标签下切换为书单排序（只作用于书单页） -->
     <div class="filter-bar">
       <button
+        v-if="activeTab === 'library'"
         :class="['filter-btn', { 'filter-btn--active': hasActiveFilters }]"
         @click="toggleAdvancedFilter"
       >
@@ -56,13 +60,14 @@
         筛选
         <span v-if="hasActiveFilters" class="filter-badge">{{ filteredBooks.length }}</span>
       </button>
-      <select v-model="sortBy" class="filter-select">
-        <option value="updateTime">更新时间</option>
-        <option value="createTime">添加时间</option>
-        <option value="title">书名</option>
-        <option value="author">作者</option>
-        <option value="rating">评分</option>
-      </select>
+      <QcSelect
+        v-if="activeTab === 'library'"
+        v-model="sortBy"
+        size="sm"
+        class="filter-select"
+        :options="librarySortOptions"
+      />
+      <QcSelect v-else v-model="doulistSortBy" size="sm" class="filter-select" :options="doulistSortOptions" />
     </div>
 
     <!-- 整理模式遮罩层 -->
@@ -272,9 +277,9 @@
         </div>
       </div>
 
-      <!-- 书单页面 -->
+      <!-- 书单页面（keyword/sortBy 与顶部搜索框、筛选栏联动，只作用于书单页） -->
       <div v-if="activeTab === 'wishlist'" class="tab-content">
-        <DoulistBooksPanel />
+        <DoulistBooksPanel v-model:keyword="doulistKeyword" :sort-by="doulistSortBy" />
       </div>
     </div>
 
@@ -454,6 +459,8 @@ import { useBookImage } from './composables/useBookImage';
 import { getBookStatus, getBookBorderStyle } from './utils/bookDisplay';
 
 import BookToolbar from './components/BookToolbar.vue';
+import QcSelect from '@/components/QcSelect.vue';
+import type { QcSelectOption } from '@/components/QcSelect.vue';
 import AdvancedFilterDialog from './components/AdvancedFilterDialog.vue';
 import OrganizeModeBar from './components/OrganizeModeBar.vue';
 import GroupSelectorDialog from './components/GroupSelectorDialog.vue';
@@ -509,6 +516,14 @@ const {
 
 const filterStatus = ref('');
 const sortBy = ref<SortBy>('createTime');
+
+const librarySortOptions: QcSelectOption[] = [
+  { value: 'updateTime', label: '更新时间' },
+  { value: 'createTime', label: '添加时间' },
+  { value: 'title', label: '书名' },
+  { value: 'author', label: '作者' },
+  { value: 'rating', label: '评分' }
+];
 const showAdvancedFilter = ref(false);
 const resetFilters = () => clearFilterConditions();
 
@@ -882,6 +897,17 @@ const tabs = computed(() => [
   { key: 'wishlist', label: '书单' }
 ]);
 const activeTab = ref('library');
+
+// 书单标签页专用：顶部搜索框关键字与排序（只作用于书单页，不影响书库）
+const doulistKeyword = ref('');
+const doulistSortBy = ref('createTime');
+
+const doulistSortOptions: QcSelectOption[] = [
+  { value: 'createTime', label: '添加时间' },
+  { value: 'rating', label: '评分' },
+  { value: 'title', label: '书名' },
+  { value: 'author', label: '作者' }
+];
 
 // 暴露工具函数给模板（保持兼容）
 const __keepRefs = { showBackToTop, isGroupsCollapsed, isBooksCollapsed, toggleGroupsCollapse, toggleBooksCollapse };

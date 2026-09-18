@@ -147,7 +147,7 @@
         </div>
         <div class="backup-warning">
           <span class="warning-icon">⚠️</span>
-          <p class="warning-text">备份文件可能很大，请确保有足够的磁盘空间。导出过程中请勿关闭页面。</p>
+          <p class="warning-text">备份文件可能很大，请确保有足够的磁盘空间。导出过程中可切换页面，备份将在后台继续。</p>
         </div>
       </div>
 
@@ -156,16 +156,16 @@
         <button
           class="btn-primary btn-large"
           @click="handleLibraryExport"
-          :disabled="isExporting"
+          :disabled="isLibraryExporting"
         >
-          <span v-if="isExporting">导出中...</span>
+          <span v-if="isLibraryExporting">导出中...</span>
           <span v-else>开始备份</span>
         </button>
       </div>
     </div>
 
     <!-- 导出进度 -->
-    <div v-if="isExporting" class="progress-overlay">
+    <div v-if="isExporting || isLibraryExporting" class="progress-overlay">
       <div class="progress-card">
         <p class="progress-text">{{ progressTitle }}</p>
 
@@ -205,6 +205,7 @@ import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { bookService } from '@/api/book';
 import { exportService, EXPORT_FIELDS, type ExportFormat, type ExportOptions, type ExportProgress } from '@/api/exportService';
+import { startLibraryExportTask, libraryExportActive, libraryExportProgress } from '@/composables/exportTask';
 
 const router = useRouter();
 
@@ -231,14 +232,19 @@ const exportProgress = ref<ExportProgress>({
   phase: 'building',
   message: '准备中...'
 });
-const exportPercent = computed(() => exportProgress.value.percent);
-const progressTitle = computed(() => exportProgress.value.message);
-const exportCurrent = computed(() => exportProgress.value.current ?? 0);
-const exportTotal = computed(() => exportProgress.value.total ?? 0);
+// 整库导出已托管为后台任务：进度读模块状态（切页后由小窗承载）；书籍导出仍为组件内进度
+const isLibraryExporting = libraryExportActive;
+const activeProgress = computed<ExportProgress>(() =>
+  isLibraryExporting.value ? libraryExportProgress.value : exportProgress.value
+);
+const exportPercent = computed(() => activeProgress.value.percent);
+const progressTitle = computed(() => activeProgress.value.message);
+const exportCurrent = computed(() => activeProgress.value.current ?? 0);
+const exportTotal = computed(() => activeProgress.value.total ?? 0);
 const exportCurrentFile = computed(() => {
   if (exportMode.value === 'library') {
-    return exportProgress.value.phase === 'packing' || exportProgress.value.phase === 'downloading'
-      ? exportProgress.value.message
+    return activeProgress.value.phase === 'packing' || activeProgress.value.phase === 'downloading'
+      ? activeProgress.value.message
       : '';
   }
   return '';
@@ -296,30 +302,10 @@ const handleExport = async () => {
   }
 };
 
-// 导出整库
-const handleLibraryExport = async () => {
-  isExporting.value = true;
+// 导出整库：托管为后台任务（进度见页面遮罩或右上角小窗，完成自动下载）
+const handleLibraryExport = () => {
   exportError.value = '';
-  exportSuccess.value = false;
-  exportProgress.value = { percent: 0, phase: 'packing', message: '准备打包...' };
-
-  try {
-    const blob = await exportService.exportLibrary(
-      {},
-      (p) => { exportProgress.value = p; }
-    );
-    const date = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `library-backup-${date}.zip`;
-    exportService.downloadFile(blob, filename);
-
-    exportSuccess.value = true;
-    setTimeout(() => exportSuccess.value = false, 3000);
-  } catch (e) {
-    console.error('整库导出失败:', e);
-    exportError.value = e instanceof Error ? e.message : '导出失败，请重试';
-  } finally {
-    isExporting.value = false;
-  }
+  startLibraryExportTask();
 };
 
 // 返回上一页

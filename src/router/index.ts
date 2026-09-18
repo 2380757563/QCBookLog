@@ -155,6 +155,7 @@ const routes: Array<RouteRecordRaw> = [
   { path: '/book/batch-scanner', name: 'BatchScanner', component: () => import('@/views/Book/BatchScanner.vue'), meta: { title: '批量扫描' } },
   { path: '/book/doulist-import', name: 'DoulistImport', component: () => import('@/views/Book/DoulistImport.vue'), meta: { title: '豆瓣豆列导入' } },
   { path: '/book/doulist-books', name: 'DoulistBooks', component: () => import('@/views/Book/DoulistBooks.vue'), meta: { title: '书单' } },
+  { path: '/book/doulist-shelve', name: 'DoulistShelve', component: () => import('@/views/Book/DoulistShelve.vue'), meta: { title: '豆列入库' } },
   // 书籍相关路由
   {
     path: '/book/detail/:id',

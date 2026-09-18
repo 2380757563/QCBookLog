@@ -934,7 +934,8 @@ class DatabaseConnectionManager {
           total_items INTEGER DEFAULT 0,
           total_pages INTEGER DEFAULT 0,
           status TEXT DEFAULT 'running',
-          category TEXT DEFAULT 'buy',
+          is_buy INTEGER DEFAULT 1,
+          is_read INTEGER DEFAULT 0,
           last_start INTEGER DEFAULT 0,
           fetched_items INTEGER DEFAULT 0,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -972,8 +973,24 @@ class DatabaseConnectionManager {
           this.qcBooklogDb.exec('ALTER TABLE qc_doulist_books ADD COLUMN shelved_at DATETIME');
         }
         const importCols = this.qcBooklogDb.prepare('PRAGMA table_info(qc_doulist_imports)').all().map((c) => c.name);
-        if (!importCols.includes('category')) {
-          this.qcBooklogDb.exec("ALTER TABLE qc_doulist_imports ADD COLUMN category TEXT DEFAULT 'buy'");
+        // 旧分类字段 category（buy/read 单选）已废弃，改为 is_buy/is_read 双标志
+        let importMigrated = false;
+        if (!importCols.includes('is_buy')) {
+          this.qcBooklogDb.exec('ALTER TABLE qc_doulist_imports ADD COLUMN is_buy INTEGER DEFAULT 1');
+          importMigrated = true;
+        }
+        if (!importCols.includes('is_read')) {
+          this.qcBooklogDb.exec('ALTER TABLE qc_doulist_imports ADD COLUMN is_read INTEGER DEFAULT 0');
+          importMigrated = true;
+        }
+        // 一次性回填：按旧 category 值初始化双标志
+        if (importMigrated && importCols.includes('category')) {
+          this.qcBooklogDb.exec(`
+            UPDATE qc_doulist_imports SET
+              is_buy = CASE WHEN category = 'read' THEN 0 ELSE 1 END,
+              is_read = CASE WHEN category = 'read' THEN 1 ELSE 0 END
+            WHERE is_buy = 1 AND is_read = 0
+          `);
         }
         if (!bookCols.includes('read_status')) {
           this.qcBooklogDb.exec("ALTER TABLE qc_doulist_books ADD COLUMN read_status TEXT DEFAULT 'unread'");

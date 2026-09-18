@@ -21,6 +21,9 @@
     <!-- 阅读计时器悬浮窗 -->
     <ReadingFloatingBall />
 
+    <!-- 批量任务小窗 -->
+    <TaskFloatWindow />
+
     <!-- 数据库配置弹窗 -->
     <DatabaseConfigModal 
       :visible="showDatabaseModal" 
@@ -40,6 +43,7 @@ import { navItems, preloadRoute } from '@/components/nav/navItems';
 import SidebarNav from '@/components/nav/SidebarNav.vue';
 import BottomNav from '@/components/nav/BottomNav.vue';
 import ReadingFloatingBall from '@/components/ReadingFloatingBall/ReadingFloatingBall.vue';
+import TaskFloatWindow from '@/components/TaskFloatWindow/TaskFloatWindow.vue';
 import DatabaseConfigModal from '@/components/DatabaseConfigModal.vue';
 
 const route = useRoute();

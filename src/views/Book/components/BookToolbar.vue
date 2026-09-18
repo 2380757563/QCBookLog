@@ -5,8 +5,21 @@
 
 <template>
   <div class="toolbar">
-    <!-- 搜索栏 -->
-    <div class="search-bar" @click="$emit('go-to-search')">
+    <!-- 搜索栏：书库标签点击跳搜索页；书单标签为书单专用搜索输入框 -->
+    <div v-if="searchMode === 'doulist'" class="search-bar">
+      <svg class="search-icon" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+      </svg>
+      <input
+        :value="searchValue"
+        type="text"
+        class="search-input"
+        :placeholder="searchPlaceholder || '搜索书单书名 / 作者'"
+        @input="$emit('update:search-value', ($event.target as HTMLInputElement).value)"
+      />
+      <span v-if="searchValue" class="search-clear" title="清空" @click="$emit('update:search-value', '')">×</span>
+    </div>
+    <div v-else class="search-bar" @click="$emit('go-to-search')">
       <svg class="search-icon" viewBox="0 0 24 24" fill="currentColor">
         <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
       </svg>
@@ -97,13 +110,12 @@
               </button>
             </div>
             <div v-if="gridColumns !== 'auto'" class="manual-columns-select">
-              <select
-                :value="manualColumnCount"
-                @change="$emit('update-manual-columns', Number(($event.target as HTMLSelectElement).value))"
+              <QcSelect
+                :model-value="manualColumnCount"
+                :options="columnOptions"
                 class="column-select"
-              >
-                <option v-for="n in 20" :key="n" :value="n">{{ n }}列</option>
-              </select>
+                @update:model-value="(v) => $emit('update-manual-columns', Number(v))"
+              />
             </div>
           </div>
         </div>
@@ -121,12 +133,19 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
+import QcSelect from '@/components/QcSelect.vue';
+import type { QcSelectOption } from '@/components/QcSelect.vue';
 
 interface Props {
   layout: 'grid' | 'list';
   groupThumbnailMax: number;
   gridColumns: string;
   manualColumnCount: number;
+  /** 搜索模式：library 点击跳搜索页 / doulist 书单页内搜索输入框 */
+  searchMode?: 'library' | 'doulist';
+  /** 书单搜索关键字（doulist 模式） */
+  searchValue?: string;
+  searchPlaceholder?: string;
 }
 
 const props = defineProps<Props>();
@@ -143,7 +162,13 @@ defineEmits<{
   'use-manual-columns': [];
   'update-manual-columns': [value: number];
   'add-book': [];
+  'update:search-value': [value: string];
 }>();
+
+const columnOptions: QcSelectOption[] = Array.from({ length: 20 }, (_, i) => ({
+  value: i + 1,
+  label: `${i + 1}列`
+}));
 
 const showScanMenu = ref(false);
 const showSettingsMenu = ref(false);
@@ -212,6 +237,33 @@ onUnmounted(() => {
 
 .search-bar:hover {
   background: #ebebeb;
+}
+
+/* 书单搜索输入框（doulist 模式） */
+.search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: #333;
+}
+
+.search-input::placeholder {
+  color: #999;
+}
+
+.search-clear {
+  color: #999;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+}
+
+.search-clear:hover {
+  color: #666;
 }
 
 .search-icon {

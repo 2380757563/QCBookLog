@@ -122,7 +122,7 @@ router.post('/import', async (req, res) => {
  */
 router.get('/books', async (req, res) => {
   try {
-    const { doulistId, category, status, hideShelved, page = 1, pageSize = 50, keyword } = req.query;
+    const { doulistId, category, status, hideShelved, page = 1, pageSize = 50, keyword, sortBy } = req.query;
     const result = doulistRepository.listBooks({
       doulistId: doulistId || null,
       category: ['buy', 'read'].includes(category) ? category : null,
@@ -130,7 +130,8 @@ router.get('/books', async (req, res) => {
       hideShelved: hideShelved === '1' || hideShelved === 'true',
       page: Math.max(1, Number(page) || 1),
       pageSize: Math.min(200, Math.max(1, Number(pageSize) || 50)),
-      keyword: keyword || null
+      keyword: keyword || null,
+      sortBy: sortBy || null
     });
     res.json({ ok: true, ...result });
   } catch (error) {
@@ -141,14 +142,14 @@ router.get('/books', async (req, res) => {
 
 /**
  * 手动添加一本书到书单（不来自豆列抓取）
- * body: { title, author?, publisher?, publishYear?, doubanRef?, doulistId?, doulistTitle?, category? }
+ * body: { title, author?, publisher?, publishYear?, doubanRef?, doulistId?, doulistTitle?, isBuy?, isRead? }
  * 书籍必须归属一个书单：doulistId 选已有书单，或 doulistTitle 新建本地书单
  */
 router.post('/books', async (req, res) => {
   try {
-    const { title, author, publisher, publishYear, isbn13, doubanRef, doulistId, doulistTitle, category } = req.body || {};
+    const { title, author, publisher, publishYear, isbn13, doubanRef, doulistId, doulistTitle, isBuy, isRead } = req.body || {};
     const result = doulistRepository.createBook({
-      title, author, publisher, publishYear, isbn13, doubanRef, doulistId, doulistTitle, category
+      title, author, publisher, publishYear, isbn13, doubanRef, doulistId, doulistTitle, isBuy, isRead
     });
     res.json({ ok: true, ...result });
   } catch (error) {
@@ -173,7 +174,8 @@ router.post('/books/:doubanId/shelf', async (req, res) => {
 });
 
 /**
- * 检查某本豆列书在本地书库是否已存在（按 ISBN）
+ * 检查某本豆列书在本地书库是否已存在
+ * 匹配策略：ISBN 归一化精确优先；书名严格相等 + 作者/出版社模糊匹配兜底
  * 用于「加入书架」按钮置灰判断
  */
 router.get('/books/:doubanId/shelf-check', async (req, res) => {
@@ -182,11 +184,30 @@ router.get('/books/:doubanId/shelf-check', async (req, res) => {
     if (!book) {
       return res.json({ ok: true, exists: false });
     }
-    const result = doulistRepository.isBookOnShelfByIsbn(book.isbn13, book.isbn10);
-    res.json({ ok: true, ...result });
+    const result = doulistRepository.isBookInLibrary(book);
+    res.json({
+      ok: true,
+      exists: result.exists,
+      bookId: result.bookId || null,
+      readStatus: result.readStatus || null,
+    });
   } catch (error) {
     console.error('❌ 检查书架存在失败:', error.message);
     res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+/**
+ * 入库衔接点：把书单阅读状态一次性单向写入书库（书库此后为权威）
+ * 加入书架成功后由前端调用
+ */
+router.post('/books/:doubanId/apply-read-status', async (req, res) => {
+  try {
+    const result = doulistRepository.applyReadStatusToLibrary(req.params.doubanId);
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    console.error('❌ 同步阅读状态到书库失败:', error.message);
+    res.status(400).json({ ok: false, error: error.message || '同步失败' });
   }
 });
 
@@ -229,17 +250,32 @@ router.post('/imports/:doulistId/progress', async (req, res) => {
 });
 
 /**
- * 更新书单分类（buy 买书 / read 读书）
- * body: { category }
+ * 更新书单双分类标志（isBuy 购书清单 / isRead 阅读清单），至少勾选一个
+ * body: { isBuy, isRead }
  */
 router.put('/imports/:doulistId', async (req, res) => {
   try {
-    const { category } = req.body || {};
-    const result = doulistRepository.setDoulistCategory(req.params.doulistId, category);
+    const { isBuy, isRead } = req.body || {};
+    const result = doulistRepository.setDoulistCategories(req.params.doulistId, isBuy, isRead);
     res.json({ ok: true, ...result });
   } catch (error) {
     console.error('❌ 更新书单分类失败:', error.message);
     res.status(400).json({ ok: false, error: error.message || '更新失败' });
+  }
+});
+
+/**
+ * 创建空书单（不添加任何书籍）
+ * body: { doulistTitle, isBuy?, isRead? }
+ */
+router.post('/imports', async (req, res) => {
+  try {
+    const { doulistTitle, isBuy, isRead } = req.body || {};
+    const result = doulistRepository.createDoulist({ doulistTitle, isBuy, isRead });
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    console.error('❌ 创建书单失败:', error.message);
+    res.status(400).json({ ok: false, error: error.message || '创建失败' });
   }
 });
 

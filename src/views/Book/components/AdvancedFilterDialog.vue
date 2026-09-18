@@ -76,18 +76,14 @@
         <div class="filter-section">
           <label class="filter-label">装帧</label>
           <div v-if="loadingBinding1" class="filter-loading">加载中…</div>
-          <select
+          <QcSelect
             v-else
-            v-model="local.binding1"
+            v-model="binding1Model"
+            :options="binding1SelectOptions"
             :disabled="availableBinding1Options.length === 0"
-            @change="onBinding1Change"
             class="filter-select"
-          >
-            <option :value="null">全部</option>
-            <option v-for="opt in availableBinding1Options" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
+            @update:model-value="onBinding1Change"
+          />
           <div v-if="!loadingBinding1 && availableBinding1Options.length === 0" class="filter-empty">
             当前书籍载体下没有可选装帧
           </div>
@@ -97,18 +93,14 @@
         <div class="filter-section">
           <label class="filter-label">装帧类型</label>
           <div v-if="loadingBinding2" class="filter-loading">加载中…</div>
-          <select
+          <QcSelect
             v-else
-            v-model="local.binding2"
+            v-model="binding2Model"
+            :options="binding2SelectOptions"
             :disabled="local.binding1 === null || availableBinding2Options.length === 0"
-            @change="emitChange"
             class="filter-select"
-          >
-            <option :value="null">全部</option>
-            <option v-for="opt in availableBinding2Options" :key="opt.value" :value="opt.value">
-              {{ opt.label }}
-            </option>
-          </select>
+            @update:model-value="emitChange"
+          />
           <div v-if="!loadingBinding2 && local.binding1 === null" class="filter-empty">
             请先选择装帧
           </div>
@@ -120,28 +112,34 @@
         <!-- 纸张类型 -->
         <div class="filter-section">
           <label class="filter-label">纸张类型</label>
-          <select v-model="local.paper1" @change="emitChange" class="filter-select">
-            <option :value="null">全部</option>
-            <option v-for="opt in PAPER_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-          </select>
+          <QcSelect
+            v-model="paper1Model"
+            :options="paperSelectOptions"
+            class="filter-select"
+            @update:model-value="emitChange"
+          />
         </div>
 
         <!-- 刷边位置 -->
         <div class="filter-section">
           <label class="filter-label">刷边位置</label>
-          <select v-model="local.edge1" @change="emitChange" class="filter-select">
-            <option :value="null">全部</option>
-            <option v-for="opt in EDGE1_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-          </select>
+          <QcSelect
+            v-model="edge1Model"
+            :options="edge1SelectOptions"
+            class="filter-select"
+            @update:model-value="emitChange"
+          />
         </div>
 
         <!-- 刷边工艺 -->
         <div class="filter-section">
           <label class="filter-label">刷边工艺</label>
-          <select v-model="local.edge2" @change="emitChange" class="filter-select">
-            <option :value="null">全部</option>
-            <option v-for="opt in EDGE2_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-          </select>
+          <QcSelect
+            v-model="edge2Model"
+            :options="edge2SelectOptions"
+            class="filter-select"
+            @update:model-value="emitChange"
+          />
         </div>
 
         <!-- 出版社 -->
@@ -230,6 +228,8 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue';
 import type { BookFilterConditions } from '../composables/useBookFilters';
+import QcSelect from '@/components/QcSelect.vue';
+import type { QcSelectOption } from '@/components/QcSelect.vue';
 
 interface Props {
   show: boolean;
@@ -351,6 +351,10 @@ const EDGE2_OPTIONS: { label: string; value: number }[] = [
   { label: '鎏金高端刷边', value: 5 },
 ];
 
+const paperSelectOptions: QcSelectOption[] = [{ value: '', label: '全部' }, ...PAPER_OPTIONS];
+const edge1SelectOptions: QcSelectOption[] = [{ value: '', label: '全部' }, ...EDGE1_OPTIONS];
+const edge2SelectOptions: QcSelectOption[] = [{ value: '', label: '全部' }, ...EDGE2_OPTIONS];
+
 // 装帧 1 选项（与 src/views/Book/Edit.vue 的 binding1Options 保持一致）
 const BINDING1_OPTIONS: { label: string; value: number }[] = [
   { label: '电子书', value: 0 },
@@ -443,6 +447,37 @@ const availableBinding2Options = computed<{ label: string; value: number }[]>(()
   const b1 = local.value.binding1;
   if (b1 === null) return [];
   return BINDING2_OPTIONS_MAP[b1] || [];
+});
+
+// QcSelect 适配：原 null（全部）值以空串哨兵表示
+const binding1SelectOptions = computed<QcSelectOption[]>(() => [
+  { value: '', label: '全部' },
+  ...availableBinding1Options.value
+]);
+const binding2SelectOptions = computed<QcSelectOption[]>(() => [
+  { value: '', label: '全部' },
+  ...availableBinding2Options.value
+]);
+
+const binding1Model = computed<number | ''>({
+  get: () => local.value.binding1 ?? '',
+  set: (v) => { local.value.binding1 = v === '' ? null : Number(v); }
+});
+const binding2Model = computed<number | ''>({
+  get: () => local.value.binding2 ?? '',
+  set: (v) => { local.value.binding2 = v === '' ? null : Number(v); }
+});
+const paper1Model = computed<number | ''>({
+  get: () => local.value.paper1 ?? '',
+  set: (v) => { local.value.paper1 = v === '' ? null : Number(v); }
+});
+const edge1Model = computed<number | ''>({
+  get: () => local.value.edge1 ?? '',
+  set: (v) => { local.value.edge1 = v === '' ? null : Number(v); }
+});
+const edge2Model = computed<number | ''>({
+  get: () => local.value.edge2 ?? '',
+  set: (v) => { local.value.edge2 = v === '' ? null : Number(v); }
 });
 
 // 修改器

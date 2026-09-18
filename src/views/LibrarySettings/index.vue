@@ -209,6 +209,57 @@
         </div>
       </CollapsibleSection>
 
+      <!-- ========== 书单设置 ========== -->
+      <CollapsibleSection icon="📋" title="书单设置" desc="配置书单卡片的点击跳转、阅读状态编辑与滑动手势">
+        <!-- 卡片点击跳转 -->
+        <div class="settings-label">点击卡片跳转</div>
+        <div class="segmented-control">
+          <button
+            :class="['segmented-btn', { active: cardClickAction === 'douban' }]"
+            @click="onSetCardClickAction('douban')"
+          >豆瓣页面</button>
+          <button
+            :class="['segmented-btn', { active: cardClickAction === 'library' }]"
+            @click="onSetCardClickAction('library')"
+          >书库书籍信息</button>
+        </div>
+        <div class="settings-hint">
+          {{ cardClickAction === 'douban' ? '点击书单卡片在新标签页打开豆瓣页面（默认）' : '已入库的书跳转到书库详情页，未入库仍打开豆瓣' }}
+        </div>
+
+        <!-- 是否可编辑在库书籍阅读状态 -->
+        <div class="settings-label">在库书籍阅读状态</div>
+        <div class="segmented-control">
+          <button
+            :class="['segmented-btn', { active: !editLibraryStatus }]"
+            @click="onSetEditLibraryStatus(false)"
+          >不可编辑</button>
+          <button
+            :class="['segmented-btn', { active: editLibraryStatus }]"
+            @click="onSetEditLibraryStatus(true)"
+          >可编辑</button>
+        </div>
+        <div class="settings-hint">
+          {{ editLibraryStatus ? '可在书单页直接修改已入库书籍的阅读状态（同步写回书库）' : '已入库书籍状态只读，修改请到书库书籍详情页（默认）' }}
+        </div>
+
+        <!-- 滑动手势 -->
+        <div class="settings-label">滑动手势</div>
+        <div class="segmented-control">
+          <button
+            :class="['segmented-btn', { active: swipeGesture }]"
+            @click="onSetSwipeGesture(true)"
+          >开启</button>
+          <button
+            :class="['segmented-btn', { active: !swipeGesture }]"
+            @click="onSetSwipeGesture(false)"
+          >关闭</button>
+        </div>
+        <div class="settings-hint">
+          {{ swipeGesture ? '右滑划掉此列，左滑加入书架；已划去的行左滑恢复（默认）' : '禁用滑动操作，仅使用「划去项目 / 加入书架 / 撤回」按钮' }}
+        </div>
+      </CollapsibleSection>
+
       <!-- ========== 外观设置（导航到子页面） ========== -->
       <CollapsibleSection icon="🎨" title="外观设置" desc="为不同阅读状态的书籍配置边框样式与装帧包边效果">
         <div class="nav-cards">
@@ -276,6 +327,7 @@ import { useAppStore } from '@/stores/app';
 import { useReadingStore } from '@/stores/reading';
 import { useBookViewSettings } from '@/composables/useBookViewSettings';
 import { useRatingDisplayMode, type RatingDisplayMode } from '@/composables/useRatingDisplayMode';
+import { useDoulistUiSettings, type DoulistCardClickAction } from '@/composables/useDoulistUiSettings';
 
 const router = useRouter();
 const appStore = useAppStore();
@@ -290,6 +342,15 @@ const {
   applyManualColumns
 } = useBookViewSettings();
 const { mode: ratingMode, setMode: setRatingMode, load: loadRatingMode } = useRatingDisplayMode();
+const {
+  cardClickAction,
+  editLibraryStatus,
+  swipeGesture,
+  setCardClickAction,
+  setEditLibraryStatus,
+  setSwipeGesture,
+  resetToDefaults: resetDoulistUiDefaults
+} = useDoulistUiSettings();
 
 // 派生：分组缩略图数
 const groupThumbnailMax = ref(appStore.groupThumbnailMax);
@@ -360,6 +421,25 @@ async function onSetRatingMode(mode: RatingDisplayMode) {
   flashToast();
 }
 
+// ---- 书单设置 ----
+function onSetCardClickAction(action: DoulistCardClickAction) {
+  if (cardClickAction.value === action) return;
+  setCardClickAction(action);
+  flashToast();
+}
+
+function onSetEditLibraryStatus(enabled: boolean) {
+  if (editLibraryStatus.value === enabled) return;
+  setEditLibraryStatus(enabled);
+  flashToast();
+}
+
+function onSetSwipeGesture(enabled: boolean) {
+  if (swipeGesture.value === enabled) return;
+  setSwipeGesture(enabled);
+  flashToast();
+}
+
 // ---- 恢复默认 ----
 async function onResetAll() {
   setLayout('grid');
@@ -368,6 +448,7 @@ async function onResetAll() {
   groupThumbnailMax.value = 9;
   onSetProgressMode('label');
   await setRatingMode('10');
+  resetDoulistUiDefaults();
   flashToast();
 }
 
@@ -459,6 +540,25 @@ onMounted(async () => {
     flex: 1;
     min-width: 0;
   }
+}
+
+/* 书单设置子项标签与提示 */
+.settings-label {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-hint {
+  margin: 8px 0 0 0;
+  font-size: 12px;
+  color: var(--text-tertiary, #999);
+  line-height: 1.4;
+}
+
+.settings-label:not(:first-child) {
+  margin-top: 16px;
 }
 
 /* 选项卡片 */

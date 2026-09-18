@@ -93,6 +93,11 @@ const isExpanded = ref(false);
 const isDragging = ref(false);
 const dragOffset = ref({ x: 0, y: 0 });
 const initialBoxRect = ref({ left: 0, top: 0, width: 0, height: 0 });
+// 拖动位移阈值：超过 5px 视为拖动，mouseup 后的 click 不触发展开/收起切换
+const DRAG_THRESHOLD = 5;
+let dragStartX = 0;
+let dragStartY = 0;
+let dragDistance = 0;
 
 // 位置状态（从localStorage读取或使用默认值） - 使用 right 定位，避免展开后超出屏幕
 const position = ref({ right: 20, top: 100 });
@@ -162,8 +167,12 @@ const todayStats = computed(() => {
   return null as { totalTime: number; totalPages: number } | null;
 });
 
-// 处理点击（展开/收起）
+// 处理点击（展开/收起）；拖动位移超过阈值时视为拖动，不切换
 const handleClick = () => {
+  if (dragDistance > DRAG_THRESHOLD) {
+    dragDistance = 0;
+    return;
+  }
   if (!isDragging.value) {
     isExpanded.value = !isExpanded.value;
   }
@@ -174,6 +183,9 @@ const startDrag = (e: MouseEvent) => {
   if (isExpanded.value) return;
 
   isDragging.value = true;
+  dragStartX = e.clientX;
+  dragStartY = e.clientY;
+  dragDistance = 0;
   const target = e.currentTarget as HTMLElement;
   const rect = target.getBoundingClientRect();
   initialBoxRect.value = { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
@@ -189,6 +201,8 @@ const startDrag = (e: MouseEvent) => {
 // 拖动中
 const onDrag = (e: MouseEvent) => {
   if (!isDragging.value) return;
+
+  dragDistance = Math.max(dragDistance, Math.hypot(e.clientX - dragStartX, e.clientY - dragStartY));
 
   const newLeft = e.clientX - dragOffset.value.x;
   const newTop = e.clientY - dragOffset.value.y;

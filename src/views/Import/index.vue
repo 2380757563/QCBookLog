@@ -472,7 +472,7 @@
     </div>
 
     <!-- 导入进度 -->
-    <div v-if="isImporting" class="progress-overlay">
+    <div v-if="isImporting || tableImportActive" class="progress-overlay">
       <div class="progress-card">
         <p class="progress-text">{{ importProgress.message || '正在导入数据...' }}</p>
 
@@ -492,7 +492,7 @@
         <p class="progress-stats" v-if="showImportStats">
           已导入 {{ importedCount }} · 已跳过 {{ skippedCount }} · 错误 {{ errorsCount }}
         </p>
-        <p class="progress-hint">请勿关闭页面</p>
+        <p class="progress-hint">可切换页面，导入将在后台继续</p>
       </div>
     </div>
 
@@ -552,11 +552,18 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import { importService, type ImportFormat, type ImportResult, type ImportOptions, type ZipImportResult, type ImportProgress } from '@/api/importService';
+import { importService, type ImportFormat, type ImportOptions, type ZipImportResult } from '@/api/importService';
 import { bookService } from '@/api/book';
 import { normalizeIsbn } from '@/utils/isbnUtils';
 import DuplicateBookDialog from '@/views/Book/components/DuplicateBookDialog.vue';
 import ExcelJS from 'exceljs';
+import {
+  tableImportProgress,
+  tableImportResult,
+  tableImportActive,
+  startZipImportTask,
+  startTableImportTask
+} from '@/composables/tableImportTask';
 
 const router = useRouter();
 
@@ -601,15 +608,11 @@ let pendingDuplicateResolver: ((r: any) => void) | null = null;
 
 // 状态
 const isImporting = ref(false);
-const importResult = ref<ImportResult | null>(null);
 const generating = ref(false);
 
-// 导入进度
-const importProgress = ref<ImportProgress>({
-  percent: 0,
-  phase: 'parsing',
-  message: '准备导入...'
-});
+// 导入进度/结果托管在 tableImportTask 模块（切页不丢），此处仅作视图别名
+const importProgress = tableImportProgress;
+const importResult = tableImportResult;
 const importPercent = computed(() => importProgress.value.percent);
 const importTotal = computed(() => importProgress.value.total ?? 0);
 const importCurrent = computed(() => importProgress.value.current ?? 0);
@@ -1406,30 +1409,13 @@ const confirmImport = async () => {
     const message = `确定要导入 ZIP 文件吗？\n包含 ${zipValidationResult.value?.metadata?.books || 0} 本书籍`;
     if (!confirm(message)) return;
 
-    isImporting.value = true;
-    importResult.value = null;
-    importProgress.value = { percent: 0, phase: 'parsing', message: '读取 ZIP 文件...' };
-    try {
-      const options: ImportOptions = {
-        format: 'zip',
-        skipDuplicates: importOptions.value.skipDuplicates,
-        updateExisting: importOptions.value.updateExisting,
-        fieldMapping: fieldMapping.value
-      };
-      const result = await importService.importFromFile(
-        selectedFile.value,
-        options,
-        (p) => { importProgress.value = p; }
-      );
-      importResult.value = result;
-    } catch (e) {
-      importResult.value = {
-        success: false, total: 0, imported: 0, skipped: 0,
-        errors: [{ row: 0, message: (e as Error).message }], warnings: []
-      };
-    } finally {
-      isImporting.value = false;
-    }
+    // 导入托管到 tableImportTask 模块，切页不中断
+    startZipImportTask(selectedFile.value, {
+      format: 'zip',
+      skipDuplicates: importOptions.value.skipDuplicates,
+      updateExisting: importOptions.value.updateExisting,
+      fieldMapping: fieldMapping.value
+    });
     return;
   }
 
@@ -1536,17 +1522,14 @@ const confirmImport = async () => {
     }
 
     // 调用导入服务(重复项已在前置处理,这里关闭 skipDuplicates 避免二次判断)
-    const result = await importService.importParsedBooks(
+    // 导入托管到 tableImportTask 模块，切页不中断
+    startTableImportTask(
       booksToImport,
-      {
-        format: importFormat.value,
-        skipDuplicates: false,
-        updateExisting: importOptions.value.updateExisting,
-        fieldMapping: fieldMapping.value
-      },
-      (p) => { importProgress.value = p; }
+      importFormat.value,
+      importOptions.value.updateExisting,
+      fieldMapping.value,
+      selectedFile.value.name
     );
-    importResult.value = result;
   } catch (e) {
     console.error('导入失败:', e);
     importResult.value = {

@@ -449,27 +449,53 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { useBookStore } from '@/stores/book';
 import { bookService } from '@/api/book';
-import { searchBookByISBN, searchBookByISBNWithSource } from '@/api/common/isbnApi';
+import { searchBookByISBNWithSource } from '@/api/common/isbnApi';
 import type { BookSearchResult } from '@/api/common/isbnApi/types';
 import { API_CONFIGS } from '@/api/common/isbnApi/apiConfig';
 import { normalizeIsbn } from '@/utils/isbnUtils';
 import type { DuplicateBook } from '@/api/book/types';
 import DuplicateBookDialog from '@/views/Book/components/DuplicateBookDialog.vue';
+import {
+  scannerList,
+  scannerPreviewBooks,
+  scannerSearchProgress,
+  scannerImportProgress,
+  scannerImportResult,
+  searchScannerItem,
+  startScannerSearchTask,
+  startScannerImportTask,
+  loadFromStorage,
+  saveToStorage,
+  clearStorage,
+  getBookFromCache,
+  saveBookToCache,
+  removeBookFromCache,
+  clearBookCache,
+  hasCachedBooks
+} from '@/composables/batchScannerTask';
 
 const router = useRouter();
 const route = useRoute();
-const bookStore = useBookStore();
+
+// 状态与执行循环托管在 batchScannerTask 模块（切页不中断），组件仅作视图
+const isbnList = scannerList;
+const previewBooks = scannerPreviewBooks;
+const importResult = scannerImportResult;
 
 // 状态管理
 const manualIsbn = ref('');
-const isProcessing = ref(false);
+const isProcessing = computed(() => scannerSearchProgress.value.active || scannerImportProgress.value.active);
 const selectedBooks = ref<string[]>([]);
-const importResult = ref<any>(null);
-const currentProcessingBook = ref<any>(null);
+// 「更换书源」阶段当前处理书（组件内交互闭环，仍在组件侧维护）
+const researchCurrentBook = ref<{ title: string } | null>(null);
+const currentProcessingBook = computed(() => {
+  if (isReseearching.value) return researchCurrentBook.value;
+  const p = scannerSearchProgress.value.active ? scannerSearchProgress.value : scannerImportProgress.value;
+  return p.active && p.title ? { title: p.title } : null;
+});
 const newlyAddedIsbns = ref<string[]>([]); // 新添加的ISBN，用于高亮显示
 const showExitConfirmDialog = ref(false); // 是否显示退出确认弹窗
 
@@ -483,144 +509,24 @@ const compareData = ref<Map<string, { old: BookSearchResult | null; new: BookSea
 const lastUsedSource = ref<string>(localStorage.getItem('batch_scanner_last_source') || 'dbr'); // 记忆上次使用的书源
 const cancelReseearch = ref(false); // 是否取消重新搜索
 
-// ISBN列表
-interface IsbnItem {
-  isbn: string;
-  searching: boolean;
-  data: BookSearchResult | null;
-  error: string | null;
-  isNew?: boolean; // 是否为新增
-}
-
-const isbnList = ref<IsbnItem[]>([]);
-
-// 本地存储key
-const STORAGE_KEY = 'batch_scanner_isbn_list';
-const BOOK_CACHE_KEY = 'batch_scanner_book_cache';
-
-// 从本地存储加载列表
-const loadFromStorage = () => {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      // 确保加载的数据包含书籍信息
-      isbnList.value = parsed.map((item: IsbnItem) => {
-        // 如果数据中没有书籍信息，尝试从缓存恢复
-        const data = item.data || getBookFromCache(item.isbn);
-        if (data) {
-          console.log(`📊 [BatchScanner.loadFromStorage] ISBN ${item.isbn} 恢复数据:`, {
-            rating: data.rating,
-            series: data.series,
-            tags: data.tags,
-            tagsCount: data.tags?.length || 0
-          });
-        }
-        return {
-          ...item,
-          data: data
-        };
-      });
-      
-      return true;
-    }
-  } catch (e: unknown) {
-    console.error('📊 [BatchScanner.loadFromStorage] 加载失败:', e);
-  }
-  return false;
-};
-
-const saveToStorage = () => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(isbnList.value));
-  } catch (e: unknown) {
-  }
-};
-
-const clearStorage = () => {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-  } catch (e: unknown) {
-  }
-};
-
-const getBookFromCache = (isbn: string): BookSearchResult | null => {
-  try {
-    const cacheData = localStorage.getItem(BOOK_CACHE_KEY);
-    if (cacheData) {
-      const cache = JSON.parse(cacheData);
-      return cache[isbn] || null;
-    }
-  } catch (e: unknown) {
-  }
-  return null;
-};
-
-const saveBookToCache = (isbn: string, bookData: BookSearchResult) => {
-  try {
-    const cacheData = localStorage.getItem(BOOK_CACHE_KEY);
-    const cache = cacheData ? JSON.parse(cacheData) : {};
-    cache[isbn] = bookData;
-    localStorage.setItem(BOOK_CACHE_KEY, JSON.stringify(cache));
-  } catch (e: unknown) {
-  }
-};
-
-const clearBookCache = () => {
-  try {
-    localStorage.removeItem(BOOK_CACHE_KEY);
-  } catch (e: unknown) {
-  }
-};
-
-const hasCachedBooks = () => {
-  try {
-    const cacheData = localStorage.getItem(BOOK_CACHE_KEY);
-    if (cacheData) {
-      const cache = JSON.parse(cacheData);
-      return Object.keys(cache).length > 0;
-    }
-  } catch (e: unknown) {
-  }
-  return false;
-};
-
-// 页面加载时从本地存储恢复
+// 页面加载时从本地存储恢复（isbnList/存储/缓存函数托管在 batchScannerTask 模块）
 const hasLoadedFromStorage = loadFromStorage();
 
-// 预览书籍列表
-const previewBooks = computed(() => {
-  const books = isbnList.value
-    .filter(item => item.data !== null)
-    .map(item => {
-      console.log(`📊 [previewBooks] ISBN ${item.isbn} 数据:`, {
-        rating: item.data?.rating,
-        series: item.data?.series,
-        tags: item.data?.tags,
-        tagsCount: item.data?.tags?.length || 0,
-        source: item.data?.source
-      });
-      return item.data!;
-    })
-    .filter(book => book !== null);
-  
-  console.log(`📊 [previewBooks] 共 ${books.length} 本书籍预览`);
-  return books;
-});
+// 进度文本 / 百分比（取当前活跃阶段的模块级进度）
+const activeProgress = computed(() =>
+  scannerSearchProgress.value.active ? scannerSearchProgress.value : scannerImportProgress.value
+);
 
 // 进度文本
 const progressText = computed(() => {
-  return `${currentIndex.value}/${totalItems.value}`;
+  return `${activeProgress.value.current}/${activeProgress.value.total}`;
 });
 
 // 进度百分比
 const progressPercent = computed(() => {
-  if (totalItems.value === 0) return 0;
-  return Math.round((currentIndex.value / totalItems.value) * 100);
+  if (activeProgress.value.total === 0) return 0;
+  return Math.round((activeProgress.value.current / activeProgress.value.total) * 100);
 });
-
-const currentIndex = ref(0);
-const totalItems = ref(0);
 
 // ISBN 重复检测弹窗状态
 const duplicateDialogVisible = ref(false);
@@ -703,17 +609,7 @@ const removeIsbn = (index: number) => {
 
   // 从缓存中移除该书籍
   if (removedIsbn) {
-    try {
-      const cacheData = localStorage.getItem(BOOK_CACHE_KEY);
-      if (cacheData) {
-        const cache = JSON.parse(cacheData);
-        if (cache[removedIsbn]) {
-          delete cache[removedIsbn];
-          localStorage.setItem(BOOK_CACHE_KEY, JSON.stringify(cache));
-        }
-      }
-    } catch (e: unknown) {
-    }
+    removeBookFromCache(removedIsbn);
   }
 
   // 保存到本地存储
@@ -784,36 +680,17 @@ const deleteSelectedIsbnItems = () => {
 };
 
 const batchSearchSelected = async () => {
-  const itemsToSearch = selectedIsbnItems.value.length > 0 
+  const itemsToSearch = selectedIsbnItems.value.length > 0
     ? isbnList.value.filter(item => selectedIsbnItems.value.includes(item.isbn) && !item.data)
     : isbnList.value.filter(item => !item.data);
-  
+
   if (itemsToSearch.length === 0) {
     alert('所有选中的ISBN都已搜索完成');
     return;
   }
-  
-  isProcessing.value = true;
-  totalItems.value = itemsToSearch.length;
-  currentIndex.value = 0;
-  
-  for (let i = 0; i < itemsToSearch.length; i++) {
-    const item = itemsToSearch[i];
-    const index = isbnList.value.findIndex(i => i.isbn === item.isbn);
-    if (index === -1) continue;
-    
-    currentIndex.value++;
-    currentProcessingBook.value = item;
-    
-    await searchSingle(index);
-    
-    await new Promise(resolve => setTimeout(resolve, 500));
-  }
-  
-  isProcessing.value = false;
-  currentIndex.value = 0;
-  currentProcessingBook.value = null;
-  totalItems.value = 0;
+
+  // 循环托管到 batchScannerTask 模块（切页不中断，小窗展示进度）
+  startScannerSearchTask(itemsToSearch);
 };
 
 const openSourceSelector = () => {
@@ -858,7 +735,7 @@ const reSearchWithSource = async () => {
     if (!item) continue;
     
     reseearchProgress.value.current = i + 1;
-    currentProcessingBook.value = { title: item.data?.title || isbn, isbn };
+    researchCurrentBook.value = { title: item.data?.title || isbn };
     
     const oldData = item.data ? { ...item.data } : null;
     
@@ -884,7 +761,7 @@ const reSearchWithSource = async () => {
   }
   
   isReseearching.value = false;
-  currentProcessingBook.value = null;
+  researchCurrentBook.value = null;
   
   if (compareData.value.size > 0 && !cancelReseearch.value) {
     showCompareView.value = true;
@@ -947,87 +824,10 @@ const retryFailedSearch = async (isbn: string) => {
   }
 };
 
-// 搜索单个ISBN
-const searchSingle = async (index: number) => {
+// 搜索单个ISBN（委托模块级 searchScannerItem，模板/自动搜索入口）
+const searchSingle = (index: number) => {
   const item = isbnList.value[index];
-  if (!item) return;
-
-  // 先检查缓存
-  const cachedBook = getBookFromCache(item.isbn);
-  if (cachedBook) {
-    console.log(`📊 [BatchScanner] ISBN ${item.isbn} 从缓存获取数据:`, {
-      rating: cachedBook.rating,
-      series: cachedBook.series,
-      tags: cachedBook.tags,
-      tagsCount: cachedBook.tags?.length || 0
-    });
-    item.data = cachedBook;
-    item.error = null;
-    return;
-  }
-
-  item.searching = true;
-  item.error = null;
-  item.data = null;
-
-  try {
-    // 使用豆瓣和DBR作为数据源
-    const results = await searchBookByISBN(item.isbn);
-
-    console.log(`📊 [BatchScanner] ISBN ${item.isbn} 搜索结果:`, JSON.stringify(results, null, 2));
-
-    // 优先使用DBR，然后是豆瓣
-    const bestResult = results.dbr || results.douban || results.isbnWork || results.tanshu;
-
-    if (bestResult) {
-      console.log(`📊 [BatchScanner] ISBN ${item.isbn} 最佳结果详情:`, {
-        source: bestResult.source,
-        title: bestResult.title,
-        rating: bestResult.rating,
-        series: bestResult.series,
-        tags: bestResult.tags,
-        tagsCount: bestResult.tags?.length || 0
-      });
-      item.data = bestResult;
-      // 立即存储到缓存
-      saveBookToCache(item.isbn, bestResult);
-      console.log(`📊 [BatchScanner] ISBN ${item.isbn} 已缓存`);
-    } else {
-      item.error = '未找到书籍信息';
-    }
-  } catch (error) {
-    console.error(`搜索失败 [${item.isbn}]:`, error);
-    item.error = '搜索失败';
-  } finally {
-    item.searching = false;
-  }
-};
-
-// 搜索所有ISBN
-const searchAll = async () => {
-  if (isProcessing.value || isbnList.value.length === 0) return;
-
-  isProcessing.value = true;
-  totalItems.value = isbnList.value.filter(item => !item.data && !item.searching).length;
-  currentIndex.value = 0;
-
-  for (let i = 0; i < isbnList.value.length; i++) {
-    const item = isbnList.value[i];
-    if (item.data || item.searching) continue;
-
-    currentIndex.value++;
-    currentProcessingBook.value = item;
-
-    await searchSingle(i);
-
-    // 延迟避免请求过快
-    await new Promise(resolve => setTimeout(resolve, 500));
-  }
-
-  isProcessing.value = false;
-  currentIndex.value = 0;
-  currentProcessingBook.value = null;
-  totalItems.value = 0;
+  if (item) searchScannerItem(item);
 };
 
 // 导入所有书籍
@@ -1087,7 +887,6 @@ const importAll = async () => {
       duplicateDialogVisible.value = true;
     });
     if (choice === 'view') {
-      isProcessing.value = false;
       return;
     }
     if (choice === 'skip-all') {
@@ -1134,111 +933,9 @@ const importAll = async () => {
     // 'continue-all' 直接走原循环
   }
 
-  isProcessing.value = true;
-  totalItems.value = booksToImport.length;
-  currentIndex.value = 0;
-
-  let successCount = 0;
-  let failedBooks: string[] = [];
-
-  for (let i = 0; i < booksToImport.length; i++) {
-    const bookData = booksToImport[i];
-    currentIndex.value++;
-    currentProcessingBook.value = bookData;
-
-    // 「逐本处理」模式下，用户选择跳过的书直接跳过 addBook
-    if (perBookDecisions.value.has(bookData.isbn) && perBookDecisions.value.get(bookData.isbn) === false) {
-      continue;
-    }
-
-    console.log(`📊 [BatchScanner.importAll] 导入书籍 ${i + 1}/${booksToImport.length}:`, {
-      isbn: bookData.isbn,
-      title: bookData.title,
-      rating: bookData.rating,
-      series: bookData.series,
-      tags: bookData.tags,
-      source: bookData.source
-    });
-
-    // 检查是否从缓存获取
-    const fromCache = getBookFromCache(bookData.isbn);
-    if (fromCache) {
-      console.log(`📊 [BatchScanner.importAll] 从缓存获取的数据:`, {
-        rating: fromCache.rating,
-        series: fromCache.series,
-        tags: fromCache.tags
-      });
-    }
-
-    try {
-      const newBook = await bookService.addBook({
-        isbn: bookData.isbn,
-        title: bookData.title,
-        author: bookData.author,
-        publisher: bookData.publisher || '',
-        publishYear: bookData.publishYear,
-        pages: bookData.pages,
-        binding1: bookData.binding1 || 0,
-        binding2: bookData.binding2 || 0,
-        book_type: bookData.book_type || 1,
-        coverUrl: bookData.coverUrl || '',
-        purchaseDate: undefined,
-        purchasePrice: undefined,
-        standardPrice: bookData.price ? parseFloat(bookData.price.replace(/[^\d.]/g, '')) : undefined,
-        readStatus: '未读' as const,
-        readCompleteDate: undefined,
-        rating: bookData.rating,
-        tags: bookData.tags?.filter((t): t is string => typeof t === 'string') || [],
-        groups: [],
-        series: bookData.series || '',
-        note: '',
-        description: bookData.description || ''
-      });
-
-      bookStore.addBook(newBook);
-      successCount++;
-
-      // 导入成功后，从isbnList中移除该项
-      const index = isbnList.value.findIndex(item => item.isbn === bookData.isbn);
-      if (index !== -1) {
-        isbnList.value.splice(index, 1);
-      }
-    } catch (error) {
-      console.error(`导入失败 [${bookData.isbn}]:`, error);
-      failedBooks.push(bookData.title);
-    }
-
-    // 延迟避免请求过快
-    await new Promise(resolve => setTimeout(resolve, 300));
-  }
-
-  isProcessing.value = false;
-  currentIndex.value = 0;
-  currentProcessingBook.value = null;
-  totalItems.value = 0;
-
-  // 清空选择
+  // 清空选择，导入循环托管到 batchScannerTask 模块（切页不中断，小窗展示进度）
   selectedBooks.value = [];
-
-  // 保存更新后的列表到本地存储
-  saveToStorage();
-
-  // 显示导入结果
-  if (failedBooks.length === 0) {
-    importResult.value = {
-      type: 'success',
-      icon: '✅',
-      title: '导入成功',
-      message: `成功导入 ${successCount} 本书籍到书库`
-    };
-  } else {
-    importResult.value = {
-      type: 'partial',
-      icon: '⚠️',
-      title: '部分导入成功',
-      message: `成功导入 ${successCount} 本，失败 ${failedBooks.length} 本\n失败书籍: ${failedBooks.join('、')}`
-    };
-  }
+  startScannerImportTask(booksToImport);
 };
 
 // ISBN 重复弹窗 - 点击列表行查看已有：跳详情
@@ -1284,12 +981,11 @@ const handleCoverError = (event: Event, book: BookSearchResult) => {
 };
 
 // 从路由参数获取ISBN
-const isUnmounted = ref(false); // 标记组件是否已卸载
 const isProcessingRoute = ref(false); // 防止重复处理路由
 
 const processRouteIsbn = () => {
-  // 如果组件已卸载或正在处理，不再处理
-  if (isUnmounted.value || isProcessingRoute.value) {
+  // 正在处理时不重复处理（isbnList 托管在模块级，组件卸载不影响已入列的 ISBN）
+  if (isProcessingRoute.value) {
     return;
   }
   
@@ -1378,12 +1074,6 @@ onMounted(() => {
   if (isbnList.value.length === 0 && !hasLoadedFromStorage) {
     loadFromStorage();
   }
-});
-
-// 组件卸载时标记
-onUnmounted(() => {
-  isUnmounted.value = true;
-  isProcessingRoute.value = false;
 });
 </script>
 

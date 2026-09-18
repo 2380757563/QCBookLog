@@ -4,6 +4,53 @@
  */
 import databaseService from '../../services/legacy/database-service.js';
 
+/**
+ * 归一化 ISBN：去掉连字符/空格等符号，统一大写（兼容 ISBN10 的 X 校验位）。
+ * Calibre books.isbn 常带连字符（如 978-7-02-...），豆列为纯数字，直接等值匹配会漏判。
+ */
+function normalizeIsbn(v) {
+  return String(v ?? '').toUpperCase().replace(/[^0-9X]/g, '');
+}
+
+// SQLite 表达式：对 books.isbn 做同样的归一化（去连字符/空格并大写），仅旧版 Calibre 使用
+const ISBN_NORM_EXPR = "REPLACE(REPLACE(UPPER(COALESCE(isbn, '')), '-', ''), ' ', '')";
+
+/**
+ * 书名归一化：小写、去空白与所有标点/符号 —— 用于书名严格相等匹配
+ */
+function normalizeTitle(v) {
+  return String(v ?? '').toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
+}
+
+/**
+ * 作者归一化：去掉括号内的国籍标记（如 [日] / (美) / （英国））、间隔符与空白，小写
+ * 用于作者模糊匹配（归一化后互相包含即命中，如 "毛姆" vs "威廉·萨默塞特·毛姆"）
+ */
+function normalizePerson(v) {
+  return String(v ?? '')
+    .replace(/[（(【\[〔][^）)】\]〕]*[）)】\]〕]/g, '')
+    .replace(/[\s·・.,，、;；:：\-—_/\\|]+/g, '')
+    .toLowerCase();
+}
+
+/**
+ * 出版社归一化：去掉「出版社」等字样、空白与标点，小写 —— 用于出版社模糊匹配
+ */
+function normalizePublisher(v) {
+  return String(v ?? '')
+    .replace(/出版社|出版公司|出版集团|出版传媒|出版中心|出版/g, '')
+    .replace(/[\s·・.,，、;；:：\-—_/\\|()（）【】\[\]〔〕]+/g, '')
+    .toLowerCase();
+}
+
+/**
+ * 模糊匹配：归一化后互相包含即命中
+ */
+function fuzzyContains(a, b) {
+  if (!a || !b) return false;
+  return a.includes(b) || b.includes(a);
+}
+
 class QcDoulistRepository {
   constructor() {
     this.db = null;
@@ -115,16 +162,16 @@ class QcDoulistRepository {
    *   incrementalOnly=true 时为增量刷新：已在该书单里的书不做任何更改（不覆盖字段、不动书架状态）
    * @returns {{ imported: number, duplicates: number }}
    */
-  importBooks(books, { doulistId, doulistTitle = null, owner = null, ownerUrl = null, incrementalOnly = false }) {
+  importBooks(books, { doulistId, doulistTitle = null, owner = null, ownerUrl = null, isBuy = 1, isRead = 0, incrementalOnly = false }) {
     const db = this.ensureDb();
     let imported = 0;
     let duplicates = 0;
 
     const run = db.transaction(() => {
-      // 批次表（断点续跑记录）
+      // 批次表（断点续跑记录）；分类标志仅在首次建档时写入，增量刷新不覆盖
       db.prepare(`
-        INSERT INTO qc_doulist_imports (doulist_id, doulist_title, owner, owner_url, status)
-        VALUES (?, ?, ?, ?, 'done')
+        INSERT INTO qc_doulist_imports (doulist_id, doulist_title, owner, owner_url, status, is_buy, is_read)
+        VALUES (?, ?, ?, ?, 'done', ?, ?)
         ON CONFLICT(doulist_id) DO UPDATE SET
           doulist_title = COALESCE(excluded.doulist_title, doulist_title),
           owner = COALESCE(excluded.owner, owner),
@@ -132,7 +179,7 @@ class QcDoulistRepository {
           status = 'done',
           last_start = 0,
           updated_at = CURRENT_TIMESTAMP
-      `).run(String(doulistId), doulistTitle, owner, ownerUrl);
+      `).run(String(doulistId), doulistTitle, owner, ownerUrl, isBuy ? 1 : 0, isRead ? 1 : 0);
 
       for (const book of books) {
         if (!book || !book.doubanId) continue;
@@ -182,8 +229,8 @@ class QcDoulistRepository {
     const db = this.ensureDb();
     const status = Number(lastStart) > 0 ? 'running' : 'done';
     db.prepare(`
-      INSERT INTO qc_doulist_imports (doulist_id, doulist_title, owner, owner_url, status, last_start, fetched_items)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO qc_doulist_imports (doulist_id, doulist_title, owner, owner_url, status, last_start, fetched_items, is_buy, is_read)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0)
       ON CONFLICT(doulist_id) DO UPDATE SET
         doulist_title = COALESCE(excluded.doulist_title, doulist_title),
         owner = COALESCE(excluded.owner, owner),
@@ -244,17 +291,45 @@ class QcDoulistRepository {
   }
 
   /**
+   * 创建一个空书单（不添加任何书籍）
+   * @returns {{ ok: true, doulistId: string }}
+   */
+  createDoulist({ doulistTitle, isBuy, isRead }) {
+    const db = this.ensureDb();
+    const title = String(doulistTitle || '').trim();
+    if (!title) {
+      throw new Error('书单名称不能为空');
+    }
+    const buyFlag = isBuy === undefined ? 1 : (isBuy ? 1 : 0);
+    const readFlag = isRead ? 1 : 0;
+    if (!buyFlag && !readFlag) {
+      throw new Error('购书清单与阅读清单至少需勾选一个');
+    }
+    const doulistId = `local_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    db.prepare(`
+      INSERT INTO qc_doulist_imports (doulist_id, doulist_title, status, is_buy, is_read)
+      VALUES (?, ?, 'done', ?, ?)
+    `).run(doulistId, title, buyFlag, readFlag);
+    return { ok: true, doulistId };
+  }
+
+  /**
    * 手动新增一本豆列书籍（不来自豆列抓取）
    * 书籍必须属于一个书单：doulistId 选已有书单，或 doulistTitle 新建本地书单（local_ 前缀 ID）
    * doubanRef 可选：填豆瓣链接或纯数字 ID 就复用豆瓣 subject ID 作为唯一键，
    * 不填则生成本地 ID（local_ 前缀），避免与豆瓣 subject ID 冲突
    * @returns {{ created: boolean, doubanId: string, doulistId: string }}
    */
-  createBook({ title, author, publisher, publishYear, isbn13, doubanRef, doulistId, doulistTitle, category }) {
+  createBook({ title, author, publisher, publishYear, isbn13, doubanRef, doulistId, doulistTitle, isBuy, isRead }) {
     const db = this.ensureDb();
     const cleanTitle = String(title || '').trim();
     if (!cleanTitle) {
       throw new Error('书名不能为空');
+    }
+    const buyFlag = isBuy === undefined ? 1 : (isBuy ? 1 : 0);
+    const readFlag = isRead ? 1 : 0;
+    if (!buyFlag && !readFlag) {
+      throw new Error('购书清单与阅读清单至少需勾选一个');
     }
 
     // 书籍必须归属一个书单
@@ -271,12 +346,12 @@ class QcDoulistRepository {
     const doulistRow = db.prepare('SELECT doulist_id FROM qc_doulist_imports WHERE doulist_id = ?').get(targetDoulistId);
     if (!doulistRow) {
       db.prepare(`
-        INSERT INTO qc_doulist_imports (doulist_id, doulist_title, status, category)
-        VALUES (?, ?, 'done', ?)
-      `).run(targetDoulistId, newDoulistTitle || `书单 ${targetDoulistId}`, category === 'read' ? 'read' : 'buy');
-    } else if (category === 'read' || category === 'buy') {
-      db.prepare('UPDATE qc_doulist_imports SET category = ?, updated_at = CURRENT_TIMESTAMP WHERE doulist_id = ?')
-        .run(category, targetDoulistId);
+        INSERT INTO qc_doulist_imports (doulist_id, doulist_title, status, is_buy, is_read)
+        VALUES (?, ?, 'done', ?, ?)
+      `).run(targetDoulistId, newDoulistTitle || `书单 ${targetDoulistId}`, buyFlag, readFlag);
+    } else if (isBuy !== undefined || isRead !== undefined) {
+      db.prepare('UPDATE qc_doulist_imports SET is_buy = ?, is_read = ?, updated_at = CURRENT_TIMESTAMP WHERE doulist_id = ?')
+        .run(buyFlag, readFlag, targetDoulistId);
     }
 
     // 从链接 / 纯数字中提取豆瓣 subject ID
@@ -345,19 +420,155 @@ class QcDoulistRepository {
   }
 
   /**
-   * 按 ISBN 检查本地书库（Calibre books 表）是否已有此书
-   * 注意：books 表在 Calibre 数据库，不在 qc_booklog.db
-   * @returns {{ exists: boolean, bookId?: number }}
+   * 构建"归一化 ISBN → calibre book id"映射（每次调用实时重建，书库量级下开销可忽略）
+   * 注意：新版 Calibre（v5+）的 books 表没有 isbn 列，ISBN 存在 identifiers 表（type='isbn'）；
+   *      旧版 Calibre 的 ISBN 在 books.isbn 列。两处都查，兼容两种版本。
+   * @returns {Map<string, number>}
    */
-  isBookOnShelfByIsbn(isbn13, isbn10) {
+  getCalibreIsbnMap() {
     const calibreDb = databaseService.calibreDb;
-    if (!calibreDb) return { exists: false };
-    const isbns = [isbn13, isbn10].filter(Boolean);
-    if (!isbns.length) return { exists: false };
-    const row = calibreDb.prepare(
-      'SELECT id FROM books WHERE isbn = ? OR isbn = ? LIMIT 1'
-    ).get(String(isbn13 || ''), String(isbn10 || ''));
-    return row ? { exists: true, bookId: row.id } : { exists: false };
+    const map = new Map();
+    if (!calibreDb) return map;
+    // 1) identifiers 表（新版 Calibre 的 ISBN 存储位置）
+    try {
+      const rows = calibreDb.prepare("SELECT book, val FROM identifiers WHERE LOWER(type) = 'isbn'").all();
+      for (const r of rows) {
+        const n = normalizeIsbn(r.val);
+        if (n && !map.has(n)) map.set(n, r.book);
+      }
+    } catch { /* identifiers 表缺失时忽略 */ }
+    // 2) books.isbn 列（旧版 Calibre）
+    try {
+      const hasIsbnCol = calibreDb.prepare('PRAGMA table_info(books)').all().some((c) => c.name === 'isbn');
+      if (hasIsbnCol) {
+        const rows = calibreDb.prepare(
+          `SELECT id, ${ISBN_NORM_EXPR} AS nisbn FROM books WHERE isbn IS NOT NULL AND trim(isbn) != ''`
+        ).all();
+        for (const r of rows) {
+          if (r.nisbn && !map.has(r.nisbn)) map.set(r.nisbn, r.id);
+        }
+      }
+    } catch { /* 忽略 */ }
+    return map;
+  }
+
+  /**
+   * 构建书库匹配索引（每次调用实时重建；数百~千级书库开销可忽略，保证新增书籍立即可见）
+   * - isbnMap : 归一化 ISBN → calibre book id（identifiers 表 + 旧版 books.isbn 列）
+   * - byTitle : 归一化书名 → [{ id, authorN, pubN }]，配合作者/出版社模糊匹配兜底
+   * @returns {{ isbnMap: Map<string, number>, byTitle: Map<string, Array> } | null}
+   */
+  getCalibreLibraryIndex() {
+    const calibreDb = databaseService.calibreDb;
+    if (!calibreDb) return null;
+    const isbnMap = this.getCalibreIsbnMap();
+    const byTitle = new Map();
+    try {
+      // 作者（多作者聚合）
+      const authorsByBook = new Map();
+      try {
+        for (const r of calibreDb.prepare(
+          'SELECT bal.book AS book, a.name AS author FROM books_authors_link bal JOIN authors a ON a.id = bal.author'
+        ).all()) {
+          if (!authorsByBook.has(r.book)) authorsByBook.set(r.book, []);
+          authorsByBook.get(r.book).push(r.author);
+        }
+      } catch { /* 作者表缺失时忽略 */ }
+
+      // 书名 + 出版社
+      let books = [];
+      try {
+        books = calibreDb.prepare(`
+          SELECT b.id, b.title, b.author_sort, p.name AS publisher
+          FROM books b
+          LEFT JOIN books_publishers_link bpl ON bpl.book = b.id
+          LEFT JOIN publishers p ON p.id = bpl.publisher
+        `).all();
+      } catch { /* 出版社表缺失时忽略 */ }
+
+      for (const b of books) {
+        const tN = normalizeTitle(b.title);
+        if (!tN) continue;
+        const authors = (authorsByBook.get(b.id) || []).join(';');
+        const authorN = normalizePerson(b.author_sort) || normalizePerson(authors);
+        const pubN = normalizePublisher(b.publisher);
+        if (!byTitle.has(tN)) byTitle.set(tN, []);
+        byTitle.get(tN).push({ id: b.id, authorN, pubN });
+      }
+    } catch { /* 索引构建失败时退回仅 ISBN 匹配 */ }
+    return { isbnMap, byTitle };
+  }
+
+  /**
+   * 豆列书 → 书库书匹配：
+   * 1) ISBN 归一化精确匹配（优先）
+   * 2) 无 ISBN 或未命中时：书名严格相等 + 作者/出版社模糊匹配兜底
+   *    （作者/出版社任一侧缺数据时跳过该项校验，避免误判）
+   * @returns {number|null} calibre book id
+   */
+  matchLibraryBook(index, book) {
+    if (!index) return null;
+    const n13 = normalizeIsbn(book?.isbn13);
+    const n10 = normalizeIsbn(book?.isbn10);
+    if (n13 && index.isbnMap.has(n13)) return index.isbnMap.get(n13);
+    if (n10 && index.isbnMap.has(n10)) return index.isbnMap.get(n10);
+
+    const tN = normalizeTitle(book?.title);
+    if (!tN) return null;
+    const candidates = index.byTitle.get(tN);
+    if (!candidates || !candidates.length) return null;
+    const aN = normalizePerson(book?.author);
+    const pN = normalizePublisher(book?.publisher);
+    for (const c of candidates) {
+      if (aN && c.authorN && !fuzzyContains(aN, c.authorN)) continue;
+      if (pN && c.pubN && !fuzzyContains(pN, c.pubN)) continue;
+      return c.id;
+    }
+    return null;
+  }
+
+  /**
+   * 查询书库书籍的阅读状态（qc_book_mapping + qc_reading_state）
+   * @returns {Map<number, string>} calibre_book_id → 中文状态
+   */
+  getReadStatusesByCalibreBookIds(bookIds) {
+    const stateByBookId = new Map();
+    if (!bookIds.length) return stateByBookId;
+    try {
+      const qcDb = this.ensureDb();
+      const libraryUuid = databaseService.getCurrentLibraryUuid?.() || null;
+      const idPh = bookIds.map(() => '?').join(',');
+      const rows = libraryUuid
+        ? qcDb.prepare(`
+            SELECT m.calibre_book_id, rs.read_status
+            FROM qc_book_mapping m
+            LEFT JOIN qc_reading_state rs ON rs.mapping_id = m.id
+            WHERE m.library_uuid = ? AND m.calibre_book_id IN (${idPh})
+          `).all(libraryUuid, ...bookIds)
+        : qcDb.prepare(`
+            SELECT m.calibre_book_id, rs.read_status
+            FROM qc_book_mapping m
+            LEFT JOIN qc_reading_state rs ON rs.mapping_id = m.id
+            WHERE m.calibre_book_id IN (${idPh})
+          `).all(...bookIds);
+      for (const r of rows) {
+        stateByBookId.set(r.calibre_book_id, r.read_status || '未读');
+      }
+    } catch { /* 映射/状态缺失时按未读处理 */ }
+    return stateByBookId;
+  }
+
+  /**
+   * 判断单本豆列书是否已在书库（ISBN 精确优先，书名+作者+出版社兜底）
+   * @returns {{ exists: boolean, bookId?: number, readStatus?: string }}
+   */
+  isBookInLibrary(book) {
+    const index = this.getCalibreLibraryIndex();
+    if (!index) return { exists: false };
+    const bookId = this.matchLibraryBook(index, book);
+    if (!bookId) return { exists: false };
+    const readStatus = this.getReadStatusesByCalibreBookIds([bookId]).get(bookId) || '未读';
+    return { exists: true, bookId, readStatus };
   }
 
   /**
@@ -377,15 +588,17 @@ class QcDoulistRepository {
   }
 
   /**
-   * 设置书单分类（buy 买书 / read 读书）
+   * 设置书单双分类标志（isBuy 购书清单 / isRead 阅读清单），至少勾选一个
    */
-  setDoulistCategory(doulistId, category) {
-    if (!['buy', 'read'].includes(category)) {
-      throw new Error('分类仅支持 buy / read');
+  setDoulistCategories(doulistId, isBuy, isRead) {
+    const buyFlag = isBuy ? 1 : 0;
+    const readFlag = isRead ? 1 : 0;
+    if (!buyFlag && !readFlag) {
+      throw new Error('购书清单与阅读清单至少需勾选一个');
     }
     const result = this.ensureDb().prepare(`
-      UPDATE qc_doulist_imports SET category = ?, updated_at = CURRENT_TIMESTAMP WHERE doulist_id = ?
-    `).run(category, String(doulistId));
+      UPDATE qc_doulist_imports SET is_buy = ?, is_read = ?, updated_at = CURRENT_TIMESTAMP WHERE doulist_id = ?
+    `).run(buyFlag, readFlag, String(doulistId));
     if (result.changes === 0) {
       throw new Error('书单不存在');
     }
@@ -394,10 +607,11 @@ class QcDoulistRepository {
 
   /**
    * 分页列出豆列书籍（前端书单页）
-   * 每本书带出其所属书单（doulist_id / doulist_title / category），默认按加入书单的时间倒序
-   * @param {object} opts { doulistId, category, status, hideShelved, page, pageSize, keyword }
+   * 每本书带出其所属书单（doulist_id / doulist_title / list_is_buy / list_is_read），默认按加入书单的时间倒序
+   * 并批量附加书库状态：on_shelf / library_book_id / library_read_status（实时取自书库）
+   * @param {object} opts { doulistId, category, status, hideShelved, page, pageSize, keyword, sortBy }
    */
-  listBooks({ doulistId = null, category = null, status = null, hideShelved = false, page = 1, pageSize = 50, keyword = null } = {}) {
+  listBooks({ doulistId = null, category = null, status = null, hideShelved = false, page = 1, pageSize = 50, keyword = null, sortBy = null } = {}) {
     const db = this.ensureDb();
     const where = [];
     const params = [];
@@ -405,9 +619,10 @@ class QcDoulistRepository {
       where.push('b.douban_id IN (SELECT douban_id FROM qc_doulist_import_items WHERE doulist_id = ?)');
       params.push(String(doulistId));
     }
-    if (category) {
-      where.push('m.category = ?');
-      params.push(String(category));
+    if (category === 'buy') {
+      where.push('m.is_buy = 1');
+    } else if (category === 'read') {
+      where.push('m.is_read = 1');
     }
     if (status) {
       where.push("COALESCE(b.shelf_status, 'pending') = ?");
@@ -422,11 +637,19 @@ class QcDoulistRepository {
     }
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
 
+    // 排序：默认按加入书单时间倒序；支持评分/书名/作者
+    const SORT_MAP = {
+      rating: "CASE WHEN b.rating IS NULL THEN 1 ELSE 0 END ASC, b.rating DESC, b.id DESC",
+      title: "b.title COLLATE NOCASE ASC, b.id DESC",
+      author: "b.author COLLATE NOCASE ASC, b.id DESC"
+    };
+    const orderSql = SORT_MAP[String(sortBy)] || 'COALESCE(m.added_at, substr(b.created_at, 1, 10)) DESC, b.id DESC';
+
     // 每本书取其最早加入的书单关联（书籍必须属于一个书单）
     const membershipJoin = `
       LEFT JOIN (
         SELECT it.douban_id, it.doulist_id, it.added_at,
-               di.doulist_title, di.category,
+               di.doulist_title, di.is_buy, di.is_read,
                ROW_NUMBER() OVER (PARTITION BY it.douban_id ORDER BY it.id) AS rn
         FROM qc_doulist_import_items it
         LEFT JOIN qc_doulist_imports di ON di.doulist_id = it.doulist_id
@@ -439,12 +662,78 @@ class QcDoulistRepository {
     ).get(...params).c;
 
     const rows = db.prepare(`
-      SELECT b.*, m.doulist_id, m.doulist_title, m.category, m.added_at AS list_added_at ${baseSql}
-      ORDER BY COALESCE(m.added_at, substr(b.created_at, 1, 10)) DESC, b.id DESC
+      SELECT b.*, m.doulist_id, m.doulist_title, m.is_buy AS list_is_buy, m.is_read AS list_is_read, m.added_at AS list_added_at ${baseSql}
+      ORDER BY ${orderSql}
       LIMIT ? OFFSET ?
     `).all(...params, pageSize, (page - 1) * pageSize);
 
+    // 批量附加书库在架状态与阅读状态（避免前端逐本调 shelf-check）
+    // 匹配策略：ISBN 归一化精确匹配优先；无 ISBN（或未命中）时
+    // 书名严格相等 + 作者/出版社模糊匹配兜底（去国籍括号标记与"出版社"字样）
+    const index = this.getCalibreLibraryIndex();
+    const bookIdByRow = new Map();
+    for (const r of rows) {
+      bookIdByRow.set(r, index ? this.matchLibraryBook(index, r) : null);
+    }
+    const matchedBookIds = [...new Set([...bookIdByRow.values()].filter(Boolean))];
+    const stateByBookId = this.getReadStatusesByCalibreBookIds(matchedBookIds);
+    for (const r of rows) {
+      const bookId = bookIdByRow.get(r) || null;
+      r.on_shelf = bookId ? 1 : 0;
+      r.library_book_id = bookId;
+      r.library_read_status = bookId ? (stateByBookId.get(bookId) || '未读') : null;
+    }
+
     return { total, page, pageSize, data: rows };
+  }
+
+  /**
+   * 入库衔接点：把书单阅读状态一次性单向写入书库（书库此后为权威）
+   * unread→未读/0  reading→在读/1  read→已读/2
+   * @returns {{ ok: true, bookId: number, mappingId: number, readStatus: string }}
+   */
+  applyReadStatusToLibrary(doubanId) {
+    const book = this.findByDoubanId(doubanId);
+    if (!book) throw new Error('书籍不存在');
+
+    const calibreDb = databaseService.calibreDb;
+    if (!calibreDb) throw new Error('Calibre 数据库不可用');
+    // 匹配策略与列表一致：ISBN 优先，书名+作者+出版社兜底
+    const index = this.getCalibreLibraryIndex();
+    const calibreBookId = this.matchLibraryBook(index, book);
+    if (!calibreBookId) throw new Error('书库中未找到此书，请先加入书架');
+    const calibreBook = { id: calibreBookId };
+
+    const readStatus = { unread: '未读', reading: '在读', read: '已读' }[book.read_status] || '未读';
+    const readState = { unread: 0, reading: 1, read: 2 }[book.read_status] ?? 0;
+
+    const qcDb = this.ensureDb();
+    const libraryUuid = databaseService.getCurrentLibraryUuid?.() || '';
+    let mapping = qcDb.prepare(
+      'SELECT id FROM qc_book_mapping WHERE library_uuid = ? AND calibre_book_id = ?'
+    ).get(libraryUuid, calibreBook.id);
+    if (!mapping) {
+      const result = qcDb.prepare(
+        'INSERT INTO qc_book_mapping (library_uuid, calibre_book_id, talebook_book_id) VALUES (?, ?, ?)'
+      ).run(libraryUuid, calibreBook.id, calibreBook.id);
+      mapping = { id: Number(result.lastInsertRowid) };
+    }
+
+    const existing = qcDb.prepare('SELECT id FROM qc_reading_state WHERE mapping_id = ?').get(mapping.id);
+    if (existing) {
+      qcDb.prepare(`
+        UPDATE qc_reading_state SET
+          read_status = ?, read_state = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE mapping_id = ?
+      `).run(readStatus, readState, mapping.id);
+    } else {
+      qcDb.prepare(`
+        INSERT INTO qc_reading_state (mapping_id, user_id, read_status, read_state, sync_status, last_sync_time)
+        VALUES (?, 0, ?, ?, 1, ?)
+      `).run(mapping.id, readStatus, readState, new Date().toISOString());
+    }
+
+    return { ok: true, bookId: calibreBook.id, mappingId: mapping.id, readStatus };
   }
 
   /**

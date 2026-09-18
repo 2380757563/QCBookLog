@@ -157,29 +157,36 @@ import { useRouter } from 'vue-router';
 import {
   doulistApi,
   doubanCoverProxy,
-  type DoulistMeta,
   type DoulistPreviewBook,
   type DoulistSettings,
   type DoulistImportRecord
 } from '@/api/doulistService';
+import {
+  crawlState,
+  startCrawlTask,
+  extractDoulistId,
+  loadPreviewCache,
+  removePreviewCache,
+  type DoulistPreviewCache
+} from '@/composables/doulistCrawlTask';
+import { useTaskStore } from '@/stores/task';
 
 const router = useRouter();
+const taskStore = useTaskStore();
 
 const step = ref(1);
 const doulistInput = ref('');
 const step1Error = ref('');
 
-// 抓取状态
-const crawling = ref(false);
-const cancelFlag = ref(false);
-const books = ref<DoulistPreviewBook[]>([]);
-const meta = ref<DoulistMeta | null>(null);
-// 豆列名称（可编辑，默认取原豆列名，导入时以此为准）
-const doulistTitleInput = ref('');
-const fetchedPages = ref(0);
-const blocked = ref(false);
-const reachedEnd = ref(false);
-const pageLimitReached = ref(false);
+// 抓取状态：托管在 doulistCrawlTask 模块（切页不中断），此处仅作视图别名
+const st = crawlState;
+const crawling = computed(() => !!st.value && !st.value.finished);
+const books = computed(() => st.value?.books ?? []);
+const meta = computed(() => st.value?.meta ?? null);
+const fetchedPages = computed(() => st.value?.fetchedPages ?? 0);
+const blocked = computed(() => st.value?.blocked ?? false);
+const reachedEnd = computed(() => st.value?.reachedEnd ?? false);
+const pageLimitReached = computed(() => st.value?.pageLimitReached ?? false);
 
 // 补全设置
 const enrichMode = ref<DoulistSettings['doulistEnrichMode']>('none');
@@ -190,16 +197,18 @@ const enrichModeLabel = computed(() =>
   ({ none: '不补全', smart: '智能补全', full: '完整补全' })[enrichMode.value] || '不补全'
 );
 
-// 勾选
+// 勾选（组件本地 UI 状态）
 const selected = ref<Set<string>>(new Set());
 const allChecked = computed(() => books.value.length > 0 && selected.value.size === books.value.length);
 const selectedCount = computed(() => selected.value.size);
 
-// 导入
+// 导入（单次 API 调用，保留在组件内）
 const importing = ref(false);
 const busyText = ref('导入中...');
 const importError = ref('');
 const importResult = ref<{ imported: number; duplicates: number } | null>(null);
+// 豆列名称（可编辑，默认取原豆列名，导入时以此为准）
+const doulistTitleInput = ref('');
 
 // 断点续跑：导入记录列表（用于检测未完成的抓取进度）
 const imports = ref<DoulistImportRecord[]>([]);
@@ -213,29 +222,6 @@ const fetchImports = async () => {
   } catch { /* 忽略 */ }
 };
 
-/** 从输入中提取豆列数字 ID（无法识别返回 null） */
-const extractDoulistId = (input: string): string | null => {
-  const raw = String(input || '').trim();
-  if (/^\d{4,}$/.test(raw)) return raw;
-  const m = raw.match(/doulist\/(\d+)/);
-  return m ? m[1] : null;
-};
-
-/** 本地缓存已抓取的书单预览（刷新页面后恢复，避免重复抓取前几页） */
-const previewCacheKey = (doulistId: string) => `doulist_preview_${doulistId}`;
-const savePreviewCache = (doulistId: string, data: any) => {
-  try { localStorage.setItem(previewCacheKey(doulistId), JSON.stringify(data)); } catch { /* 忽略 */ }
-};
-const loadPreviewCache = (doulistId: string) => {
-  try {
-    const raw = localStorage.getItem(previewCacheKey(doulistId));
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
-};
-const removePreviewCache = (doulistId: string) => {
-  try { localStorage.removeItem(previewCacheKey(doulistId)); } catch { /* 忽略 */ }
-};
-
 // 续传弹窗显示的页码（每页 25 本）
 const resumeSavedPage = computed(() => Math.floor(Number(resumeSaved.value?.last_start || 0) / 25) + 1);
 
@@ -243,12 +229,13 @@ const estimatedTotal = computed(() =>
   meta.value && meta.value.totalPages ? meta.value.totalPages * 25 : books.value.length
 );
 
-// 抓到豆列元信息后，名称输入框默认填入原豆列名（用户可改）
+// 抓到豆列元信息后，名称输入框默认填入原豆列名（用户可改）；immediate 兼容切页返回时 meta 已存在
 watch(meta, (m) => {
   if (m && doulistTitleInput.value === '') {
     doulistTitleInput.value = m.title || '';
   }
-});
+}, { immediate: true });
+
 const progressPercent = computed(() =>
   meta.value && meta.value.totalPages
     ? Math.min(100, Math.round((fetchedPages.value / meta.value.totalPages) * 100))
@@ -259,14 +246,8 @@ const goBack = () => router.back();
 
 const restart = () => {
   step.value = 1;
-  books.value = [];
-  meta.value = null;
   doulistTitleInput.value = '';
-  fetchedPages.value = 0;
   selected.value = new Set();
-  blocked.value = false;
-  reachedEnd.value = false;
-  pageLimitReached.value = false;
   importResult.value = null;
   importError.value = '';
   step1Error.value = '';
@@ -300,13 +281,11 @@ const startCrawl = async () => {
   beginCrawl();
 };
 
-/** 重新开始全新抓取 */
+/** 重新开始全新抓取（抓取循环托管在 doulistCrawlTask 模块） */
 const beginCrawl = () => {
   restart();
-  crawling.value = true;
-  cancelFlag.value = false;
   step.value = 2;
-  crawlLoop(0);
+  startCrawlTask({ input: doulistInput.value, startOffset: 0, maxPages: maxPagesLimit.value });
 };
 
 /** 继续上次中断的抓取（恢复缓存 + 从 last_start 继续） */
@@ -315,23 +294,26 @@ const resumeCrawl = () => {
   if (!saved) return;
   showResumeDialog.value = false;
 
-  const cached = loadPreviewCache(saved.doulist_id);
-  if (cached) {
-    books.value = cached.books || [];
-    meta.value = cached.meta || null;
-    fetchedPages.value = cached.fetchedPages || 0;
-    if (meta.value && doulistTitleInput.value === '') doulistTitleInput.value = meta.value.title || '';
-  } else {
-    // 无本地缓存（如换浏览器/清了 localStorage）：页码从续传位置起算
-    fetchedPages.value = Math.floor(Number(saved.last_start || 0) / 25);
-  }
-  blocked.value = false;
-  reachedEnd.value = false;
-  pageLimitReached.value = false;
+  const raw = loadPreviewCache(saved.doulist_id);
+  const cached: Partial<DoulistPreviewCache> = raw
+    ? {
+        meta: raw.meta ?? null,
+        books: raw.books ?? [],
+        fetchedPages: raw.fetchedPages ?? 0,
+        blocked: !!raw.blocked,
+        reachedEnd: !!raw.reachedEnd
+      }
+    : // 无本地缓存（如换浏览器/清了 localStorage）：页码从续传位置起算
+      { fetchedPages: Math.floor(Number(saved.last_start || 0) / 25) };
+
+  restart();
   step.value = 2;
-  crawling.value = true;
-  cancelFlag.value = false;
-  crawlLoop(Number(saved.last_start) || 0);
+  startCrawlTask({
+    input: doulistInput.value,
+    startOffset: Number(saved.last_start) || 0,
+    cached,
+    maxPages: maxPagesLimit.value
+  });
 };
 
 /** 放弃续传，重新抓取 */
@@ -346,81 +328,14 @@ const restartCrawl = async () => {
   beginCrawl();
 };
 
-/**
- * 逐页抓取循环：每抓完一页把进度落库（last_start 指向下一页偏移）并缓存已抓书单，
- * 刷新页面后通过「继续抓取」从上次位置续传。
- */
-const crawlLoop = async (startOffset: number) => {
-  const input = doulistInput.value.trim();
-  const doulistId = extractDoulistId(input);
-  let start = startOffset;
-
-  try {
-    while (!cancelFlag.value) {
-      // 设置里的「单次最多抓取页数」上限（0 = 不限，抓到底）
-      if (maxPagesLimit.value > 0 && fetchedPages.value >= maxPagesLimit.value) {
-        pageLimitReached.value = true;
-        break;
-      }
-
-      const result = await doulistApi.preview(input, start, 1);
-      meta.value = result.doulist;
-      fetchedPages.value += result.pagesFetched || 0;
-      blocked.value = result.blocked;
-
-      // 去重合并（同一页重复返回时跳过）
-      const existing = new Set(books.value.map(b => b.doubanId));
-      for (const b of result.books) {
-        if (!existing.has(b.doubanId)) books.value.push(b);
-      }
-
-      // 断点续跑：进度落库 + 本地缓存已抓书单
-      if (doulistId) {
-        const lastStart = result.nextStart !== null ? result.nextStart : start;
-        try {
-          await doulistApi.saveProgress(doulistId, {
-            lastStart: result.blocked ? start : lastStart,
-            fetchedItems: books.value.length,
-            title: meta.value?.title,
-            owner: meta.value?.owner,
-            ownerUrl: meta.value?.ownerUrl
-          });
-        } catch { /* 忽略进度保存失败 */ }
-        savePreviewCache(doulistId, {
-          meta: meta.value,
-          books: books.value,
-          fetchedPages: fetchedPages.value,
-          blocked: blocked.value,
-          reachedEnd: reachedEnd.value
-        });
-      }
-
-      if (result.blocked) break;
-      if (result.reachedEnd || result.nextStart === null || result.nextStart <= start) {
-        reachedEnd.value = true;
-        break;
-      }
-      start = result.nextStart;
-    }
-
-    // 抓到头：清除续传标记（避免下次还提示续传最后一页）
-    if (reachedEnd.value && doulistId) {
-      try { await doulistApi.saveProgress(doulistId, { lastStart: 0, fetchedItems: books.value.length }); } catch { /* 忽略 */ }
-    }
-  } catch (err: any) {
-    if (books.value.length === 0) {
-      step.value = 1;
-      step1Error.value = err?.message || '抓取失败';
-    }
-  } finally {
-    crawling.value = false;
-    selected.value = new Set(books.value.map(b => b.doubanId));
-  }
-};
-
 const cancelCrawl = () => {
-  cancelFlag.value = true;
+  if (st.value) taskStore.cancelTask(st.value.taskId);
 };
+
+// 抓取循环结束后全选已抓书籍（原 crawlLoop finally 的行为，托管后由 watch 触发）
+watch(() => st.value?.finished, (f) => {
+  if (f && st.value) selected.value = new Set(st.value.books.map((b) => b.doubanId));
+});
 
 const startImport = async () => {
   if (!meta.value || !selected.value.size) return;
@@ -490,6 +405,16 @@ const startImport = async () => {
 onMounted(async () => {
   // 拉取导入记录（断点续跑检测用）
   fetchImports();
+  // 恢复托管中的抓取视图：有任务状态时回到对应步骤（切页返回场景）
+  if (st.value) {
+    if (st.value.finished && st.value.error && st.value.books.length === 0) {
+      step1Error.value = st.value.error;
+      step.value = 1;
+    } else {
+      step.value = 2;
+      if (st.value.finished) selected.value = new Set(st.value.books.map((b) => b.doubanId));
+    }
+  }
   try {
     const res = await doulistApi.getSettings();
     if (res?.data) {
