@@ -95,7 +95,9 @@ class DatabaseService {
    */
   initRepositories() {
     const calibreDb = this.connectionManager.getCalibreDb();
-    const talebookDb = this.connectionManager.getTalebookDb();
+    // 仓储层需要「表真实可用」的连接：Talebook 库若为空库（仅有文件无表），
+    // 传入裸连接会让 reading_state / items 查询抛错并被静默吞掉，导致阅读状态全部回落为「未读」
+    const talebookDb = this.connectionManager.getUsableTalebookDb();
     const qcBooklogDb = this.connectionManager.getQcBooklogDb();
 
     // Calibre 仓储
@@ -361,6 +363,18 @@ class DatabaseService {
   isTalebookAvailable() {
     this.ensureInitialized();
     return this.connectionManager.isTalebookAvailable();
+  }
+
+  /**
+   * 检查 Talebook 关键表（reading_state / items）是否真实可用
+   *
+   * 与 isTalebookAvailable() 的区别：后者只判断连接对象是否存在，
+   * 空的 Talebook 库文件同样会返回 true，导致后续查询抛 "no such table"。
+   * 需要读写阅读状态等业务表时应使用本方法。
+   */
+  isTalebookUsable() {
+    this.ensureInitialized();
+    return this.connectionManager.getUsableTalebookDb() !== null;
   }
 
   /**
@@ -1489,19 +1503,20 @@ class DatabaseService {
     this.ensureInitialized();
 
     // 首先尝试从 Talebook 数据库获取
-    if (this.connectionManager.isTalebookAvailable()) {
+    // 注意：必须用 getUsableTalebookDb()（表真实可用）而非 isTalebookAvailable()（仅文件存在）。
+    // 本方法在书籍列表中逐本调用，若在空库上执行 SELECT reading_state，会抛出 407 次
+    // "no such table" 异常并逐条打印警告，既污染日志又拖慢响应。
+    const talebookDb = this.connectionManager.getUsableTalebookDb();
+    if (talebookDb) {
       try {
-        const talebookDb = this.connectionManager.getTalebookDb();
-        if (talebookDb) {
-          const query = `
-            SELECT * FROM reading_state
-            WHERE book_id = ? AND reader_id = ?
-          `;
-          const result = talebookDb.prepare(query).get(bookId, readerId);
+        const query = `
+          SELECT * FROM reading_state
+          WHERE book_id = ? AND reader_id = ?
+        `;
+        const result = talebookDb.prepare(query).get(bookId, readerId);
 
-          if (result) {
-            return result;
-          }
+        if (result) {
+          return result;
         }
       } catch (error) {
         console.warn(`⚠️ 从 Talebook 获取书籍 ${bookId} 的阅读状态失败:`, error.message);
@@ -1551,12 +1566,13 @@ class DatabaseService {
   updateReadingState(bookId, data, readerId = 0) {
     this.ensureInitialized();
 
-    const talebookAvailable = this.connectionManager.isTalebookAvailable();
+    // Talebook 只在「表真实可用」时才读写：空库上写 reading_state 会整体失败，
+    // 且异常被吞掉后调用方误以为同步成功。
+    const talebookDb = this.connectionManager.getUsableTalebookDb();
     const qcBooklogAvailable = this.connectionManager.isQcBooklogAvailable();
 
-    if (talebookAvailable) {
+    if (talebookDb) {
       try {
-        const talebookDb = this.connectionManager.getTalebookDb();
 
         const existing = talebookDb.prepare(`
           SELECT * FROM reading_state
@@ -1782,15 +1798,16 @@ class DatabaseService {
      }
      
      // 如果 QCBookLog 不可用，尝试从 Talebook 数据库获取
-     if (this.connectionManager.isTalebookAvailable()) {
-       try {
-         const result = this.repositories.talebook.qcBookdata.findByBookId(bookId);
-         return result || null;
-       } catch (error) {
-         console.warn(`⚠️ 从 Talebook 获取书籍 ${bookId} 的扩展数据失败:`, error.message);
-         return null;
-       }
-     }
+    // 仓储实例在 initRepositories 中按可用性构建，这里必须用同一判定，否则会取到 null
+    if (this.connectionManager.getUsableTalebookDb() && this.repositories.talebook) {
+      try {
+        const result = this.repositories.talebook.qcBookdata.findByBookId(bookId);
+        return result || null;
+      } catch (error) {
+        console.warn(`⚠️ 从 Talebook 获取书籍 ${bookId} 的扩展数据失败:`, error.message);
+        return null;
+      }
+    }
      
      return null;
    }

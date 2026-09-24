@@ -2,7 +2,7 @@ import { Router } from 'express';
 import fs from 'fs';
 import path from 'path';
 import archiver from 'archiver';
-import gitService from '../services/git/gitService.js';
+import gitService, { GitBadRequestError, GitNotFoundError, GitConflictError } from '../services/git/gitService.js';
 import { reviewSyncOrchestrator } from '../services/git/index.js';
 import reviewExportService from '../services/git/reviewExportService.js';
 import matter from 'gray-matter';
@@ -245,6 +245,23 @@ router.post('/pull', async (req, res, next) => {
 });
 
 /**
+ * 把 Git 业务异常映射到语义化 HTTP 状态码
+ *   参数错误 → 400；资源不存在 → 404；其余 → 交给全局错误中间件（500）
+ */
+function handleGitError(err, res, next) {
+  if (err instanceof GitNotFoundError) {
+    return res.status(404).json({ error: err.message });
+  }
+  if (err instanceof GitBadRequestError) {
+    return res.status(400).json({ error: err.message });
+  }
+  if (err instanceof GitConflictError) {
+    return res.status(409).json({ error: err.message });
+  }
+  return next(err);
+}
+
+/**
  * DELETE /api/git/history/:reviewId/:commitHash
  * 删除某篇书评的单个历史版本（重写历史 + 强推同步删除远端记录）
  */
@@ -259,7 +276,7 @@ router.delete('/history/:reviewId/:commitHash', async (req, res, next) => {
     const result = await gitService.dropCommit(commitHash, { push: true });
     res.json({ success: true, ...result });
   } catch (err) {
-    next(err);
+    handleGitError(err, res, next);
   }
 });
 
@@ -273,7 +290,7 @@ router.delete('/history/:reviewId', async (req, res, next) => {
     const result = await reviewSyncOrchestrator.purgeReviewHistory(reviewId);
     res.json({ success: true, ...result });
   } catch (err) {
-    next(err);
+    handleGitError(err, res, next);
   }
 });
 

@@ -30,6 +30,14 @@ export function useBookPagination() {
   const loadError = ref<string | null>(null);
   const loadMoreError = ref<string | null>(null);
 
+  /**
+   * 全量数据是否已加载完成
+   *
+   * 分页模式下 allBooks 仅含首屏数据，一旦因筛选切到全量就会置为 true。
+   * 后续切换不同筛选条件时数据未变化，可跳过重复请求（避免近 1MB 的往返）。
+   */
+  const isFullDataLoaded = ref(false);
+
   // 是否启用分页（超过 100 本）
   const usePagination = computed(() => totalBooksCount.value > 100);
 
@@ -53,6 +61,7 @@ export function useBookPagination() {
         bookStore.setBooks(books);
         displayBooks.value = books;
         hasMoreBooks.value = false;
+        isFullDataLoaded.value = true;
       } else {
         const result = await bookService.getBooksPaginated({
           page: 1,
@@ -148,6 +157,7 @@ export function useBookPagination() {
     loadMoreError,
     usePagination,
     loadMoreSentinelRef,
+    isFullDataLoaded,
     loadBooksCount,
     loadBooksFirstPage,
     loadMoreBooks,

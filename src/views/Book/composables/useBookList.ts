@@ -46,9 +46,17 @@ export function useBookList(options: UseBookListOptions) {
   const { filterConditions, filterStatus, sortBy, currentGroupId, usePagination, displayBooks } = options;
   const bookStore = useBookStore();
 
-  /** 是否需要全量数据（分组或高级筛选时） */
+  /**
+   * 是否需要全量数据（分组或任一筛选条件激活时）
+   *
+   * 注意：分页模式下 bookStore.allBooks 只保存已加载的部分数据（首屏 pageSize 条），
+   * 若在分页数据上做筛选，会出现「筛未读得到 50 本、筛已读得到 0 本」的假结果。
+   * 因此这里必须与 useBookFilters 的 hasActiveFilters 保持完全一致，
+   * 任一条件激活都切换到全量数据源。
+   */
   const hasAdvancedFilters = (cond: BookFilterConditions) =>
     cond.tags.length > 0 ||
+    cond.readStatus !== '' ||
     cond.book_type !== null ||
     cond.binding1 !== null ||
     cond.binding2 !== null ||
@@ -56,10 +64,16 @@ export function useBookList(options: UseBookListOptions) {
     cond.edge1 !== null ||
     cond.edge2 !== null ||
     cond.publisher.trim() !== '' ||
-    cond.author.trim() !== '';
+    cond.author.trim() !== '' ||
+    cond.favorite !== null ||
+    cond.wants !== null;
 
   const filteredBooks = computed<Book[]>(() => {
-    const needsFullData = !!currentGroupId.value || hasAdvancedFilters(filterConditions.value);
+    // 普通状态筛选（filterStatus）同样需要全量数据
+    const needsFullData =
+      !!currentGroupId.value ||
+      !!filterStatus.value ||
+      hasAdvancedFilters(filterConditions.value);
 
     let books: Book[];
     if (currentGroupId.value && usePagination.value) {
@@ -118,20 +132,32 @@ export function useBookList(options: UseBookListOptions) {
     }
 
     // 排序
-    books.sort((a, b) => {
-      switch (sortBy.value) {
-        case 'title':
-          return (a.title || '').localeCompare(b.title || '');
-        case 'author':
-          return (a.author || '').localeCompare(b.author || '');
-        case 'rating':
-          return (b.rating || 0) - (a.rating || 0);
-        case 'updateTime':
-          return new Date(b.updateTime || 0).getTime() - new Date(a.updateTime || 0).getTime();
-        default:
-          return new Date(b.createTime || 0).getTime() - new Date(a.createTime || 0).getTime();
-      }
-    });
+    // 优化：把 switch 提到比较函数之外，避免每次两两比较都做分支判断；
+    // 时间字段改用 Date.parse 直接解析字符串，并做 NaN 兜底，避免反复 new Date 构造对象。
+    const toTime = (v?: string | number) => {
+      if (!v) return 0;
+      const t = typeof v === 'number' ? v : Date.parse(v);
+      return Number.isNaN(t) ? 0 : t;
+    };
+    const key = sortBy.value;
+    let comparator: (a: Book, b: Book) => number;
+    switch (key) {
+      case 'title':
+        comparator = (a, b) => (a.title || '').localeCompare(b.title || '');
+        break;
+      case 'author':
+        comparator = (a, b) => (a.author || '').localeCompare(b.author || '');
+        break;
+      case 'rating':
+        comparator = (a, b) => (b.rating || 0) - (a.rating || 0);
+        break;
+      case 'updateTime':
+        comparator = (a, b) => toTime(b.updateTime) - toTime(a.updateTime);
+        break;
+      default:
+        comparator = (a, b) => toTime(b.createTime) - toTime(a.createTime);
+    }
+    books.sort(comparator);
 
     return books;
   });

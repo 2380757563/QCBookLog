@@ -18,6 +18,13 @@ import userSettingsService from '../settings/userSettingsService.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+/** 请求参数类错误（对应 HTTP 400） */
+export class GitBadRequestError extends Error {}
+/** 资源不存在类错误（对应 HTTP 404） */
+export class GitNotFoundError extends Error {}
+/** 历史改写冲突类错误（对应 HTTP 409）：需用户调整历史后重试，非服务端故障 */
+export class GitConflictError extends Error {}
+
 const SETTING_KEYS = {
   REPO_URL: 'gitRepoUrl',
   BRANCH: 'gitBranch',
@@ -235,7 +242,7 @@ class GitService {
    * 核心提交并推送：对指定文件 add → commit → push（push 仅在 autoPush=true 或 forcePush=true 时执行）
    * forceLease=true 时使用 --force-with-lease 强推（用于重写历史后的同步删除）
    */
-  async commitAndPush({ files = [], message, forcePush = false, forceLease = false }) {
+  async commitAndPush({ files = [], message, forcePush = false, forceLease = false, expectRemoteHash = '' }) {
     if (!this.isReady()) {
       throw new Error('Git 仓库尚未初始化，请先配置同步仓库');
     }
@@ -283,7 +290,12 @@ class GitService {
 
       if (shouldPush && token && repoUrl) {
         // 只在本次 push 使用带 token 的 URL，不写入 remote 配置
-        const pushOptions = forceLease ? { '--force-with-lease': null } : { '--set-upstream': null };
+        let pushOptions = { '--set-upstream': null };
+        if (forceLease) {
+          // 先确认远端不含本地不知道的提交，再强推（详见 _assertRemoteIsKnown 说明）
+          await this._assertRemoteIsKnown(git, repoUrl, token, branch, expectRemoteHash);
+          pushOptions = { '--force': null };
+        }
         await this._pushWithFallback(git, branch, pushOptions);
         result.pushed = true;
         await userSettingsService.saveSetting(0, SETTING_KEYS.LAST_SYNC_AT, new Date().toISOString());
@@ -407,6 +419,28 @@ class GitService {
   }
 
   /**
+   * 回滚仓库到指定提交：先尝试中止可能残留的 rebase，再硬回退。
+   * @param {Object} git simple-git 实例
+   * @param {string} headHash 目标提交
+   * @param {string} branch 分支名
+   * @returns {boolean} 是否回滚成功
+   */
+  async _rollbackTo(git, headHash, branch) {
+    try {
+      // rebase/filter-branch 可能中途失败留下中断态，需先中止
+      await git.raw(['rebase', '--abort']).catch(() => {});
+      await git.raw(['cherry-pick', '--abort']).catch(() => {});
+      await git.reset(['--hard', headHash]);
+      // 清理 filter-branch 可能留下的备份引用
+      await git.raw(['update-ref', '-d', `refs/original/refs/heads/${branch}`]).catch(() => {});
+      return true;
+    } catch (e) {
+      console.error('[GitService] 回滚失败:', e.message);
+      return false;
+    }
+  }
+
+  /**
    * 删除单个历史 commit（重写历史），可同步强推删除远端记录。
    * @param {string} commitHash - 要删除的提交
    * @param {Object} options
@@ -433,30 +467,79 @@ class GitService {
         target = (await git.revparse([`${commitHash}^{commit}`])).trim();
         parent = (await git.revparse([`${target}^`])).trim();
       } catch (e) {
-        throw new Error('无效的提交哈希：' + commitHash);
+        throw new GitBadRequestError('无效的提交哈希：' + commitHash);
       }
       if (!parent) {
-        throw new Error('该提交是仓库初始提交，无法单独删除');
+        throw new GitBadRequestError('该提交是仓库初始提交，无法单独删除');
       }
 
-      if (target === headHash) {
-        // 目标就是 HEAD：直接回退到父提交
-        await git.reset(['--hard', parent]);
-      } else {
-        // 中间提交：rebase --onto 丢弃该提交
-        await git.raw(['rebase', '--onto', parent, target, branch]);
-      }
-
+      // 重写历史 + 强推需保证原子性：任一步失败都回滚到原 HEAD，
+      // 避免本地与远端静默分叉、或仓库卡在 rebase 中断态
       let pushed = false;
-      if (push) {
-        pushed = await this._pushForceWithLease(git, branch);
+      try {
+        if (target === headHash) {
+          // 目标就是 HEAD：直接回退到父提交
+          await git.reset(['--hard', parent]);
+        } else {
+          // 中间提交：rebase --onto 丢弃该提交
+          await git.raw(['rebase', '--onto', parent, target, branch]);
+        }
+
+        if (push) {
+          // 重写后本地 HEAD 是全新构造的，与远端无祖先关系，
+          // 故要求远端严格等于重写前的本地 HEAD（即操作开始时的远端状态）
+          pushed = await this._pushForceWithLease(git, branch, headHash);
+        }
+      } catch (err) {
+        await this._rollbackTo(git, headHash, branch);
+        // 语义化错误（如安全校验中止）已带明确含义与状态码，原样上抛
+        if (err instanceof GitConflictError || err instanceof GitBadRequestError || err instanceof GitNotFoundError) {
+          throw err;
+        }
+        // 删除中间提交需重放其后的提交，若这些提交改动了同一处内容，
+        // 会产生真实的内容冲突（非服务端故障），提示用户改用其他方式处理
+        const raw = err?.message || '';
+        if (/CONFLICT|could not apply|Merge conflict/i.test(raw)) {
+          throw new GitConflictError(
+            '该提交之后的改动与删除操作存在内容冲突，无法自动合并。请先处理相关改动后再重试',
+          );
+        }
+        throw new Error(raw || '删除历史失败');
       }
+
       return {
         dropped: target,
         head: (await git.revparse(['HEAD'])).trim(),
         pushed,
       };
     });
+  }
+
+  /** 取当前配置的分支名（默认 main） */
+  async getBranch() {
+    return (await this._getSetting(SETTING_KEYS.BRANCH)) || 'main';
+  }
+
+  /** 取本地 HEAD 的 commit hash（尚无提交时返回空字符串） */
+  async getHeadHash() {
+    if (!this.isReady() || !this._git) return '';
+    try {
+      return (await this._git.revparse(['HEAD'])).trim();
+    } catch (e) {
+      return '';
+    }
+  }
+
+  /**
+   * 把仓库回滚到指定提交（供上层在多步操作失败时调用）
+   * @returns {Promise<boolean>} 是否回滚成功
+   */
+  async rollbackTo(commitHash, branch) {
+    if (!this.isReady() || !this._git) return false;
+    const br = branch || (await this.getBranch());
+    // 注意：不能用 _enqueue —— 该方法常在外层 git 任务内被调用，
+    // 入队会排到外层任务之后，而外层正等待它返回，导致死锁
+    return this._rollbackTo(this._git, commitHash, br);
   }
 
   /**
@@ -471,42 +554,126 @@ class GitService {
     }
     return this._enqueue('purge', async (git) => {
       const branch = (await this._getSetting(SETTING_KEYS.BRANCH)) || 'main';
+      // filter-branch 自身要求工作区干净，无法在脏工作区上重写历史
       const status = await git.status();
       if (!status.isClean()) {
         throw new Error('工作区有未提交的变更，请先同步或保存后再清空历史');
       }
 
-      // index-filter：在每个提交中移除该文件；--prune-empty 丢弃因此变空的提交
-      const rmCmd = `git rm --cached --ignore-unmatch '${String(relativePath).replace(/'/g, "\\'")}'`;
-      await git.raw(['filter-branch', '--force', '--index-filter', rmCmd, '--prune-empty', '--', branch]);
-
-      // 清理 filter-branch 产生的备份引用与 reflog
-      await git.raw(['update-ref', '-d', `refs/original/refs/heads/${branch}`]).catch(() => {});
-      await git.raw(['reflog', 'expire', '--expire=now', '--all']).catch(() => {});
-      await git.raw(['gc', '--prune=now', '--quiet']).catch(() => {});
-
+      // filter-branch 会重写全部历史，失败时需回滚，避免仓库停留在中间状态
+      const headHash = (await git.revparse(['HEAD'])).trim();
       let pushed = false;
-      if (push) {
-        pushed = await this._pushForceWithLease(git, branch);
+      try {
+        // index-filter：在每个提交中移除该文件；--prune-empty 丢弃因此变空的提交
+        const rmCmd = `git rm --cached --ignore-unmatch '${String(relativePath).replace(/'/g, "\\'")}'`;
+        await git.raw(['filter-branch', '--force', '--index-filter', rmCmd, '--prune-empty', '--', branch]);
+
+        // 清理 filter-branch 产生的备份引用与 reflog
+        await git.raw(['update-ref', '-d', `refs/original/refs/heads/${branch}`]).catch(() => {});
+        await git.raw(['reflog', 'expire', '--expire=now', '--all']).catch(() => {});
+        await git.raw(['gc', '--prune=now', '--quiet']).catch(() => {});
+
+        if (push) {
+          pushed = await this._pushForceWithLease(git, branch);
+        }
+      } catch (err) {
+        await this._rollbackTo(git, headHash, branch);
+        if (err instanceof GitConflictError || err instanceof GitBadRequestError || err instanceof GitNotFoundError) {
+          throw err;
+        }
+        const raw = err?.message || '';
+        if (/CONFLICT|could not apply|Merge conflict/i.test(raw)) {
+          throw new GitConflictError('清空历史过程中出现内容冲突，无法自动完成。请先处理相关改动后再重试');
+        }
+        throw new Error(raw || '清空历史失败');
       }
       return { purged: relativePath, pushed };
     });
   }
 
   /**
-   * 强推当前分支到远端（重写历史后同步删除远端记录），使用 --force-with-lease
+   * 强推当前分支到远端（重写历史后同步删除远端记录）
+   *
+   * 安全前提：远端当前 hash 必须是「本地已知的提交」——即它是本地 HEAD 的祖先。
+   * 否则说明远端存在本地不知道的新提交（他人推送或本地未拉取），中止推送以免覆盖。
+   *
+   * 另：仓库 remote 配置为裸 URL（无命名 remote），refs/remotes/* 为空，
+   * 不带期望值的 --force-with-lease 会被 git 一律判为 stale info 而拒绝，
+   * 因此这里用「祖先校验 + --force」替代，语义更明确。
    */
-  async _pushForceWithLease(git, branch) {
+  async _pushForceWithLease(git, branch, expectKnown = '') {
     const token = await this._getSetting(SETTING_KEYS.TOKEN);
     const repoUrl = await this._getSetting(SETTING_KEYS.REPO_URL);
     if (!token || !repoUrl) {
       throw new Error('未配置仓库地址或 Token，无法强推');
     }
-    await this._pushWithFallback(git, branch, { '--force-with-lease': null });
+    await this._assertRemoteIsKnown(git, repoUrl, token, branch, expectKnown);
+    await this._pushWithFallback(git, branch, { '--force': null });
     await userSettingsService.saveSetting(0, SETTING_KEYS.LAST_SYNC_AT, new Date().toISOString());
     await userSettingsService.saveSetting(0, SETTING_KEYS.LAST_ERROR, '');
     await this._maybeGc();
     return true;
+  }
+
+  /**
+   * 查询远端指定分支的当前 hash（实时查询，不使用测速缓存）
+   *
+   * 注意：此处不能用 selectFastestRemote() 的缓存结果 —— 该缓存有 30s TTL，
+   * 而本方法服务于「强推前的安全校验」，必须反映远端此刻的真实状态，
+   * 否则刚推送成功后紧接着的第二次操作会因读到过期 hash 而被误判为「远端已被更新」。
+   * @returns {string|null} 远端 hash（分支不存在时为空字符串）；查询失败返回 null
+   */
+  async _getRemoteBranchHash(git, repoUrl, token, branch) {
+    try {
+      const out = await withTimeout(
+        git.listRemote([this._buildAuthedUrl(repoUrl, token), `refs/heads/${branch}`]),
+        NETWORK_TIMEOUT_MS,
+        '查询远端分支状态超时',
+      );
+      // 输出形如 "<hash>\trefs/heads/main"，分支不存在时为空字符串
+      return String(out || '').trim().split('\t')[0].trim();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /**
+   * 校验远端分支当前状态是否为「本地已知」，防止强推覆盖他人提交。
+   *
+   * 两种模式：
+   *   1) expectKnown 为空（普通提交后强推）：远端 HEAD 必须是本地 HEAD 的祖先，
+   *      即本地已包含远端全部提交。
+   *   2) expectKnown 非空（重写历史后强推）：本地 HEAD 是全新构造的，与远端无祖先关系，
+   *      因此改为要求远端 HEAD 严格等于 expectKnown（重写操作开始前记录的本地 HEAD）。
+   *
+   * 远端分支不存在（首次推送）时均视为安全。
+   * 校验不通过统一抛 GitConflictError（HTTP 409）：
+   * 这属于「需用户先同步再重试」的可恢复情况，不应作为服务端故障（500）上报。
+   * @throws {GitConflictError} 校验不通过时抛出
+   */
+  async _assertRemoteIsKnown(git, repoUrl, token, branch, expectKnown = '') {
+    const remoteHash = await this._getRemoteBranchHash(git, repoUrl, token, branch);
+    if (remoteHash === null) {
+      throw new GitConflictError('无法获取远端分支当前状态，为避免覆盖他人提交，已中止操作，请稍后重试');
+    }
+    // 远端分支不存在：允许创建
+    if (remoteHash === '') return;
+
+    if (expectKnown) {
+      if (remoteHash === expectKnown) return;
+      throw new GitConflictError('远端已被其他改动更新，请先拉取后再操作，以免覆盖他人内容');
+    }
+
+    const localHead = (await git.revparse(['HEAD'])).trim();
+    if (remoteHash === localHead) return;
+    // 远端 hash 是本地 HEAD 的祖先 → 本地已包含远端全部提交，可安全覆盖
+    try {
+      await git.raw(['merge-base', '--is-ancestor', remoteHash, localHead]);
+      return;
+    } catch (_) {
+      // 非 0 退出码表示不是祖先
+    }
+    throw new GitConflictError('远端存在本地尚未同步的新提交，请先拉取后再操作，以免覆盖他人内容');
   }
 
   /**

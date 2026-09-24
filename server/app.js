@@ -263,6 +263,7 @@ import bookSourceSettingsRoutes from './routes/bookSourceSettings.js';
 import reviewRoutes from './routes/reviews.js';
 import gitSyncRoutes from './routes/gitSync.js';
 import doulistRoutes from './routes/doulist.js';
+import annualSummaryRoutes from './routes/annualSummary.js';
 import dbrService from './services/legacy/dbrService.js';
 
 // 注册路由
@@ -291,6 +292,7 @@ app.use('/api/book-source-settings', bookSourceSettingsRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/git', gitSyncRoutes);
 app.use('/api/doulist', doulistRoutes);
+app.use('/api/annual-summary', annualSummaryRoutes);
 
 // 书源 API 代理：统一由插件层处理
 app.get('/api/tanshu/isbn/:isbn', async (req, res) => {

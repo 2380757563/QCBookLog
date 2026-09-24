@@ -36,6 +36,8 @@ class DatabaseConnectionManager {
     this.calibreError = null;
     this.talebookError = null;
     this.qcBooklogError = null;
+    // Talebook 关键表可用性缓存：null 表示尚未探测
+    this._talebookUsable = null;
   }
 
   /**
@@ -261,13 +263,77 @@ class DatabaseConnectionManager {
         
         this.ensureDefaultReader();
         this.upgradeTalebookSchema();
+        this.detectTalebookUsability();
       } catch (error) {
         console.error('❌ Talebook 数据库连接失败:', error.message);
         console.error('❌ 数据库路径:', this.config.talebookPath);
         this.talebookDb = null;
+        this._talebookUsable = null;
         this.talebookError = error.message;
       }
     }
+  }
+
+  /**
+   * 探测 Talebook 关键业务表是否真实可用
+   *
+   * 背景：Talebook 库文件可能只是「存在但为空」，此时连接对象非空、
+   * 但 reading_state / items 等表并不存在。若仅用 `if (this.talebookDb)`
+   * 判定数据来源，查询会抛错后被静默吞掉，导致始终读不到真实数据。
+   * 这里把「表是否可用」作为唯一判定依据，并将结果缓存。
+   *
+   * @returns {boolean} Talebook 关键表是否可用
+   */
+  detectTalebookUsability() {
+    if (!this.talebookDb) {
+      this._talebookUsable = false;
+      return false;
+    }
+
+    try {
+      const requiredTables = ['reading_state', 'items'];
+      const placeholders = requiredTables.map(() => '?').join(',');
+      const rows = this.talebookDb
+        .prepare(
+          `SELECT name FROM sqlite_master
+           WHERE type = 'table' AND name IN (${placeholders})`
+        )
+        .all(...requiredTables);
+      const found = new Set(rows.map((r) => r.name));
+      this._talebookUsable = requiredTables.every((t) => found.has(t));
+
+      if (this._talebookUsable) {
+        console.log('✅ Talebook 关键表可用（reading_state / items）');
+      } else {
+        const missing = requiredTables.filter((t) => !found.has(t));
+        console.warn(
+          `⚠️ Talebook 缺少关键表 [${missing.join(', ')}]，将降级使用 QCBookLog 数据库`
+        );
+        this.talebookError = `缺少关键表: ${missing.join(', ')}`;
+      }
+    } catch (error) {
+      console.warn('⚠️ Talebook 可用性探测失败:', error.message);
+      this._talebookUsable = false;
+      this.talebookError = error.message;
+    }
+
+    return this._talebookUsable;
+  }
+
+  /**
+   * 获取「真实可用」的 Talebook 数据库实例
+   *
+   * 与 getTalebookDb() 的区别：当 Talebook 缺少关键表时返回 null，
+   * 使调用方原有的 `if (talebookDb) ... else ...` 降级分支能正确走通。
+   * 若调用方需要库路径等元信息（配置页展示），请使用 getTalebookDb()。
+   *
+   * @returns {import('better-sqlite3').Database|null}
+   */
+  getUsableTalebookDb() {
+    if (this._talebookUsable === null) {
+      this.detectTalebookUsability();
+    }
+    return this._talebookUsable ? this.talebookDb : null;
   }
 
   upgradeTalebookSchema() {
@@ -1210,6 +1276,8 @@ class DatabaseConnectionManager {
     this.calibreError = null;
     this.talebookError = null;
     this.qcBooklogError = null;
+    // 路径可能变化，清空可用性缓存强制重新探测
+    this._talebookUsable = null;
     
     if (this.calibreDb) {
       this.calibreDb.close();
@@ -1243,6 +1311,7 @@ class DatabaseConnectionManager {
     this.calibreError = null;
     this.talebookError = null;
     this.qcBooklogError = null;
+    this._talebookUsable = null;
   }
 
   async createNewCalibreDatabase(dbPath, libraryName = 'My Library') {

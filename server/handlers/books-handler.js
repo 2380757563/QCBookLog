@@ -52,6 +52,55 @@ async function downloadRemoteCover(coverUrl, bookPath) {
 }
 
 /**
+ * 书籍列表默认返回的字段白名单
+ *
+ * 背景：全量列表响应约 957KB（407 本 × 47 字段），其中 description、多语言字段等
+ * 体积占比很高，但列表页仅用于渲染书卡，并不需要。裁剪后响应体可降至约 1/5，
+ * 显著降低传输耗时与前端反序列化开销。
+ *
+ * 需要完整字段时（详情页、导出等）传 full=true 或 fields=*
+ */
+const LIST_FIELDS = [
+  'id', 'title', 'author', 'coverUrl', 'localCoverData', 'path',
+  'readStatus', 'read_state', 'rating', 'tags',
+  'binding1', 'binding2', 'book_type', 'paper1', 'edge1', 'edge2',
+  'pages', 'totalPages', 'reading_progress', 'total_reading_time',
+  'read_pages', 'reading_count', 'last_read_date', 'readDuration',
+  'createTime', 'updateTime', 'last_modified', 'timestamp', 'publishYear',
+  'seriesIndex', 'publisher', 'favorite', 'wants', 'groups', 'hasReview', 'bookmarkCount'
+];
+
+/**
+ * 按白名单裁剪书籍字段
+ * @param {Array} books 原始书籍数组
+ * @param {string[]|null} fields 指定字段；null 表示返回全字段
+ * @returns {Array} 裁剪后的数组
+ */
+function pickBookFields(books, fields) {
+  if (!Array.isArray(books) || !fields) return books;
+  return books.map((book) => {
+    if (!book || typeof book !== 'object') return book;
+    const out = {};
+    for (const k of fields) {
+      if (k in book) out[k] = book[k];
+    }
+    return out;
+  });
+}
+
+/**
+ * 解析 fields 查询参数
+ * @returns {string[]|null} null 表示不过滤（返回全字段）
+ */
+function resolveFields(req) {
+  if (req.query.full === 'true' || req.query.fields === '*') return null;
+  if (typeof req.query.fields === 'string' && req.query.fields.trim()) {
+    return req.query.fields.split(',').map((s) => s.trim()).filter(Boolean);
+  }
+  return LIST_FIELDS;
+}
+
+/**
  * 获取所有书籍（支持分页）
  */
 async function getAllBooks(req, res) {
@@ -72,10 +121,12 @@ async function getAllBooks(req, res) {
         sortBy,
         sortOrder
       });
-      res.json(result);
+      const fields = resolveFields(req);
+      res.json({ ...result, list: pickBookFields(result.list, fields) });
     } else {
       const books = await calibreService.getAllBooksFromCalibre(useCache, readerId);
-      res.json(books);
+      const fields = resolveFields(req);
+      res.json(pickBookFields(books, fields));
     }
   } catch (error) {
     console.error('⚠️ 获取书籍列表失败，返回空数组:', error.message);

@@ -72,6 +72,27 @@
       </span>
     </div>
 
+    <!-- 书单内：购书 / 阅读进度条 -->
+    <div
+      v-if="filterDoulistId && selectedImport && (selectedImport.is_buy === 1 || selectedImport.is_read === 1)"
+      class="doulist-progress"
+    >
+      <div v-if="selectedImport.is_buy === 1" class="dp-row">
+        <span class="dp-label">已购买</span>
+        <div class="dp-track">
+          <div class="dp-fill dp-fill--buy" :style="{ width: pctOf(selectedImport.buy_done, selectedImport.buy_total) + '%' }"></div>
+        </div>
+        <span class="dp-count">{{ selectedImport.buy_done }}/{{ selectedImport.buy_total }}</span>
+      </div>
+      <div v-if="selectedImport.is_read === 1" class="dp-row">
+        <span class="dp-label">已阅读</span>
+        <div class="dp-track">
+          <div class="dp-fill dp-fill--read" :style="{ width: pctOf(selectedImport.read_done, selectedImport.read_total) + '%' }"></div>
+        </div>
+        <span class="dp-count">{{ selectedImport.read_done }}/{{ selectedImport.read_total }}</span>
+      </div>
+    </div>
+
     <!-- 文件夹视图：全部书单且无搜索关键字 -->
     <div v-if="showFolders" class="folders-grid">
       <div
@@ -98,16 +119,35 @@
           <span v-if="isDoubanId(imp.doulist_id)" class="dou-badge">豆</span>
           <span class="folder-card__name">{{ imp.doulist_title || `书单 ${imp.doulist_id}` }}</span>
         </div>
+        <!-- 购书 / 阅读进度条 -->
+        <div v-if="imp.is_buy === 1 || imp.is_read === 1" class="folder-card__progress">
+          <div v-if="imp.is_buy === 1" class="fp-row">
+            <span class="fp-label fp-label--buy">购</span>
+            <div class="fp-track">
+              <div class="fp-fill fp-fill--buy" :style="{ width: pctOf(imp.buy_done, imp.buy_total) + '%' }"></div>
+            </div>
+            <span class="fp-text">{{ imp.buy_done }}/{{ imp.buy_total }}</span>
+          </div>
+          <div v-if="imp.is_read === 1" class="fp-row">
+            <span class="fp-label fp-label--read">读</span>
+            <div class="fp-track">
+              <div class="fp-fill fp-fill--read" :style="{ width: pctOf(imp.read_done, imp.read_total) + '%' }"></div>
+            </div>
+            <span class="fp-text">{{ imp.read_done }}/{{ imp.read_total }}</span>
+          </div>
+        </div>
         <!-- 双分类角标 -->
         <div class="folder-card__cats">
           <span v-if="imp.is_buy === 1" class="folder-card__cat folder-card__cat--buy">购书</span>
           <span v-if="imp.is_read === 1" class="folder-card__cat folder-card__cat--read">阅读</span>
         </div>
-        <!-- 数量角标 -->
-        <div class="folder-card__count">
+        <!-- 数量角标（有奖章时下移避让） -->
+        <div class="folder-card__count" :class="{ 'folder-card__count--medal': isMedaled(imp) }">
           <span class="count-number">{{ imp.item_count }}</span>
           <span class="count-label">本</span>
         </div>
+        <!-- 完成奖章：勾选的分类各自进度 100% 时显示在右上角 -->
+        <img v-if="isMedaled(imp)" :src="medalImg" class="folder-card__medal" alt="已完成" />
       </div>
 
       <div v-if="visibleImports.length === 0 && !loading" class="empty-text">
@@ -406,6 +446,9 @@
       v-model:visible="showShelveDialog"
       :task-id="activeShelveTaskId"
     />
+
+    <!-- 书单完成礼花（常驻挂载，通过 ref 触发） -->
+    <ConfettiBurst ref="confettiRef" />
   </div>
 </template>
 
@@ -423,6 +466,8 @@ import type { Book } from '@/api/book/types';
 import QcSelect from '@/components/QcSelect.vue';
 import type { QcSelectOption } from '@/components/QcSelect.vue';
 import DoulistShelveDialog from './DoulistShelveDialog.vue';
+import ConfettiBurst from '@/components/ConfettiBurst.vue';
+import medalImg from '@/pic/奖章.png';
 import { useDoulistUiSettings } from '@/composables/useDoulistUiSettings';
 import { startShelveTask, shelveState } from '@/composables/doulistShelveTask';
 import { startRefreshTask, clearRefreshTask, refreshState } from '@/composables/doulistRefreshTask';
@@ -603,8 +648,41 @@ const setCategory = (value: '' | 'buy' | 'read') => {
 const fetchImports = async () => {
   try {
     const res = await doulistApi.imports();
+    // 记录刷新前的奖章状态，用于识别「从未完成 → 完成」瞬间
+    const wasMedaled = new Map(imports.value.map((i) => [i.doulist_id, isMedaled(i)]));
     imports.value = res.data || [];
+    for (const imp of imports.value) {
+      if (!isMedaled(imp)) continue;
+      // 本次会话内从未完成变为完成 → 播放礼花；首次加载即为完成只记录不重放（刷新不重放）
+      if (wasMedaled.get(imp.doulist_id) === false) confettiRef.value?.fire();
+      rememberMedal(imp.doulist_id);
+    }
   } catch { /* 忽略 */ }
+};
+
+/* ---------- 购书 / 阅读进度与完成奖章 ---------- */
+// 进度百分比（总数为 0 时按 0 处理）
+const pctOf = (done: number, total: number) => (total > 0 ? Math.round((done / total) * 100) : 0);
+
+// 奖章条件：勾选的分类各自进度 100%（勾选分类总数为 0 不算完成）
+const isMedaled = (imp: DoulistImportRecord) => {
+  if (imp.is_buy === 1 && (imp.buy_total === 0 || imp.buy_done < imp.buy_total)) return false;
+  if (imp.is_read === 1 && (imp.read_total === 0 || imp.read_done < imp.read_total)) return false;
+  return imp.is_buy === 1 || imp.is_read === 1;
+};
+
+const confettiRef = ref<InstanceType<typeof ConfettiBurst> | null>(null);
+
+// 已达成过完成态的书单（localStorage 持久化，跨刷新不重放礼花）
+const MEDAL_SEEN_KEY = 'qc_doulist_medal_seen';
+const medalSeen: Set<string> = (() => {
+  try { return new Set(JSON.parse(localStorage.getItem(MEDAL_SEEN_KEY) || '[]')); }
+  catch { return new Set(); }
+})();
+const rememberMedal = (id: string) => {
+  if (medalSeen.has(id)) return;
+  medalSeen.add(id);
+  try { localStorage.setItem(MEDAL_SEEN_KEY, JSON.stringify([...medalSeen])); } catch { /* 忽略 */ }
 };
 
 /* ---------- 书单分类（双标志开关，至少保留一个） ---------- */
@@ -621,6 +699,8 @@ const toggleDoulistFlag = async (flag: 'is_buy' | 'is_read') => {
     await doulistApi.setDoulistCategories(imp.doulist_id, newBuy === 1, newRead === 1);
     imp.is_buy = newBuy;
     imp.is_read = newRead;
+    // 分类变化影响奖章判定条件，刷新统计并检测完成状态
+    fetchImports();
     if (filterDoulistId.value === imp.doulist_id) reload();
   } catch (err: any) {
     console.error('设置书单分类失败:', err);
@@ -739,6 +819,7 @@ const applyShelveResult = () => {
   if (addedIds.length) {
     clearSelection();
     reload();
+    fetchImports(); // 入库可能使书单达成 100%，刷新统计并检测奖章/礼花
   }
 };
 
@@ -767,6 +848,7 @@ const setReadStatus = async (book: DoulistBook, status: 'unread' | 'reading' | '
   try {
     await doulistApi.setReadStatus(book.douban_id, status);
     book.read_status = status;
+    fetchImports(); // 阅读状态变化影响阅读进度统计
   } catch (err: any) {
     console.error('更新阅读状态失败:', err);
   }
@@ -796,6 +878,7 @@ const setLibraryReadStatus = async (book: DoulistBook, status: 'unread' | 'readi
     const applyRes = await doulistApi.applyReadStatus(book.douban_id);
     book.read_status = status;
     book.library_read_status = applyRes.readStatus || STATUS_OPTIONS.find((o) => o.value === status)?.label || null;
+    fetchImports(); // 阅读状态变化影响阅读进度统计
   } catch (err: any) {
     console.error('更新书库阅读状态失败:', err);
     alert(err?.message || '更新书库阅读状态失败');
@@ -1449,6 +1532,132 @@ onMounted(async () => {
   font-size: 12px;
   font-weight: 400;
   color: rgba(255, 255, 255, 0.9);
+}
+
+/* 有奖章时数量角标下移避让 */
+.folder-card__count--medal {
+  top: 48px;
+}
+
+/* 完成奖章（右上角，出现时弹跳动画） */
+.folder-card__medal {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 5px rgba(255, 176, 0, 0.6));
+  z-index: 11;
+  animation: medal-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes medal-pop {
+  0% { transform: scale(0) rotate(-30deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+/* 文件夹卡片购书/阅读进度条 */
+.folder-card__progress {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0 10px 8px;
+}
+
+.fp-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.fp-label {
+  width: 14px;
+  height: 14px;
+  line-height: 14px;
+  text-align: center;
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.fp-label--buy { background-color: #ff6b35; }
+.fp-label--read { background-color: #00b51d; }
+
+.fp-track {
+  flex: 1;
+  height: 4px;
+  background-color: var(--bg-secondary);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.fp-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+.fp-fill--buy { background-color: #ff6b35; }
+.fp-fill--read { background-color: #00b51d; }
+
+.fp-text {
+  min-width: 34px;
+  text-align: right;
+  font-size: 10px;
+  color: var(--text-hint);
+  flex-shrink: 0;
+}
+
+/* 书单详情页购书/阅读进度条 */
+.doulist-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+}
+
+.dp-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dp-label {
+  width: 44px;
+  font-size: 12px;
+  color: var(--text-hint);
+  flex-shrink: 0;
+}
+
+.dp-track {
+  flex: 1;
+  height: 8px;
+  background-color: var(--bg-secondary);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.dp-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+
+.dp-fill--buy { background: linear-gradient(90deg, #ff9f43, #ff6b35); }
+.dp-fill--read { background: linear-gradient(90deg, #4cd964, #00b51d); }
+
+.dp-count {
+  min-width: 48px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--text-hint);
+  flex-shrink: 0;
 }
 
 .dou-badge {

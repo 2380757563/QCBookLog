@@ -41,17 +41,20 @@ class ReadingStateSyncService {
   }
 
   /**
-   * 获取 Talebook 数据库实例
+   * 获取 Talebook 数据库实例（仅当关键表真实可用）
    */
   getTalebookDb() {
-    return databaseService.connectionManager.getTalebookDb();
+    return databaseService.connectionManager.getUsableTalebookDb();
   }
 
   /**
    * 检查 Talebook 数据库是否可用
+   *
+   * 用「关键表真实可用」判定：空库文件同样存在，若只看连接对象会误判为可用，
+   * 导致 reading_state 查询抛 "no such table" 并写入 sync_error。
    */
   isTalebookAvailable() {
-    return databaseService.isTalebookAvailable();
+    return databaseService.isTalebookUsable();
   }
 
   /**

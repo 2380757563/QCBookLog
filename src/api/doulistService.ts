@@ -121,6 +121,12 @@ export interface DoulistImportRecord {
   last_start: number;
   /** 前 4 张书籍封面 URL，用 | 分隔（文件夹缩略图用） */
   covers: string | null;
+  /** 购书清单进度：已购买（匹配到书库）/ 总数；未勾选购书分类时为 0 */
+  buy_done: number;
+  buy_total: number;
+  /** 阅读清单进度：已阅读（书内已读 或 书库已读）/ 总数；未勾选阅读分类时为 0 */
+  read_done: number;
+  read_total: number;
   updated_at: string;
 }
 

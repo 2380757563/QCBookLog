@@ -738,9 +738,11 @@ class QcDoulistRepository {
 
   /**
    * 导入记录列表（附每本书单前 4 张封面，供前端文件夹缩略图使用）
+   * 并附加购书/阅读进度统计：buy_done/buy_total/read_done/read_total
+   * 已购买 = 书籍可匹配到书库（on_shelf）；已阅读 = 书内已标记已读 或 书库阅读状态为已读
    */
   listImports() {
-    return this.ensureDb().prepare(`
+    const rows = this.ensureDb().prepare(`
       SELECT i.*,
         (
           SELECT COUNT(*) FROM qc_doulist_import_items it WHERE it.doulist_id = i.doulist_id
@@ -758,6 +760,57 @@ class QcDoulistRepository {
       FROM qc_doulist_imports i
       ORDER BY i.updated_at DESC
     `).all();
+    this.attachImportStats(rows);
+    return rows;
+  }
+
+  /**
+   * 批量为书单记录附加购书/阅读进度统计（buy_done/buy_total/read_done/read_total）
+   * 匹配策略与 listBooks 一致：calibre 索引 ISBN 精确优先、书名作者兜底；
+   * 未勾选对应分类的书单统计字段为 0（前端只对勾选的分类渲染进度条）
+   */
+  attachImportStats(rows) {
+    for (const r of rows) {
+      r.buy_done = 0; r.buy_total = 0; r.read_done = 0; r.read_total = 0;
+    }
+    if (!rows.length) return;
+    const db = this.ensureDb();
+    const items = db.prepare(`
+      SELECT it.doulist_id, it.douban_id, b.*
+      FROM qc_doulist_import_items it
+      JOIN qc_doulist_books b ON b.douban_id = it.douban_id
+    `).all();
+    if (!items.length) return;
+
+    // 每本豆瓣书只匹配一次书库，避免跨书单重复匹配
+    const index = this.getCalibreLibraryIndex();
+    const calibreIdByDouban = new Map();
+    for (const it of items) {
+      if (!calibreIdByDouban.has(it.douban_id)) {
+        calibreIdByDouban.set(it.douban_id, index ? this.matchLibraryBook(index, it) : null);
+      }
+    }
+    const matchedIds = [...new Set([...calibreIdByDouban.values()].filter(Boolean))];
+    const stateByBookId = this.getReadStatusesByCalibreBookIds(matchedIds);
+
+    // 按书单聚合：总数 / 已购（匹配到书库）/ 已读（书内标记已读 或 书库已读）
+    const perDoulist = new Map();
+    for (const it of items) {
+      const s = perDoulist.get(it.doulist_id) || { n: 0, bought: 0, read: 0 };
+      s.n += 1;
+      const calibreId = calibreIdByDouban.get(it.douban_id);
+      if (calibreId) s.bought += 1;
+      const libRead = stateByBookId.get(calibreId);
+      if (it.read_status === 'read' || libRead === '已读') s.read += 1;
+      perDoulist.set(it.doulist_id, s);
+    }
+
+    for (const r of rows) {
+      const s = perDoulist.get(r.doulist_id);
+      if (!s) continue;
+      if (r.is_buy === 1) { r.buy_total = s.n; r.buy_done = s.bought; }
+      if (r.is_read === 1) { r.read_total = s.n; r.read_done = s.read; }
+    }
   }
 
 }

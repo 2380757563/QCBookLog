@@ -1,4 +1,4 @@
-import gitService from './gitService.js';
+import gitService, { GitBadRequestError, GitNotFoundError, GitConflictError } from './gitService.js';
 import reviewExportService from './reviewExportService.js';
 import databaseService from '../legacy/database-service.js';
 
@@ -89,27 +89,48 @@ async function syncAllPending(forcePush = false) {
  */
 async function purgeReviewHistory(reviewId) {
   if (!gitService.isReady()) {
-    throw new Error('Git 仓库尚未初始化');
+    throw new GitBadRequestError('Git 仓库尚未初始化');
   }
   const filePath = reviewExportService.getReviewFilePath(reviewId);
   if (!filePath) {
-    throw new Error('书评文件未找到，可能尚未同步到 Git');
+    throw new GitNotFoundError('书评文件未找到，可能尚未同步到 Git');
   }
-  // 1. 先把最新版本落到工作区（若有变化会 commit，确保清空前的状态是最新的）
-  reviewExportService.exportReview(reviewId);
-  // 2. 从所有历史提交中移除该文件（重写历史）
-  const purged = await gitService.purgeFileHistory(filePath, { push: false });
-  // 3. filter-branch 后 HEAD 不再包含该文件，重新导出当前版本
-  reviewExportService.exportReview(reviewId);
-  // 4. 提交当前版本并强推（重写历史后与远端分叉，必须 force-with-lease）
-  const result = await gitService.commitAndPush({
-    files: [filePath],
-    message: `review: 清空书评历史，仅保留当前版本`,
-    forcePush: true,
-    forceLease: true,
-  });
-  reviewExportService.markSynced([reviewId]);
-  return { ...purged, ...result };
+  const branch = await gitService.getBranch();
+  // 记录整个流程开始前的 HEAD，任一步失败都回滚到此处，保证本地与远端不分叉
+  const originalHead = await gitService.getHeadHash();
+  try {
+    // 1. 先把最新版本落到工作区并提交。
+    //    filter-branch 自身要求工作区干净（"Cannot rewrite branches: You have unstaged changes"），
+    //    因此必须先提交，不能只跳过前置校验。
+    reviewExportService.exportReview(reviewId);
+    await gitService.commitAndPush({
+      files: [filePath],
+      message: 'review: 清空书评历史前保存当前版本',
+    });
+    // 2. 从所有历史提交中移除该文件（重写历史）
+    const purged = await gitService.purgeFileHistory(filePath, { push: false });
+    // 3. filter-branch 后 HEAD 不再包含该文件，重新导出当前版本
+    reviewExportService.exportReview(reviewId);
+    // 4. 提交当前版本并强推（重写历史后与远端分叉，必须 force-with-lease）
+    const result = await gitService.commitAndPush({
+      files: [filePath],
+      message: 'review: 清空书评历史，仅保留当前版本',
+      forcePush: true,
+      forceLease: true,
+      // filter-branch 后本地 HEAD 是全新构造的，故要求远端仍等于流程开始前的 HEAD
+      expectRemoteHash: originalHead,
+    });
+    reviewExportService.markSynced([reviewId]);
+    return { ...purged, ...result };
+  } catch (err) {
+    // 任一步失败（含最后强推失败）都回滚到流程开始前的状态，避免本地已重写而远端未同步
+    await gitService.rollbackTo(originalHead, branch);
+    // 语义化错误原样上抛，路由层据此映射到 400/404/409
+    if (err instanceof GitBadRequestError || err instanceof GitNotFoundError || err instanceof GitConflictError) {
+      throw err;
+    }
+    throw new Error(err?.message || '清空历史失败');
+  }
 }
 
 export default {

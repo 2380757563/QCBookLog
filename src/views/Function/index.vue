@@ -44,6 +44,11 @@
           <div class="function-card__label">配置书库</div>
           <div class="function-card__desc">设置书库同步</div>
         </router-link>
+        <router-link to="/annual-summary" class="function-card">
+          <div class="function-card__icon">🏆</div>
+          <div class="function-card__label">年度报告</div>
+          <div class="function-card__desc">AI 生成阅读年度长卷</div>
+        </router-link>
       </div>
     </div>
 

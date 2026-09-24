@@ -436,7 +436,8 @@ const getAllBooksFromCalibre = async (useCache = true, readerId = 0) => {
     // 从talebook数据库的reading_state表读取阅读状态
     try {
       const dbService = databaseService && databaseService.default ? databaseService.default : databaseService;
-      if (dbService && dbService.isTalebookAvailable && dbService.isTalebookAvailable()) {
+      // 用「表真实可用」判定：空库时直接跳过合并，避免 407 次无谓查询与逐条告警日志
+      if (dbService && dbService.isTalebookUsable && dbService.isTalebookUsable()) {
         console.log(`📖 开始从talebook数据库读取阅读状态（读者ID: ${readerId}）...`);
 
         books = books.map(book => {
@@ -662,8 +663,8 @@ const processAuthorDirectory = async (authorDir) => {
             };
             console.log(`✅ 已为数据库书籍生成封面URL: ${coverUrl}`);
 
-            // 从 Talebook 数据库获取阅读状态
-            if (dbService && dbService.isTalebookAvailable && dbService.isTalebookAvailable()) {
+            // 从 Talebook 数据库获取阅读状态（表真实可用时才走此分支）
+            if (dbService && dbService.isTalebookUsable && dbService.isTalebookUsable()) {
               try {
                 const readingState = dbService.getReadingState(bookId, readerId);
 

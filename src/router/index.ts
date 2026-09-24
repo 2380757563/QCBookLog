@@ -87,6 +87,14 @@ const routes: Array<RouteRecordRaw> = [
     }
   },
   {
+    path: '/annual-summary',
+    name: 'AnnualSummary',
+    component: () => import('@/views/AnnualSummary/index.vue'),
+    meta: {
+      title: 'AI 年度报告'
+    }
+  },
+  {
     path: '/import',
     name: 'Import',
     component: () => import('@/views/Import/index.vue'),

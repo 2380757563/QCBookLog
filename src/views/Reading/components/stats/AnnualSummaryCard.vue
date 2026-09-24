@@ -62,12 +62,31 @@
       <span class="empty-icon">📅</span>
       <p>{{ year }} 年暂无可统计的阅读数据</p>
     </div>
+
+    <!-- AI 年度报告入口 -->
+    <div class="annual-ai-row">
+      <button
+        class="annual-ai-btn"
+        type="button"
+        :disabled="aiChecking"
+        :title="aiReady ? `用 AI 生成 ${year} 年报告` : aiHint"
+        @click="goReport"
+      >
+        <span class="annual-ai-btn__icon">✨</span>
+        <span>{{ aiChecking ? '正在检查 AI 配置…' : '生成 AI 年度报告' }}</span>
+      </button>
+      <span class="annual-ai-hint" :class="{ 'annual-ai-hint--warn': !aiReady && !aiChecking }">
+        {{ aiChecking ? '' : aiReady ? `${year} 年长卷，可导出 PDF` : aiHint }}
+      </span>
+    </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { useBookStore } from '@/stores/book';
+import { annualSummaryApi } from '@/api/annualSummaryService';
 
 /** 统计可用的年份：当年 + 前一年 */
 const currentYear = new Date().getFullYear();
@@ -158,6 +177,41 @@ const totalMinutes = computed(() =>
 const totalHours = computed(() =>
   Math.round((totalMinutes.value / 60) * 10) / 10
 );
+
+/* ---------------- AI 年度报告入口 ---------------- */
+
+const router = useRouter();
+
+const aiReady = ref(false);
+const aiChecking = ref(true);
+
+/** 未配置时的提示文案 */
+const aiHint = computed(() => '尚未配置 AI 服务，请先到「第三方设置」填写 API Key');
+
+const loadAiReady = async () => {
+  try {
+    const res = await annualSummaryApi.getSettings();
+    const s = res.data?.settings;
+    aiReady.value =
+      !!s &&
+      Number(s.annualSummaryEnabled) === 1 &&
+      s.hasApiKey === true &&
+      !!s.annualSummaryBaseUrl;
+  } catch {
+    aiReady.value = false;
+  } finally {
+    aiChecking.value = false;
+  }
+};
+
+/**
+ * 跳转到 AI 年度报告页。
+ * 未配置 AI 时仍允许跳转，由报告页给出引导（避免用户在此页无从下手）。
+ */
+const goReport = () => {
+  router.push({ path: '/annual-summary', query: { year: String(year.value) } });
+};
+onMounted(loadAiReady);
 </script>
 
 <style scoped lang="scss">
@@ -294,5 +348,46 @@ const totalHours = computed(() =>
 .annual-empty p {
   margin: 0;
   font-size: 14px;
+}
+
+/* AI 年度报告入口 */
+.annual-ai-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--border-light, #eee);
+}
+.annual-ai-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #ff8c5a, var(--primary-color, #ff6b35));
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.2s;
+}
+.annual-ai-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.annual-ai-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.annual-ai-btn__icon {
+  font-size: 14px;
+}
+.annual-ai-hint {
+  font-size: 12px;
+  color: var(--text-hint);
+}
+.annual-ai-hint--warn {
+  color: #c08a2e;
 }
 </style>

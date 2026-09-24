@@ -180,7 +180,7 @@
           <template v-else>
             <div v-if="filteredBooks.length > 0" :class="['book-grid', `book-grid--${layout}`, layout === 'grid' ? `book-grid-cols-${gridColumns}` : '']">
             <div
-              v-for="book in filteredBooks"
+              v-for="book in visibleBooks"
               :key="book.id"
               :class="['book-card', `book-card--${layout}`, { 'book-card--selected': selectedBookIds.includes(book.id), 'book-card--organize': isOrganizeMode }]"
               @click="isOrganizeMode ? toggleBookSelection(book.id) : goToBookDetail(String(book.id))"
@@ -252,12 +252,22 @@
             <button class="btn-retry-small" @click="retryLoadMore">重试</button>
           </div>
 
+          <!-- 分片渲染哨兵：筛选态下一次挂载的书卡超过一批时，滚动到底部继续追加 -->
+          <div
+            v-else-if="hasPendingBooks"
+            ref="chunkSentinelRef"
+            class="load-more-sentinel"
+          >
+            <div class="sentinel-dot"></div>
+            <span>下拉加载更多</span>
+          </div>
+
           <!-- 没有更多数据提示 -->
           <div v-else-if="!hasMoreBooks && usePagination && filteredBooks.length > 0" class="no-more-data">
             已加载全部 {{ filteredBooks.length }} 本书籍
           </div>
 
-          <!-- 滚动加载哨兵（IntersectionObserver 触发点） -->
+          <!-- 滚动加载哨兵（IntersectionObserver 触发点，仅分页模式生效） -->
           <div
             v-if="usePagination && hasMoreBooks && !isLoadingMore && !loadMoreError && filteredBooks.length > 0"
             ref="loadMoreSentinelRef"
@@ -549,6 +559,7 @@ const {
   loadMoreError,
   usePagination,
   loadMoreSentinelRef,
+  isFullDataLoaded,
   loadBooksCount,
   loadBooksFirstPage,
   loadMoreBooks,
@@ -615,6 +626,77 @@ const { filteredBooks } = useBookList({
   currentGroupId,
   usePagination,
   displayBooks
+});
+
+/**
+ * 增量渲染（分片挂载）
+ *
+ * 筛选态下 filteredBooks 可能包含全库数百本书（如「未读」371 本），
+ * 若一次性 v-for 出全部书卡，Vue 需要在同一帧内创建数百个含图片、
+ * SVG、进度条、评分的组件实例，会明显阻塞主线程，表现为「切换筛选卡一下」。
+ *
+ * 这里改为按 RENDER_CHUNK 分批挂载：首屏只渲染第一批，
+ * 由滚动哨兵在接近底部时追加下一批。数据源与筛选计数仍使用完整列表，
+ * 因此筛选结果数量、排序都不受影响。
+ */
+const RENDER_CHUNK = 60;
+const renderLimit = ref(RENDER_CHUNK);
+
+/** 实际参与渲染的切片 */
+const visibleBooks = computed(() => filteredBooks.value.slice(0, renderLimit.value));
+
+/** 是否还有未挂载的书卡 */
+const hasPendingBooks = computed(() => renderLimit.value < filteredBooks.value.length);
+
+/** 追加下一批 */
+function renderMoreChunk() {
+  if (hasPendingBooks.value) {
+    renderLimit.value += RENDER_CHUNK;
+  }
+}
+
+// 筛选条件变化时重置分片（否则会保留上一次的上限，导致新结果首屏仍渲染很多）
+watch(
+  () => [filterConditions.value.readStatus, filterStatus.value, currentGroupId.value, sortBy.value],
+  () => {
+    renderLimit.value = RENDER_CHUNK;
+  }
+);
+
+/** 分片渲染哨兵：滚动到它时追加下一批书卡 */
+const chunkSentinelRef = ref<HTMLElement | null>(null);
+let chunkObserver: IntersectionObserver | null = null;
+
+function setupChunkObserver() {
+  if (chunkObserver) {
+    chunkObserver.disconnect();
+    chunkObserver = null;
+  }
+  if (!chunkSentinelRef.value) return;
+  chunkObserver = new IntersectionObserver(
+    (entries) => {
+      if (entries[0]?.isIntersecting) renderMoreChunk();
+    },
+    { rootMargin: '0px 0px 400px 0px', threshold: 0 }
+  );
+  chunkObserver.observe(chunkSentinelRef.value);
+}
+
+// 哨兵随分片状态重新挂载/卸载，需在 DOM 更新后重新 observe
+watch(
+  () => [hasPendingBooks.value, filteredBooks.value],
+  async () => {
+    await nextTick();
+    setupChunkObserver();
+  },
+  { flush: 'post' }
+);
+
+onUnmounted(() => {
+  if (chunkObserver) {
+    chunkObserver.disconnect();
+    chunkObserver = null;
+  }
 });
 
 // ============ 整理模式 ============
@@ -799,8 +881,16 @@ const toggleAdvancedFilter = () => {
 };
 
 // ============ 加载数据 ============
-async function loadData() {
-  isLoading.value = true;
+/**
+ * 加载书籍数据
+ *
+ * @param options.silent 静默模式：不显示全屏 loading。
+ *        用于「切换筛选条件」场景——数据源已就绪，只是本地过滤结果变化，
+ *        若整页替换为 loading 会造成明显闪烁与卡顿感。
+ */
+async function loadData(options: { silent?: boolean } = {}) {
+  const { silent = false } = options;
+  if (!silent) isLoading.value = true;
   try {
     appStore.loadSettings();
     bookStore.setLayout(layout.value);
@@ -810,12 +900,21 @@ async function loadData() {
       selectedGroupIds.value = [];
     }
 
-    await loadBooksCount();
-    await loadGroups();
-
     const hasGroupFilter = !!currentGroupId.value;
     const needsFullData = hasGroupFilter || hasActiveFilters.value;
     const hasGroups = groups.value.length > 0;
+
+    // 数据源已就绪时直接复用，避免重复请求（全量响应约 1MB）
+    // 仅当「需要全量但尚未加载全量」时才真正发起请求
+    if (needsFullData && isFullDataLoaded.value) {
+      hasMoreBooks.value = false;
+      return;
+    }
+
+    if (!silent) {
+      await loadBooksCount();
+      await loadGroups();
+    }
 
     if (usePagination.value && !needsFullData) {
       if (hasGroups) {
@@ -825,6 +924,7 @@ async function loadData() {
           displayBooks.value = allBooks.slice(0, pageSize.value);
           hasMoreBooks.value = allBooks.length > pageSize.value;
           currentPage.value = 1;
+          isFullDataLoaded.value = true;
         } catch (error) {
           console.error('加载书籍失败:', error);
           await loadBooksFirstPage();
@@ -838,6 +938,7 @@ async function loadData() {
         bookStore.setBooks(books);
         displayBooks.value = books;
         hasMoreBooks.value = false;
+        isFullDataLoaded.value = true;
       } catch (error) {
         console.error('加载书籍失败:', error);
       }
@@ -845,13 +946,15 @@ async function loadData() {
   } catch (error) {
     console.error('加载数据失败:', error);
   } finally {
-    isLoading.value = false;
+    if (!silent) isLoading.value = false;
   }
 }
 
 onMounted(async () => {
-  await loadData();
+  // 先恢复筛选条件，再加载数据：否则会先按「无筛选」拉一次分页数据，
+  // 随后筛选条件恢复触发 watch 再拉一次全量数据，造成首屏闪烁与重复请求。
   loadFilterConditions();
+  await loadData();
   readingStore.loadProgressDisplayMode();
   if (route.query.status) {
     filterStatus.value = route.query.status as string;
@@ -875,6 +978,22 @@ watch(
   async () => {
     await nextTick();
     setupIntersectionObserver();
+  }
+);
+
+/**
+ * 筛选条件变化时重新加载数据
+ *
+ * 分页模式（>100 本）下 bookStore.allBooks 仅含首屏 pageSize 条，
+ * 而筛选需要全库数据才能得到正确结果。hasActiveFilters 覆盖全部筛选字段，
+ * 此处据其切换「全量 / 分页」两种加载策略。
+ */
+watch(
+  () => hasActiveFilters.value,
+  async (hasFilters, prevHasFilters) => {
+    if (hasFilters === prevHasFilters) return;
+    // 静默加载：避免每次切换筛选都整页 loading，同时已加载全量时不会重复请求
+    await loadData({ silent: true });
   }
 );
 
